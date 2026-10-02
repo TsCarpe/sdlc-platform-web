@@ -1,0 +1,205 @@
+<script setup>
+import { ref, watch, onMounted } from 'vue'
+import { api } from './api.js'
+import { pendingJump } from './trace.js'
+import ReqList from './components/ReqList.vue'
+import ReqDetail from './components/ReqDetail.vue'
+import CaseList from './components/CaseList.vue'
+import IterList from './components/IterList.vue'
+import IterEmpty from './components/IterEmpty.vue'
+import AppIcon from './components/AppIcon.vue'
+import ConfirmBox from './components/ConfirmBox.vue'
+import Chat from './components/Chat.vue'
+
+// v2.4：平台首页 = 迭代列表（DESIGN-v2.4 D37）；#/reqs 保留为跨迭代需求二级视图
+const page = ref('iters')
+const currentReqId = ref(null)
+const currentIter = ref(null)    // 迭代名（page='iters' 时的二级定位：null=列表，名字=迭代页）
+const detailTitle = ref('')
+const toast = ref(null)          // { text, type: 'ok' | 'err' }
+let toastTimer = null
+const counts = ref({ reqs: null, cases: null, iters: null })
+
+// ===== 侧栏收缩（localStorage 持久化，默认展开） =====
+const sideCollapsed = ref(localStorage.getItem('sdlc.side') === 'collapsed')
+function toggleSide() {
+  sideCollapsed.value = !sideCollapsed.value
+  localStorage.setItem('sdlc.side', sideCollapsed.value ? 'collapsed' : 'expanded')
+}
+
+// ===== hash 路由（零依赖）：#/iters · #/iters/<name> · #/reqs · #/reqs/<id> · #/cases =====
+// 状态 → hash 产生历史条目；前进/后退经 hashchange 回写状态；幂等防循环
+function hashFor() {
+  if (page.value === 'cases') return '#/cases'
+  if (page.value === 'iters') return currentIter.value ? '#/iters/' + encodeURIComponent(currentIter.value) : '#/iters'
+  return currentReqId.value ? '#/reqs/' + encodeURIComponent(currentReqId.value) : '#/reqs'
+}
+function syncHash() {
+  const want = hashFor()
+  if (location.hash !== want) { lastHash = want; location.hash = want }
+}
+function resetWork() { currentReqId.value = null; detailTitle.value = '' }
+// 同一 hash 只应用一次：syncHash 写入后触发的 hashchange 是异步派发，事件到达时若 hash 未变
+// 属迟到重放（会把 openIter 刚设置的 currentReqId 清掉）——幂等跳过
+let lastHash = null
+function applyHash() {
+  const h = location.hash
+  if (h === lastHash) return
+  lastHash = h
+  if (h === '#/cases') {
+    page.value = 'cases'; currentIter.value = null; resetWork(); return
+  }
+  if (h.startsWith('#/iters')) {
+    page.value = 'iters'; resetWork()
+    currentIter.value = h.startsWith('#/iters/') ? (decodeURIComponent(h.slice(8)) || null) : null
+    if (currentIter.value) resolveIterBinding(currentIter.value)
+    return
+  }
+  if (h.startsWith('#/reqs')) {
+    page.value = 'reqs'; currentIter.value = null
+    const id = h.startsWith('#/reqs/') ? (decodeURIComponent(h.slice(7)) || null) : null
+    currentReqId.value = id
+    if (!id) detailTitle.value = ''
+    return
+  }
+  syncHash()   // 非法 hash 归位
+}
+watch([page, currentReqId, currentIter], syncHash)
+
+// 迭代定位：绑定需求 → 工作台；空迭代 → 迭代页（页内提交卡）。
+// 绑定关系以服务端为权威，异步幂等解析——直接刷新 / 后退进入 hash 同样走此路径（防刷新丢工作台）。
+function openIter(name) {
+  page.value = 'iters'
+  if (currentIter.value !== name) { resetWork(); currentIter.value = name }
+  resolveIterBinding(name)
+}
+async function resolveIterBinding(name) {
+  try {
+    const row = await api.get('/api/iterations/detail?name=' + encodeURIComponent(name))
+    if (page.value === 'iters' && currentIter.value === name && row.reqId && currentReqId.value !== row.reqId) {
+      currentReqId.value = row.reqId
+      detailTitle.value = row.reqName || ''
+    }
+  } catch (e) { showToast('打开迭代失败：' + e.message, 'err') }
+}
+function onIterSubmitted(reqId) {
+  currentReqId.value = reqId   // 留在 #/iters/<name>，内容切换为工作台
+}
+function backFromIter() {
+  currentIter.value = null
+  resetWork()
+}
+
+function showToast(msg, type = 'ok') {
+  toast.value = { text: msg, type }
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = null }, type === 'err' ? 5000 : 2600)
+}
+
+function goPage(p) {
+  page.value = p
+  currentIter.value = null
+  resetWork()
+}
+
+function onLoaded(name) { detailTitle.value = name || '' }
+
+async function refreshCounts() {
+  try {
+    const [rs, cs, is] = await Promise.all([api.get('/api/requirements'), api.get('/api/cases'), api.get('/api/iterations')])
+    counts.value = { reqs: rs.length, cases: cs.length, iters: is.length }
+  } catch (e) { /* 侧栏计数失败不打扰主流程 */ }
+}
+
+onMounted(() => {
+  if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/iters')
+  applyHash()
+  window.addEventListener('hashchange', applyHash)
+  refreshCounts()
+})
+
+// v1.1 追溯跳转：trace.js 发起，这里只负责切页/开卡；tab 内定位由目标组件消费 nonce 完成
+watch(() => pendingJump.nonce, n => {
+  if (!n) return
+  page.value = pendingJump.page
+  currentIter.value = null
+  if (pendingJump.page === 'reqs') currentReqId.value = pendingJump.reqId
+})
+</script>
+
+<template>
+  <aside class="side" :class="{ collapsed: sideCollapsed }">
+    <div class="logo">
+      <span class="logo-mark"><AppIcon name="clipboard-list" :size="13" /></span>
+      <span class="logo-txt">SDLC 产物平台<small>迭代 · 需求 · 用例 · 全程可追溯</small></span>
+    </div>
+    <button class="nav-item" :class="{ on: page === 'iters' }" :title="sideCollapsed ? '迭代' : null"
+            @click="goPage('iters')">
+      <AppIcon name="layers" :size="15" /><span class="nav-label">迭代</span>
+      <span class="cnt" v-if="counts.iters != null">{{ counts.iters }}</span>
+    </button>
+    <button class="nav-item" :class="{ on: page === 'reqs' }" :title="sideCollapsed ? '需求质检' : null"
+            @click="goPage('reqs')">
+      <AppIcon name="clipboard-list" :size="15" /><span class="nav-label">需求</span>
+      <span class="cnt" v-if="counts.reqs != null">{{ counts.reqs }}</span>
+    </button>
+    <button class="nav-item" :class="{ on: page === 'cases' }" :title="sideCollapsed ? '测试用例' : null"
+            @click="goPage('cases')">
+      <AppIcon name="flask" :size="15" /><span class="nav-label">用例</span>
+      <span class="cnt" v-if="counts.cases != null">{{ counts.cases }}</span>
+    </button>
+    <!-- P5：AI 查询助理（右侧抽屉，只读查询，不切页） -->
+    <Chat />
+    <div class="side-foot">
+      <details>
+        <summary><AppIcon name="chevron-right" :size="12" />范围约定</summary>
+        <div class="foot-body">
+          平台首页 = 迭代列表（迭代 × 需求 1:1）；全生命周期（提交→质检→澄清→发布→设计→用例→门禁→放行）在迭代工作台内闭环。<br>
+          缺陷与执行态不上平台（本地测试）。无登录（内网约定，防误操作不防故意）。出处/编号/覆盖引用均可点击定位回跳。
+        </div>
+      </details>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <button class="topbar-toggle" @click="toggleSide"
+              :title="sideCollapsed ? '展开侧栏' : '收起侧栏'" aria-label="收起/展开侧栏">
+        <AppIcon name="panel" :size="15" />
+      </button>
+      <h1>
+        <template v-if="page === 'iters' && !currentIter">迭代列表</template>
+        <template v-else-if="page === 'iters'"><span class="crumb">迭代列表 /</span> {{ currentIter }}</template>
+        <template v-else-if="page === 'reqs' && !currentReqId">需求（跨迭代视图）</template>
+        <template v-else-if="page === 'reqs'"><span class="crumb">需求 /</span> {{ currentReqId || '需求详情' }}</template>
+        <template v-else>测试用例登记</template>
+      </h1>
+      <div class="sync-info" title="产物由本地 sdlc-sync 工具或平台流水线写入，无后台自动同步"><span class="dot"></span>同步服务 · 手动触发</div>
+    </div>
+
+    <div class="content">
+      <Transition name="fade" mode="out-in">
+        <IterList v-if="page === 'iters' && !currentIter" key="iterlist"
+                  @open-iter="openIter($event.iter)" @open-empty="openIter($event)" @toast="showToast" />
+        <IterEmpty v-else-if="page === 'iters' && currentIter && !currentReqId" key="iterempty"
+                   :iter="currentIter" @back="backFromIter" @submitted="onIterSubmitted" @toast="showToast" />
+        <!-- key 绑定需求 id：跨需求导航（迭代绑定 → 直达 hash）时强制重挂载，防复用实例残留上一个需求的数据 -->
+        <ReqDetail v-else-if="currentReqId" :key="'reqdetail-' + currentReqId" :req-id="currentReqId"
+                   @back="page === 'iters' ? backFromIter() : (currentReqId = null, detailTitle = '')"
+                   @toast="showToast" @loaded="onLoaded" />
+        <ReqList v-else-if="page === 'reqs'" key="reqlist" @open="currentReqId = $event" @toast="showToast" />
+        <CaseList v-else key="cases" @toast="showToast" />
+      </Transition>
+    </div>
+  </div>
+
+  <Transition name="fade">
+    <div class="toast" :class="{ err: toast.type === 'err' }" v-if="toast" role="status">
+      <AppIcon :name="toast.type === 'err' ? 'alert-circle' : 'check-circle'" :size="15" />
+      {{ toast.text }}
+    </div>
+  </Transition>
+
+  <!-- v2.2 全局确认框（评测 P1-8：替代原生 confirm），Teleport 到 body -->
+  <ConfirmBox />
+</template>

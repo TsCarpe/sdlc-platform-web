@@ -6,7 +6,13 @@ async function call(method, url, body) {
   })
   let data = {}
   try { data = await res.json() } catch (e) { /* 空响应体 */ }
-  if (!res.ok) throw new Error(data.error || ('请求失败 ' + res.status))
+  if (!res.ok) {
+    // 响应体与状态码随错误透出（如用例 409 的 conflicts 明细，TaskPanel 据此出裁决横幅）
+    const err = new Error(data.error || ('请求失败 ' + res.status))
+    err.data = data
+    err.status = res.status
+    throw err
+  }
   return data
 }
 

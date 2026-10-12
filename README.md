@@ -18,8 +18,7 @@ npm run build    # 产物 dist/
 后端从 `static/` 直出构建产物（同源无 CORS）：
 
 ```bash
-npm run build
-rsync -a --delete dist/ ../sdlc-platform-server/static/
+npm run deploy    # = vite build + rsync 到 ../sdlc-platform-server/static/（SDLC_SERVER_STATIC_DIR 可覆盖目标）
 ```
 
 ## 结构

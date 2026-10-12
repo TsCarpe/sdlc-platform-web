@@ -469,6 +469,9 @@ function frByModule(m) {
 </script>
 
 <template>
+  <!-- 单根包装（勿拆）：App.vue 的 Transition(out-in) 要求子组件单根——本组件原为三个条件根的 fragment，
+       离场过渡窗口内组件被打断 re-render 时 transitionend 丢失，out-in 死锁 → 内容区永久白屏 -->
+  <div>
   <!-- 加载失败 -->
   <EmptyState v-if="error" icon="alert-circle" tone="error" title="需求详情加载失败" :desc="error">
     <button class="btn" @click="load"><AppIcon name="refresh-cw" :size="13" />重试</button>
@@ -511,7 +514,7 @@ function frByModule(m) {
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" :class="{ on: tab === 'origin' }" @click="tab = 'origin'">原始需求</button>
       <button class="tab" role="tab" :class="{ on: tab === 'digest' }" @click="tab = 'digest'">
-        需求摘要（Digest）<span class="n num" v-if="d.digest">{{ d.frPoints.length }}</span></button>
+        需求摘要<span class="n num" v-if="d.digest">{{ d.frPoints.length }}</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'audit' }" @click="tab = 'audit'">
         体检报告<span class="n num" v-if="d.audit">{{ (d.audit.content?.items || []).length }}</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'checklist' }" @click="tab = 'checklist'">
@@ -725,7 +728,7 @@ function frByModule(m) {
         </div>
 
         <details class="card" :open="digestMdOpen" v-if="d.digest.markdown">
-          <summary style="cursor:pointer;font-size:13px;color:var(--muted)">查看 digest 原文（markdown，含假设清单——「需求.Axx」引用的定位落点）</summary>
+          <summary style="cursor:pointer;font-size:13px;color:var(--muted)">查看摘要原文（markdown，含假设清单——「需求.Axx」引用的定位落点）</summary>
           <div class="doc" style="margin-top:10px" ref="digestMdBox" v-html="digestMdHtml"></div>
         </details>
       </template>
@@ -736,16 +739,16 @@ function frByModule(m) {
       <EmptyState v-if="!d.audit" icon="inbox" title="体检报告尚未推送"
                   desc="本地运行 sdlc-intent 产出体检报告后，由 sdlc-sync 推送至此" />
       <template v-else>
-        <div class="stats inline">
-          <div class="stat">
+        <div class="stats inline lv-stats">
+          <div class="stat lv-red" :class="{ zero: !(d.audit.content?.red > 0) }">
             <span class="stat-ico ti-red"><AppIcon name="alert-circle" :size="16" /></span>
             <div><div class="n">{{ d.audit.content?.red || 0 }}</div><div class="l">阻断</div></div>
           </div>
-          <div class="stat">
+          <div class="stat lv-amber" :class="{ zero: !(d.audit.content?.yellow > 0) }">
             <span class="stat-ico ti-amber"><AppIcon name="alert-triangle" :size="16" /></span>
             <div><div class="n">{{ d.audit.content?.yellow || 0 }}</div><div class="l">存疑</div></div>
           </div>
-          <div class="stat">
+          <div class="stat lv-blue" :class="{ zero: !(d.audit.content?.blue > 0) }">
             <span class="stat-ico ti-lvblue"><AppIcon name="info" :size="16" /></span>
             <div><div class="n">{{ d.audit.content?.blue || 0 }}</div><div class="l">建议</div></div>
           </div>
@@ -761,9 +764,8 @@ function frByModule(m) {
         <div class="grp" v-for="g in auditGroups" :key="g.name" :class="{ closed: !openGrps.has(g.name) }">
           <div class="grp-t" @click="toggleGrp(g.name)">
             <AppIcon name="chevron-right" :size="13" class="grp-chev" />{{ g.name }}
-            <span class="cnt">{{ g.items.length }} 题 · <span class="lvl-dot red"></span>{{ cnt(g.items, 'red') }}
-              <span class="lvl-dot yellow"></span>{{ cnt(g.items, 'yellow') }}
-              <span class="lvl-dot blue"></span>{{ cnt(g.items, 'blue') }}</span>
+            <span class="cnt">{{ g.items.length }} 题<template v-for="lv in ['red', 'yellow', 'blue']" :key="lv"><span
+              v-if="cnt(g.items, lv)" class="lv-pill" :class="lv"><i class="lvl-dot" :class="lv"></i>{{ lvlLabel[lv] }} {{ cnt(g.items, lv) }}</span></template></span>
           </div>
           <div class="grp-body"><div class="grp-inner">
           <div v-for="it in g.items" :key="it.id" class="check-item" :class="it.level" :data-pid="pidOf(it.id)">
@@ -941,5 +943,6 @@ function frByModule(m) {
         </div>
       </div>
     </div>
+  </div>
   </div>
 </template>

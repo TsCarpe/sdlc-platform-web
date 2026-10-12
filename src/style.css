@@ -87,11 +87,13 @@ button{cursor:pointer}
 .topbar h1 .cur{color:var(--text)}
 .sync-info{margin-left:auto; font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px}
 .dot{width:7px; height:7px; border-radius:50%; background:var(--green-vivid); display:inline-block}
-.content{padding:24px 36px 56px; max-width:1280px; margin:0 auto}
+.content{padding:24px 36px 56px; max-width:1280px; margin:0 auto; position:relative}
 
 /* 页面切换过渡 */
 .fade-enter-active,.fade-leave-active{transition:opacity .16s ease, transform .16s ease}
 .fade-enter-from,.fade-leave-to{opacity:0; transform:translateY(4px)}
+/* 并发淡切（无 out-in）：离场元素脱离文档流防双倍高度抖动 */
+.fade-leave-active{position:absolute; top:24px; left:36px; right:36px; pointer-events:none}
 
 /* ===== 统计卡：白卡 + 彩色图标点缀 ===== */
 .stats{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px}
@@ -152,7 +154,6 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
 /* overflow-x 容器会接管 sticky 基准，Chrome 下 scrollY=0 也偏移 top —— 容器内改用静态表头 */
 .tablewrap .table th{position:static}
 .grp-t .lvl-dot{vertical-align:-1px}
-.grp-t .cnt .lvl-dot{margin:0 3px 0 9px}
 
 /* ===== 徽章：色点 + 文字 ===== */
 .badge{font-size:11.5px; font-weight:600; padding:2px 9px 2px 7px; border-radius:9999px; white-space:nowrap;
@@ -245,10 +246,29 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
 
 /* ===== 质检/澄清问题卡 ===== */
 .check-item{border:1px solid var(--line-soft); border-left-width:3px; border-radius:10px;
-  padding:12px 16px; margin-bottom:10px; background:var(--canvas); box-shadow:var(--shadow-card)}
+  padding:12px 16px; margin-bottom:10px; background:var(--canvas); box-shadow:var(--shadow-card);
+  transition:box-shadow .13s ease}
+.check-item:hover{box-shadow:var(--shadow-pop)}
 .check-item.red{border-left-color:var(--lv-red)}
 .check-item.yellow{border-left-color:var(--lv-yellow)}
 .check-item.blue{border-left-color:var(--lv-blue)}
+/* 级别可视化统一：统计卡左色条 + 数字按级着色（与问题卡左条同语言），零值降饱和置灰 */
+.stats.inline.lv-stats{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr))}
+.lv-stats .stat{border-left:3px solid transparent}
+.lv-stats .stat.lv-red{border-left-color:var(--lv-red)}
+.lv-stats .stat.lv-amber{border-left-color:var(--lv-yellow)}
+.lv-stats .stat.lv-blue{border-left-color:var(--lv-blue)}
+.lv-stats .lv-red .n{color:var(--red-deep)}
+.lv-stats .lv-amber .n{color:var(--amber-deep)}
+.lv-stats .lv-blue .n{color:var(--lv-blue)}
+.lv-stats .stat.zero{filter:saturate(.2); opacity:.55}
+/* 组头级别计数：带文字小胶囊（裸点无图例，读不出哪色对应哪级） */
+.lv-pill{display:inline-flex; align-items:center; gap:4px; margin-left:6px; padding:1px 8px;
+  border-radius:9999px; font-size:11px; font-weight:600; white-space:nowrap}
+.lv-pill .lvl-dot{width:6px; height:6px}
+.lv-pill.red{background:var(--red-soft); color:var(--red-deep)}
+.lv-pill.yellow{background:var(--amber-soft); color:var(--amber-deep)}
+.lv-pill.blue{background:#eaf4ff; color:var(--lv-blue)}
 .ci-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .ci-head .grow{flex:1}
 .jump-link{border:none; background:none; color:var(--blue); font-size:12px; font-weight:500; margin-left:auto;

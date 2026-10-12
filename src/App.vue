@@ -108,7 +108,7 @@ async function refreshCounts() {
   try {
     const [rs, cs, is] = await Promise.all([api.get('/api/requirements'), api.get('/api/cases'), api.get('/api/iterations')])
     counts.value = { reqs: rs.length, cases: cs.length, iters: is.length }
-  } catch (e) { /* 侧栏计数失败不打扰主流程 */ }
+  } catch { /* 侧栏计数失败不打扰主流程 */ }
 }
 
 onMounted(() => {
@@ -178,7 +178,9 @@ watch(() => pendingJump.nonce, n => {
     </div>
 
     <div class="content">
-      <Transition name="fade" mode="out-in">
+      <!-- 勿加 mode="out-in"：Vue 3.5 下 leave 后 afterLeave→instance.update() 会以 el=null 的 prevTree patch 抛错，
+           渲染 effect 中断 → 内容区永久白屏（迭代工作台→导航必现）。并发淡切规避该路径 -->
+      <Transition name="fade">
         <IterList v-if="page === 'iters' && !currentIter" key="iterlist"
                   @open-iter="openIter($event.iter)" @open-empty="openIter($event)" @toast="showToast" />
         <IterEmpty v-else-if="page === 'iters' && currentIter && !currentReqId" key="iterempty"

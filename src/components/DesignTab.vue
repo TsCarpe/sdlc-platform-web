@@ -61,7 +61,7 @@ const confirmFinalize = () => run(async () => {
   <div v-if="view">
     <div class="banner blue">
       <AppIcon name="pencil-ruler" :size="14" />
-      <span><b>设计 lane</b> ｜ 输入 = 已发布 digest/标准文档（GR-1 冻结）；<b>定稿 ≠ 放行</b>，放行唯一口径 = 门禁已放行（GR-4）。
+      <span><b>设计 lane</b> ｜ 输入 = 已发布需求摘要/标准文档（GR-1 冻结）；<b>定稿 ≠ 放行</b>，放行唯一口径 = 门禁已放行（GR-4）。
         <span class="sub">阶段徽标为平台化推导（skill 权威落库仅「已定稿｜轻量跳过」两值）</span></span>
       <span class="badge" :class="{ none: 'b-gray', draft: 'b-amber', final: 'b-green', skipped: 'b-gray' }[phase] || 'b-gray'">{{ designPhaseLabel[phase] || phase }}</span>
     </div>

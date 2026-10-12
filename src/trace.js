@@ -115,7 +115,7 @@ export function highlightIn(container, needle) {
         mark.id = 'snapshot-hl'
         range.surroundContents(mark)
         return true
-      } catch (e) {
+      } catch {
         return false
       }
     }

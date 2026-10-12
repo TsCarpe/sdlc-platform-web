@@ -51,7 +51,6 @@ const items = computed(() => props.detail?.items || [])
 const answered = computed(() => items.value.filter(isDone).length)
 const allAnswered = computed(() => items.value.length > 0 && answered.value === items.value.length)
 const hasDigest = computed(() => !!props.detail?.digest)
-const hasStandard = computed(() => !!props.detail?.standard)
 
 const activeTask = computed(() => tasks.value.find(t => t.status === 'queued' || t.status === 'running') || null)
 const autoBy = t => (t.createdBy || '').startsWith('auto')   // v2.1 L2 自动编排任务标记
@@ -74,7 +73,7 @@ const digestStats = computed(() => {
     if (p.snapshot?.md) out.push(['快照', Math.round(p.snapshot.md.length / 1024) + 'KB'])
     if (p.doc) out.push(['原文块', (p.doc.blocks || []).length], ['媒体', (p.doc.media || []).length])
     if (p.audit) out.push(['体检问题', (p.audit.items || []).length])
-  } catch {}
+  } catch { /* contentJson 坏值 → 无统计 */ }
   return out
 })
 const digestDraftHtml = computed(() => {
@@ -90,7 +89,7 @@ const casesRows = computed(() => {
 const stdPreviewHtml = computed(() => linkifyRefs(render(stdText.value || stdDraft.value?.md || '')))
 
 async function loadTasks() {
-  try { tasks.value = await api.get(`/api/tasks?req_id=${props.reqId}`) } catch {}
+  try { tasks.value = await api.get(`/api/tasks?req_id=${props.reqId}`) } catch { /* 轮询失败保旧态，下次 tick 重试 */ }
 }
 async function loadDrafts() {
   try {
@@ -102,7 +101,7 @@ async function loadDrafts() {
       stdText.value = m.standard.md
     }
     drafts.value = m
-  } catch {}
+  } catch { /* 草稿拉取失败保持现状（轮询补齐） */ }
 }
 function reloadAll() { loadTasks(); loadDrafts() }
 
@@ -121,7 +120,7 @@ async function tick() {
       KNOWN[t.id] = t.status
     }
     tasks.value = list
-  } catch {}
+  } catch { /* 轮询失败保旧态，下次 tick 重试 */ }
 }
 function onVis() { if (!document.hidden) tick() }
 onMounted(async () => {
@@ -371,7 +370,7 @@ function elapsed(t) {
         <span class="chip" v-for="[k, v] in digestStats" :key="k">{{ k }} {{ v }}</span>
       </div>
       <details :open="showDigestDraft" @toggle="showDigestDraft = $event.target.open">
-        <summary>预览 digest 正文</summary>
+        <summary>预览摘要正文</summary>
         <div class="doc tp-preview" v-html="digestDraftHtml"></div>
       </details>
       <div class="tp-btns">

@@ -25,7 +25,6 @@ const savingCmt = ref(false)
 
 const priCls = { P0: 'b-red', P1: 'b-amber', P2: 'b-gray' }
 const statusLabel = { draft: '待审核', reviewed: '已定稿' }
-const sourceLabel = { feishu: '飞书文档', text: '粘贴文本' }
 
 const iterations = computed(() => [...new Set(rows.value.map(r => r.iter).filter(Boolean))].sort())
 
@@ -71,7 +70,7 @@ async function load() {
 async function loadReqs() {
   try {
     reqs.value = await api.get('/api/requirements')
-  } catch (e) { /* 需求下拉失败不阻塞用例列表 */ }
+  } catch { /* 需求下拉失败不阻塞用例列表 */ }
 }
 
 // 搜索防抖自动查询；select 变化即查（@change）
@@ -87,7 +86,7 @@ function clearSearch() {
 }
 
 function parsePoints(s) {
-  try { return JSON.parse(s || '[]') } catch (e) { return [] }
+  try { return JSON.parse(s || '[]') } catch { return [] }
 }
 
 onMounted(async () => {

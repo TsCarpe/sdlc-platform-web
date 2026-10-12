@@ -1,7 +1,7 @@
 <script setup>
 // AI 查询助理（P5 新增）：右侧抽屉 + SSE 流式（fetch stream，零新依赖）。
 // 只读查询；输出按纯文本渲染（pre-wrap），不走 markdown 注入面。
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick } from 'vue'
 import AppIcon from './AppIcon.vue'
 
 const open = ref(false)
@@ -69,7 +69,7 @@ async function send() {
 function stop() { if (aborter) aborter.abort() }
 
 async function clearSession() {
-  try { await fetch('/api/assistant/sessions/' + encodeURIComponent(sid), { method: 'DELETE' }) } catch (e) { /* 幂等 */ }
+  try { await fetch('/api/assistant/sessions/' + encodeURIComponent(sid), { method: 'DELETE' }) } catch { /* 幂等 */ }
   msgs.value = []
   errText.value = ''
 }

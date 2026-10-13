@@ -764,3 +764,109 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .dd-lb{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .dd-ck{margin-left:auto; color:var(--blue); display:inline-flex; flex:none}
 .dd-empty{padding:14px; text-align:center; color:var(--faint); font-size:12.5px}
+
+/* ============================================================
+   v4 块级编辑（BlockDiff / BlockEditor，DESIGN-v4 §14 方案 C）
+   ============================================================ */
+
+/* ---- 四态 diff（BlockDiff.vue）：edit 黄 / insert 绿 / delete 红 / move 蓝 ---- */
+.bdiff{display:flex; flex-direction:column; gap:8px}
+.bdiff-counts{display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+.bd-dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:1px}
+.bd-dot.edit{background:var(--lv-yellow)} .bd-dot.insert{background:var(--green-vivid)}
+.bd-dot.delete{background:var(--lv-red)} .bd-dot.move{background:var(--lv-blue)}
+.bdiff-empty{padding:6px 2px}
+.bdiff-row{border:1px solid var(--line-soft); border-radius:9px; padding:8px 11px; background:var(--canvas)}
+.bdiff-row.op-edit{background:#fffdf2; border-color:#f2e8b8}
+.bdiff-row.op-insert{background:var(--green-soft); border-color:#c8e6d7}
+.bdiff-row.op-delete{background:var(--red-soft); border-color:#f4c7c3}
+.bdiff-row.op-move{background:var(--blue-light); border-color:var(--blue-border)}
+.bdiff-h{display:flex; align-items:center; gap:6px; margin-bottom:5px}
+.badge.bd-op{display:inline-flex; align-items:center; gap:4px}
+.badge.bd-op::before{display:none}
+.badge.bd-op.edit{background:var(--yellow-light); color:var(--yellow-dark)}
+.badge.bd-op.insert{background:var(--green-soft); color:var(--green)}
+.badge.bd-op.delete{background:var(--red-soft); color:var(--red-deep)}
+.badge.bd-op.move{background:var(--blue-light); color:var(--blue)}
+.chip.bd-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; color:var(--faint);
+  max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.chip.bd-moved{display:inline-flex; align-items:center; gap:3px; color:var(--blue); border-color:transparent; background:var(--canvas)}
+.bdiff-pair{display:flex; flex-direction:column; gap:3px; font-size:13px; line-height:1.55; word-break:break-word}
+.bd-old{color:var(--muted)}
+.op-delete .bd-old{text-decoration:line-through; color:var(--red-deep)}
+.op-edit .bd-old{text-decoration:line-through; color:var(--stone); background:#faf5d8; border-radius:4px; padding:1px 5px; display:inline-block}
+.op-edit .bd-old:empty{display:none}
+.bd-new{color:var(--text)}
+.op-insert .bd-new, .op-edit .bd-new{background:#e3f4eb; border-radius:4px; padding:1px 5px; display:inline-block}
+.bdiff-attrs{margin-top:5px; font-size:12px}
+.bdiff-attrs summary{color:var(--faint); cursor:pointer; user-select:none}
+.bdiff-attrs summary:hover{color:var(--muted)}
+.bd-attrs-body{display:flex; flex-direction:column; gap:3px; margin-top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; word-break:break-all}
+.bdiff-dead{margin-top:4px; font-size:12.5px; color:var(--muted)}
+.bdiff-dead summary{cursor:pointer; user-select:none; color:var(--stone)}
+.bd-dead-row{padding:5px 2px; border-bottom:1px dashed var(--line-soft); word-break:break-word}
+.bd-dead-row:last-child{border-bottom:none}
+
+/* ---- 块编辑器（BlockEditor.vue）：渲染态手柄 + 单块编辑态 ---- */
+.bedit{position:relative}
+.bedit-row{position:relative; display:flex; align-items:flex-start; gap:2px; border-radius:8px;
+  transition:background .12s ease}
+.bedit-row:hover{background:var(--bg-soft)}
+.bedit-row.drag-over-top{box-shadow:inset 0 2px 0 var(--blue)}
+.bedit-row.drag-over-bottom{box-shadow:inset 0 -2px 0 var(--blue)}
+.bedit-row.dragging{opacity:.45}
+.bedit-handle{flex:none; display:inline-flex; align-items:center; gap:1px; margin-top:3px;
+  opacity:0; transition:opacity .12s ease; background:none; border:none; padding:2px; border-radius:6px; color:var(--faint)}
+.bedit-row:hover .bedit-handle, .bedit-row.handle-open .bedit-handle{opacity:1}
+.bedit-handle button{background:none; border:none; padding:3px; border-radius:6px; color:var(--faint);
+  display:inline-flex; align-items:center; justify-content:center}
+.bedit-handle button:hover{background:var(--bg-active); color:var(--charcoal)}
+.bedit-grip{cursor:grab}
+.bedit-grip:active{cursor:grabbing}
+.bedit-body{flex:1; min-width:0; cursor:text}
+.bedit-row.is-editing{background:var(--canvas)}
+.bedit-row.is-editing .bedit-body{cursor:default}
+/* 菜单弹出层（升降级/删除/转换） */
+.bedit-menu{position:absolute; z-index:80; min-width:150px; background:var(--canvas); border:1px solid var(--line);
+  border-radius:10px; box-shadow:var(--shadow-pop); padding:4px; animation:ddin .12s ease}
+.bedit-menu button{display:flex; align-items:center; gap:7px; width:100%; text-align:left; border:none;
+  background:none; padding:6px 9px; border-radius:7px; font-size:12.5px; color:var(--charcoal)}
+.bedit-menu button:hover{background:var(--bg)}
+.bedit-menu button:disabled{opacity:.4; cursor:not-allowed}
+.bedit-menu button.danger{color:var(--red-deep)}
+.bedit-menu .sep{height:1px; background:var(--line-soft); margin:4px 6px}
+/* 单块编辑态控件 */
+.bedit-edit{padding:6px 8px}
+.bedit-edit textarea, .bedit-edit input[type=text]{width:100%; border:1px solid var(--blue-border); border-radius:8px;
+  padding:7px 10px; font-size:13.5px; line-height:1.6; color:var(--text); background:var(--canvas); resize:vertical}
+.bedit-edit textarea:focus, .bedit-edit input[type=text]:focus{outline:none; border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+.bedit-toolbar{display:flex; gap:4px; margin-top:6px; align-items:center}
+.bedit-toolbar button{border:1px solid var(--line); background:var(--canvas); border-radius:6px; min-width:26px;
+  height:24px; font-size:12px; color:var(--charcoal); display:inline-flex; align-items:center; justify-content:center}
+.bedit-toolbar button:hover{border-color:var(--faint); background:var(--bg-soft)}
+.bedit-hint{margin-left:auto; font-size:11px; color:var(--faint)}
+.bedit-fieldrow{display:flex; gap:8px; margin-bottom:8px; align-items:center}
+.bedit-fieldrow label{font-size:12px; color:var(--muted); flex:none}
+.bedit-fieldrow select{border:1px solid var(--line-strong); border-radius:7px; padding:5px 8px; font-size:12.5px;
+  background:var(--canvas); color:var(--text)}
+.bedit-cells{display:flex; flex-direction:column; gap:6px}
+.bedit-cell{display:flex; gap:6px; align-items:center}
+.bedit-cell .idx{flex:none; font-size:11px; color:var(--faint); width:34px; text-align:right}
+.bedit-cell input{flex:1}
+.bedit-media{display:flex; align-items:center; gap:8px; padding:6px 0; flex-wrap:wrap}
+/* 顶条（操作人 + 保存/取消） */
+.bedit-topbar{display:flex; align-items:center; gap:8px; padding:8px 12px; margin-bottom:10px;
+  background:var(--blue-light); border:1px solid var(--blue-border); border-radius:10px; flex-wrap:wrap}
+.bedit-topbar .lbl{font-size:12.5px; color:#3f3ac0}
+.bedit-topbar input{border:1px solid var(--blue-border); border-radius:7px; padding:5px 9px; font-size:12.5px;
+  width:140px; background:var(--canvas)}
+.bedit-topbar .spacer{flex:1}
+.bedit-problem{background:var(--red-soft); color:var(--red-deep); border-radius:8px; padding:6px 10px;
+  font-size:12.5px; margin:4px 0}
+/* diff 预览弹层 */
+.bdiff-modal .modal{width:720px; max-width:94vw}
+.bdiff-modal .modal-b{max-height:60vh; overflow-y:auto}
+
+/* 原文卡编辑工具行（编辑入口右对齐，不挤占阅读区） */
+.edit-tools{display:flex; justify-content:flex-end; margin-bottom:8px}

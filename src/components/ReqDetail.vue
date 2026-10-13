@@ -263,10 +263,12 @@ function resolveDocPath(path) {
         门禁<span class="n num" v-if="gv && gv.round">{{ gv.round.status === 'released' ? '✓' : gv.round.roundNo + '轮' }}</span></button>
     </div>
 
-    <!-- 原始需求：全文快照（D1）；v1.2 有块结构时结构化渲染（不堆叠/图片/锚点），否则 md 渲染降级 -->
+    <!-- 原始需求：全文快照（D1）；v1.2 有块结构时结构化渲染（不堆叠/图片/锚点），否则 md 渲染降级；
+         v4 窗口 1 块级编辑（保存后 @reload 壳层重拉 doc.json 刷新锚点） -->
     <OriginTab v-if="tab === 'origin'" ref="originTabRef"
                :card="card" :snapshot="d.snapshot" :doc="d.doc" :active-head="activeHead"
-               @locate="locate" @go-toc="goToc" />
+               @locate="locate" @go-toc="goToc"
+               @toast="(m, t) => emit('toast', m, t)" @reload="load" />
 
     <!-- 结构化 Digest -->
     <DigestTab v-if="tab === 'digest'" ref="digestTabRef"

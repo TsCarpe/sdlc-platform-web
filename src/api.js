@@ -23,3 +23,20 @@ export const api = {
   patch: (u, b) => call('PATCH', u, b),
   del: (u) => call('DELETE', u)
 }
+
+/** 媒体上传（raw bytes + x-media-mime 头，非 JSON 通道）→ {id, sha256, bytes, name, mime} */
+export async function uploadMedia(reqId, file) {
+  const res = await fetch(`/api/requirements/${reqId}/media?name=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { 'x-media-mime': file.type || 'application/octet-stream' },
+    body: file
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(data.error || ('上传失败 ' + res.status))
+    err.data = data
+    err.status = res.status
+    throw err
+  }
+  return data
+}

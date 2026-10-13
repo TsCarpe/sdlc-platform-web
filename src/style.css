@@ -870,3 +870,47 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 
 /* 原文卡编辑工具行（编辑入口右对齐，不挤占阅读区） */
 .edit-tools{display:flex; justify-content:flex-end; margin-bottom:8px}
+
+/* ============================================================
+   v4 评论面板（CommentsPanel）：右侧抽屉（对齐 chat-drawer 交互语言）
+   ============================================================ */
+.cmts-drawer{position:fixed; right:0; top:0; bottom:0; width:400px; max-width:94vw; z-index:70;
+  background:var(--canvas); border-left:1px solid var(--line); box-shadow:var(--shadow-modal);
+  display:flex; flex-direction:column; animation:ddin .15s ease}
+.cmts-h{display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line-soft)}
+.cmts-h b{display:inline-flex; align-items:center; gap:6px; font-size:13.5px}
+.cmts-h .spacer{flex:1}
+.cmts-compose{padding:10px 14px; border-bottom:1px solid var(--line-soft); background:var(--bg-soft)}
+.cmts-target{display:flex; align-items:center; gap:6px; margin-bottom:7px; flex-wrap:wrap; font-size:12px}
+.cmts-target .chip{max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.cmts-row{display:flex; gap:6px}
+.cmts-row input{border:1px solid var(--line-strong); border-radius:7px; padding:6px 9px; font-size:12.5px;
+  background:var(--canvas); color:var(--text); min-width:0}
+.cmts-row input:focus{outline:none; border-color:var(--blue); box-shadow:0 0 0 2px rgba(79,70,229,.1)}
+.cmts-body{flex:1; overflow-y:auto; padding:10px 14px 18px; scrollbar-width:thin}
+.cmts-sec{font-size:11.5px; font-weight:600; color:var(--faint); text-transform:uppercase;
+  letter-spacing:.4px; margin:12px 0 7px}
+.cmts-sec:first-child{margin-top:2px}
+.cthread-card{border:1px solid var(--line-soft); border-radius:10px; padding:9px 11px; margin-bottom:9px;
+  background:var(--canvas)}
+.cthread-card.resolved{opacity:.62; background:var(--bg-soft)}
+.cmts-blk{font-size:12px; margin-bottom:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.cmts-blk .linklike{color:var(--blue); cursor:pointer}
+.ct-msgs{display:flex; flex-direction:column; gap:6px}
+.ct-msg{font-size:12.5px; line-height:1.55; border-radius:6px; padding:2px 4px; scroll-margin:60px}
+.ct-msg.reply{border-left:2px solid var(--line); padding-left:9px; margin-left:6px}
+.ct-msg b{font-size:12px; color:var(--charcoal)}
+.ct-text{word-break:break-word; white-space:pre-wrap}
+.ct-msg .cdel{opacity:0; float:right; margin-left:6px}
+.ct-msg:hover .cdel{opacity:1}
+.ct-ops{display:flex; gap:5px; margin-top:8px; align-items:center}
+.ct-ops input{border:1px solid var(--line); border-radius:7px; padding:5px 9px; font-size:12px;
+  background:var(--canvas); color:var(--text); min-width:0}
+.ct-ops input:focus{outline:none; border-color:var(--blue)}
+.cthread-card .tp-on{background:var(--green-soft); color:var(--green); border-color:transparent}
+.cmts-empty{padding:22px 8px; text-align:center}
+.cmt-flash{background:var(--yellow-light); border-radius:6px; transition:background .4s ease}
+.cmt-chip{display:inline-flex; align-items:center; gap:3px; color:var(--amber-deep); background:var(--amber-soft);
+  border-color:transparent; vertical-align:1px}
+/* 段落/条款上的平台评论角标（复用 cmbadge 基础样式，靠后微调） */
+.docblk-p .cmbadge{margin-left:6px}

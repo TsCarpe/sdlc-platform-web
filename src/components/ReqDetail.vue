@@ -15,6 +15,7 @@ import DigestTab from './DigestTab.vue'
 import AuditTab from './AuditTab.vue'
 import ChecklistTab from './ChecklistTab.vue'
 import StdTab from './StdTab.vue'
+import CommentsPanel from './CommentsPanel.vue'
 import { fmtRel } from '../time.js'
 import { nextActionCta } from '../lifecycle.js'
 import { jumpTo, groupItems, groupByFirstAppearance } from '../trace.js'
@@ -100,6 +101,7 @@ async function load() {
     tab.value = TABS.includes(prevTab) ? prevTab : def
     emit('loaded', card.value.name)
     await loadExt()      // v2.4：设计/门禁读面（发布后），主按钮 CTA 与新 tab 的数据源
+    loadComments()       // v4：评论面（不阻塞主装载；失败静默）
   } catch (e) {
     error.value = e.message
   } finally {
@@ -112,6 +114,38 @@ const dv = ref(null)
 const gv = ref(null)
 const operator = ref(localStorage.getItem('sdlc.op') || '')
 watch(operator, v => localStorage.setItem('sdlc.op', v || ''))
+
+// ===== v4 评论域（DESIGN-v4 §4）：面板常驻壳层（跨 tab）；platformByBlock 供 OriginTab 角标 =====
+const cm = ref(null)              // GET /comments → {comments, unresolvedCount}
+const cmtsOpen = ref(false)
+const cmtsFocus = ref(null)       // 定位高亮的评论 id（L 系跳回协议）
+const cmtsComposeBlock = ref('')  // 发评目标块（块角标进入预选）
+
+async function loadComments() {
+  try {
+    const r = await api.get(`/api/requirements/${props.reqId}/comments`)
+    cm.value = Array.isArray(r?.comments) ? r : null   // 形状防御（非评论面响应不进渲染）
+  } catch { cm.value = null }   // 评论面失败不连累主流程（面板内动作会再次尝试）
+}
+function openComments(blockId = '', focusId = null) {
+  cmtsComposeBlock.value = blockId || ''
+  cmtsFocus.value = focusId
+  cmtsOpen.value = true
+}
+const cmByBlock = computed(() => {
+  const m = {}
+  for (const c of cm.value?.comments || []) if (c.blockId) m[c.blockId] = (m[c.blockId] || 0) + 1
+  return m
+})
+const cmUnresolved = computed(() => cm.value?.unresolvedCount || 0)
+const cmBlockText = computed(() => {
+  const m = {}
+  for (const b of docBlocks.value) if (b.text) m[b.id] = b.text
+  return m
+})
+const escalatedIds = computed(() =>
+  (d.value?.items || []).filter(i => i.origin === 'local' && i.srcCommentId).map(i => i.srcCommentId))
+function onCmtsRefresh() { loadComments(); load() }   // 升级会产生 L 行——澄清清单同步重拉
 
 async function loadExt() {
   if (card.value.status !== 'published') { dv.value = null; gv.value = null; return }
@@ -241,6 +275,10 @@ function resolveDocPath(path) {
       <span v-if="card.syncedAt" :title="card.syncedAt"><AppIcon name="refresh-cw" :size="12" />同步 {{ fmtRel(card.syncedAt) }}</span>
       <span v-if="card.status === 'published'" class="op-inline" title="定稿/裁决/放行动作以此留名（无登录体系的归因方案）">
         <AppIcon name="user" :size="12" />操作人 <input v-model="operator" class="op-input"></span>
+      <!-- v4 卡片级评论（整体疑问）：有评论才亮，含未解决计数 -->
+      <button class="btn small link" v-if="cm && cm.comments.length" @click="openComments('')"
+              title="卡片级评论（不锚定原文块的整体疑问）">
+        <AppIcon name="message-square" :size="12" />整体疑问<template v-if="cmUnresolved">（{{ cmUnresolved }} 未解决）</template></button>
       <button class="btn primary cta-btn" v-if="cta" :disabled="cta.disabled" @click="runCta">{{ cta.label }}</button>
     </div>
 
@@ -264,10 +302,11 @@ function resolveDocPath(path) {
     </div>
 
     <!-- 原始需求：全文快照（D1）；v1.2 有块结构时结构化渲染（不堆叠/图片/锚点），否则 md 渲染降级；
-         v4 窗口 1 块级编辑（保存后 @reload 壳层重拉 doc.json 刷新锚点） -->
+         v4 窗口 1 块级编辑（保存后 @reload 壳层重拉 doc.json 刷新锚点）；平台评论角标 + 面板入口 -->
     <OriginTab v-if="tab === 'origin'" ref="originTabRef"
                :card="card" :snapshot="d.snapshot" :doc="d.doc" :active-head="activeHead"
-               @locate="locate" @go-toc="goToc"
+               :platform-by-block="cmByBlock"
+               @locate="locate" @go-toc="goToc" @open-comments="id => openComments(id)"
                @toast="(m, t) => emit('toast', m, t)" @reload="load" />
 
     <!-- 结构化 Digest -->
@@ -280,10 +319,11 @@ function resolveDocPath(path) {
     <AuditTab v-if="tab === 'audit'" :audit="d.audit" :groups="auditGroups"
               @locate="locate" @jump="onJump" />
 
-    <!-- 澄清清单：与体检同序分组（D4） + 摘引 + 回跳（D5），答复交互不变 -->
+    <!-- 澄清清单：与体检同序分组（D4） + 摘引 + 回跳（D5），答复交互不变；L 系行可跳回原评论 -->
     <ChecklistTab v-if="tab === 'checklist'" :req-id="card.id" :items="d.items" :status="card.status"
                   :groups="checklistGroups"
-                  @locate="locate" @jump="onJump" @toast="(m, t) => emit('toast', m, t)" />
+                  @locate="locate" @jump="onJump" @open-comment="id => openComments('', id)"
+                  @toast="(m, t) => emit('toast', m, t)" />
 
     <!-- 标准需求文档：重写版（D6），四类引用可点击（D7） -->
     <StdTab v-if="tab === 'std'" ref="stdTabRef" :standard="d.standard" :active-head="activeHead"
@@ -314,6 +354,14 @@ function resolveDocPath(path) {
         <AppIcon name="arrow-up" :size="15" />
       </button>
     </Transition>
+
+    <!-- v4 评论面板（右侧抽屉，跨 tab 常驻）：locate 事件转发壳层定位协议（切到 origin 并锚块） -->
+    <CommentsPanel v-if="cmtsOpen" :req-id="card.id" :comments="cm?.comments || []"
+                   :block-text="cmBlockText" :escalated-ids="escalatedIds"
+                   :focus-id="cmtsFocus" :compose-block-id="cmtsComposeBlock"
+                   @close="cmtsOpen = false" @refresh="onCmtsRefresh"
+                   @locate="id => { locate('', id) }"
+                   @toast="(m, t) => emit('toast', m, t)" />
   </div>
   </div>
 </template>

@@ -19,9 +19,10 @@ const props = defineProps({
   card: { type: Object, required: true },        // sourceType/sourceUrl/sourceText/id/status
   snapshot: { type: Object, default: null },
   doc: { type: Object, default: null },
-  activeHead: { type: String, default: '' }      // 壳层滚动高亮（目录侧栏）
+  activeHead: { type: String, default: '' },     // 壳层滚动高亮（目录侧栏）
+  platformByBlock: { type: Object, default: () => ({}) }   // v4 blockId → 平台评论数（角标）
 })
-const emit = defineEmits(['locate', 'go-toc', 'toast', 'reload'])
+const emit = defineEmits(['locate', 'go-toc', 'toast', 'reload', 'open-comments'])
 
 const snapshotBox = ref(null)            // 快照渲染容器（needle 定位，expose 给壳）
 const tocOpen = ref(false)
@@ -207,12 +208,16 @@ async function rerunCheck() {
                       :comment-by-ref="commentByRef" :req-id="card.id" />
             <DocBlock v-for="b in sec.blocks" :key="b.id" :block="b"
                       :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
-                      :req-id="card.id" />
+                      :req-id="card.id"
+                      :platform-count="platformByBlock[b.id] || 0"
+                      @comments="emit('open-comments', b.id)" />
           </section>
           <template v-else>
             <DocBlock v-for="b in sec.blocks" :key="b.id" :block="b"
                       :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
-                      :req-id="card.id" />
+                      :req-id="card.id"
+                      :platform-count="platformByBlock[b.id] || 0"
+                      @comments="emit('open-comments', b.id)" />
           </template>
         </template>
       </template>

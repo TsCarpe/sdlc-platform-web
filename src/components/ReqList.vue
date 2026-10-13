@@ -54,6 +54,7 @@ async function load() {
   error.value = ''
   try {
     reqs.value = await api.get('/api/requirements')
+    loadCommentCounts(reqs.value)   // v4 未解决评论角标：逐卡拉取（交接背书），后台分批不阻塞列表
   } catch (e) {
     error.value = e.message
   } finally {
@@ -61,6 +62,24 @@ async function load() {
   }
 }
 onMounted(load)
+
+// v4 评论角标：并发 10 的后台分批逐卡拉取 unresolvedCount（200 卡残留数据下也不挤爆浏览器队列）
+const cmts = ref({})
+async function loadCommentCounts(list) {
+  cmts.value = {}
+  const ids = list.map(r => r.id)
+  let i = 0
+  const worker = async () => {
+    while (i < ids.length) {
+      const id = ids[i++]
+      try {
+        const r = await api.get(`/api/requirements/${id}/comments`)
+        cmts.value = { ...cmts.value, [id]: r.unresolvedCount }
+      } catch { /* 角标失败静默——详情页评论面兜底 */ }
+    }
+  }
+  await Promise.all(Array.from({ length: 10 }, worker))
+}
 
 // 统计卡即筛选：点卡片快速过滤对应状态
 function statFilter(s) { fq.value.status = fq.value.status === s ? '' : s }
@@ -179,6 +198,9 @@ async function saveNewReq() {
             <td><div class="cell-ell" :title="r.name">{{ r.name }}</div>
               <div class="sub">{{ r.id }}
                 <span class="badge" v-if="tierCls[r.riskTier]" :class="tierCls[r.riskTier]" :title="tierTip[r.riskTier]">{{ r.riskTier }}</span>
+                <!-- v4 未解决评论角标（逐卡拉取；点击进详情看评论面） -->
+                <span class="chip cmt-chip" v-if="cmts[r.id]" :title="`${cmts[r.id]} 条未解决评论`">
+                  <AppIcon name="message-square" :size="10" />{{ cmts[r.id] }}</span>
               </div>
             </td>
             <td class="sub nw" :title="r.iter">{{ r.iter || '—' }}</td>

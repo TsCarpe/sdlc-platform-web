@@ -12,8 +12,10 @@ const props = defineProps({
   block: { type: Object, required: true },
   childrenByParent: { type: Object, default: () => ({}) },
   commentByRef: { type: Object, default: () => ({}) },
-  reqId: { type: String, default: '' }
+  reqId: { type: String, default: '' },
+  platformCount: { type: Number, default: 0 }   // v4 平台评论数（按 blockId 聚合，OriginTab 传入）
 })
+const emit = defineEmits(['comments'])   // 平台评论角标点击（壳层开评论面板）
 
 const openComments = ref(false)
 
@@ -59,6 +61,8 @@ function toggleComments() { openComments.value = !openComments.value }
   <!-- 段落：长文本默认折叠（CSS line-clamp，DOM 常驻），可展开 -->
   <p v-else-if="block.type === 'paragraph'" class="docblk-p" :data-blk="block.id">
     <ClampText :html="inlineHtml" :lines="4" :threshold="170" />
+    <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
+            @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
   </p>
 
   <!-- 列表项（条款）：最小引用单位 -->
@@ -66,6 +70,8 @@ function toggleComments() { openComments.value = !openComments.value }
     <div class="clause-line">
       <span class="ordinal" v-if="block.marker">{{ block.marker.replace(/\s+/g, '') }}</span>
       <span class="clause-text" v-html="inlineHtml"></span>
+      <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
+              @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
       <button class="cmbadge" v-if="commentThreads.length" @click="toggleComments"
           :title="'评论区：' + commentThreads[0]?.quote">
         <AppIcon name="message-square" :size="10" />{{ commentThreads.length }}</button>
@@ -82,6 +88,8 @@ function toggleComments() { openComments.value = !openComments.value }
   <div v-else-if="block.type === 'table-row'" class="docblk rowcard" :data-blk="block.id">
     <div class="rowcard-h">
       <span class="chip">{{ block.rowLabel }}</span>
+      <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
+              @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
       <button class="cmbadge" v-if="commentThreads.length" @click="toggleComments">
         <AppIcon name="message-square" :size="10" />{{ commentThreads.length }}</button>
       <div class="cthread" v-for="t in (openComments ? commentThreads : [])" :key="t.id">

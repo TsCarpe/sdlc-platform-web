@@ -17,7 +17,7 @@ const props = defineProps({
   status: { type: String, default: '' },
   groups: { type: Array, default: () => [] }      // 壳层需求域分组（revealGrpFor 共用）
 })
-const emit = defineEmits(['locate', 'jump', 'toast'])
+const emit = defineEmits(['locate', 'jump', 'toast', 'open-comment'])
 
 const { openGrps, toggleGrp, expandAll, collapseAll, revealGrpFor } = useGrpCollapse()
 
@@ -155,7 +155,11 @@ async function reopen(it) {
         <div class="ci-head">
           <span class="badge" :class="lvlCls[it.level]">{{ lvlLabel[it.level] }}</span>
           <span class="chip">{{ it.seq }}</span>
-          <button class="jump-link" @click="emit('jump', { kind: 'audit', id: it.seq })">来自体检.{{ it.seq }}<AppIcon name="arrow-up-right" :size="11" /></button>
+          <!-- v4 origin 两族（§2）：L 系来自评论升级（回链原讨论）；P 系来自体检报告 -->
+          <button class="jump-link" v-if="it.origin === 'local'"
+                  title="由评论升级而来——点击回看原讨论" @click="emit('open-comment', it.srcCommentId)">
+            来自评论<span v-if="it.srcCommentId"> #{{ it.srcCommentId }}</span><AppIcon name="arrow-up-right" :size="11" /></button>
+          <button class="jump-link" v-else @click="emit('jump', { kind: 'audit', id: it.seq })">来自体检.{{ it.seq }}<AppIcon name="arrow-up-right" :size="11" /></button>
         </div>
         <div class="q">{{ it.question }}</div>
         <div class="ctx" v-if="it.ctx">出处：<a class="cite" :class="{ anchored: it.anchor }" @click="emit('locate', firstQuote(it.quote) || it.ctx, it.anchor)">{{ it.ctx }}<span v-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a></div>

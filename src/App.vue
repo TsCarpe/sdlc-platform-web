@@ -124,6 +124,7 @@ watch(() => pendingJump.nonce, n => {
   page.value = pendingJump.page
   currentIter.value = null
   if (pendingJump.page === 'reqs') currentReqId.value = pendingJump.reqId
+  else resetWork()   // 跳出工作台（cases 页）：须清 currentReqId，否则 ReqDetail(v-else-if) 挡住目标页
 })
 </script>
 

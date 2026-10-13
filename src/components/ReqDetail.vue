@@ -524,7 +524,7 @@ function frByModule(m) {
         用例<span class="n num" v-if="d.coverage && d.coverage.backward.total">{{ d.coverage.backward.total }}</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'design' }" @click="tab = 'design'">设计</button>
       <button class="tab" role="tab" :class="{ on: tab === 'gate' }" @click="tab = 'gate'">
-        门禁<span class="n num" v-if="gv && gv.round">{{ gv.round.status === '已放行' ? '✓' : gv.round.roundNo + '轮' }}</span></button>
+        门禁<span class="n num" v-if="gv && gv.round">{{ gv.round.status === 'released' ? '✓' : gv.round.roundNo + '轮' }}</span></button>
     </div>
 
     <!-- 原始需求：全文快照（D1）；v1.2 有块结构时结构化渲染（不堆叠/图片/锚点），否则 md 渲染降级 -->

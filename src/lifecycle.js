@@ -60,7 +60,7 @@ export function nextActionCta(d, dv, gv) {
   }
   if (gate === 'deciding') {
     const units = gv.units || []
-    const decided = units.filter(u => u.verdict === '备案' || u.verdict).length
+    const decided = units.filter(u => u.verdict).length  // truthy 即已裁决（revise/reject/query/filed）
     return decided >= units.length
       ? { label: '放行评审（GR-4 校验）', go: 'gate:release' }
       : { label: `继续裁决 ${decided}/${units.length}`, go: 'tab:gate' }

@@ -41,6 +41,9 @@ const loadDraft = async () => {
     showDraft.value = d.md || ''
   } catch (e) { emit('toast', e.message, 'err') }
 }
+// gate 域落库值英文化（批次6）：显示口径经映射表回到中文
+const VERDICT_LABEL = { revise: '落改', reject: '驳回', query: '存疑', filed: '备案' }
+const ROUND_LABEL = { pending: '待裁决', released: '已放行' }
 const askVerdict = (issue, verdict) => { vd.value = { issue, verdict, note: '', revLocation: '' } }
 const confirmVerdict = () => run(async () => {
   const v = vd.value
@@ -48,7 +51,7 @@ const confirmVerdict = () => run(async () => {
     { verdict: v.verdict, note: v.note.trim(), revLocation: v.revLocation.trim(), by: props.operator })
   vd.value = null
 }, '裁决已记录（按裁决单元批量生效）')
-const markExecuted = issue => run(() => api.post(`/api/gate/issues/${issue.id}/revision`, { revStatus: '已执行' }), '落改已执行')
+const markExecuted = issue => run(() => api.post(`/api/gate/issues/${issue.id}/revision`, { revStatus: 'done' }), '落改已执行')
 const release = () => run(() => api.post(`/api/gate/rounds/${round.value.id}/release`, { by: props.operator }),
   '已放行（GR-4 全绿）·关卡互认：用例关卡1 视同通过')
 const reopen = () => run(() => api.post(`/api/requirements/${props.reqId}/gate/reopen`, { by: props.operator }), '已开复审轮（旧轮只读归档）')
@@ -124,16 +127,16 @@ const reopen = () => run(() => api.post(`/api/requirements/${props.reqId}/gate/r
         <blockquote class="quote" v-if="i.quote"><span class="qlb">摘引 · {{ i.loc || '—' }}</span>{{ i.quote }}</blockquote>
         <div class="issue-v">
           <template v-if="!i.verdict">
-            <button class="btn small primary" @click="askVerdict(i, '落改')">落改</button>
-            <button class="btn small" @click="askVerdict(i, '驳回')">驳回</button>
-            <button class="btn small" @click="askVerdict(i, '存疑')">存疑</button>
+            <button class="btn small primary" @click="askVerdict(i, 'revise')">落改</button>
+            <button class="btn small" @click="askVerdict(i, 'reject')">驳回</button>
+            <button class="btn small" @click="askVerdict(i, 'query')">存疑</button>
           </template>
           <template v-else>
-            <span class="badge" :class="{ 落改: 'b-blue', 驳回: 'b-gray', 存疑: 'b-amber' }[i.verdict]">{{ i.verdict }}</span>
+            <span class="badge" :class="{ revise: 'b-blue', reject: 'b-gray', query: 'b-amber', filed: 'b-gray' }[i.verdict]">{{ VERDICT_LABEL[i.verdict] || i.verdict }}</span>
             <span class="sub" v-if="i.verdictNote">{{ i.verdictNote }}</span>
             <span class="sub" v-if="i.revLocation">落点：{{ i.revLocation }}</span>
-            <button class="btn small" v-if="i.verdict === '落改' && i.revStatus !== '已执行'" :disabled="busy" @click="markExecuted(i)">标记已执行</button>
-            <span class="badge b-green" v-if="i.verdict === '落改' && i.revStatus === '已执行'">已执行</span>
+            <button class="btn small" v-if="i.verdict === 'revise' && i.revStatus !== 'done'" :disabled="busy" @click="markExecuted(i)">标记已执行</button>
+            <span class="badge b-green" v-if="i.verdict === 'revise' && i.revStatus === 'done'">已执行</span>
             <span class="sub" style="margin-left:auto">{{ i.verdictBy }} · {{ i.verdictAt }}</span>
           </template>
         </div>
@@ -155,9 +158,9 @@ const reopen = () => run(() => api.post(`/api/requirements/${props.reqId}/gate/r
     <!-- 轮次列表（旧轮只读） -->
     <div class="card" v-if="(view.rounds || []).length > 1 || (view.rounds || []).length === 1">
       <h3>评审轮次</h3>
-      <div class="gc-item" v-for="r in view.rounds" :key="r.id" :class="r.status === '已放行' ? 'ok' : ''">
+      <div class="gc-item" v-for="r in view.rounds" :key="r.id" :class="r.status === 'released' ? 'ok' : ''">
         <b>r{{ r.roundNo }}</b>
-        <span class="badge" :class="r.status === '已放行' ? 'b-green' : 'b-amber'">{{ r.status }}</span>
+        <span class="badge" :class="r.status === 'released' ? 'b-green' : 'b-amber'">{{ ROUND_LABEL[r.status] || r.status }}</span>
         <span class="sub">开闸 {{ r.openedAt }}<template v-if="r.releasedAt"> · 放行 {{ r.releasedAt }}</template><template v-if="r.id !== round?.id"> · 只读归档</template></span>
       </div>
     </div>
@@ -166,15 +169,15 @@ const reopen = () => run(() => api.post(`/api/requirements/${props.reqId}/gate/r
   <!-- 裁决弹层 -->
   <div class="modal-mask" v-if="vd" @click.self="vd = null">
     <div class="modal" style="width:500px" role="dialog" aria-modal="true">
-      <div class="modal-h">{{ vd.issue.code }} · {{ vd.verdict }}<button class="x" @click="vd = null">✕</button></div>
+      <div class="modal-h">{{ vd.issue.code }} · {{ VERDICT_LABEL[vd.verdict] || vd.verdict }}<button class="x" @click="vd = null">✕</button></div>
       <div class="modal-b">
         <p class="sub" style="margin-bottom:10px">{{ vd.issue.scene }}</p>
-        <div class="field" v-if="vd.verdict === '落改'">
+        <div class="field" v-if="vd.verdict === 'revise'">
           <label><em>*</em>落点（&lt;文件+位置&gt;）</label>
           <input v-model="vd.revLocation" placeholder="如：§1 数据模型 · idx_publish_at">
         </div>
         <div class="field">
-          <label>{{ vd.verdict === '落改' ? '改动摘要（可选）' : (vd.verdict === '驳回' ? '*驳回理由（沉淀误报模式）' : '*去向（如：拉 PM / 留下轮）') }}</label>
+          <label>{{ vd.verdict === 'revise' ? '改动摘要（可选）' : (vd.verdict === 'reject' ? '*驳回理由（沉淀误报模式）' : '*去向（如：拉 PM / 留下轮）') }}</label>
           <textarea v-model="vd.note" rows="3"></textarea>
         </div>
         <div class="field"><label>裁决人</label><input :value="props.operator" disabled placeholder="—"></div>

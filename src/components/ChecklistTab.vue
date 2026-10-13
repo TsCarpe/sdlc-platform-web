@@ -168,10 +168,11 @@ async function reopen(it) {
         <div class="ci-head">
           <span class="badge" :class="lvlCls[it.level]">{{ lvlLabel[it.level] }}</span>
           <span class="chip">{{ it.seq }}</span>
-          <!-- v4 origin 两族（§2）：L 系来自评论升级（回链原讨论）；P 系来自体检报告 -->
+          <!-- v4 origin 三族（§2/§6.3）：L 系来自评论升级（回链原讨论）；incremental 来自增量质检（变更后局部重检）；skill 来自体检报告 -->
           <button class="jump-link" v-if="it.origin === 'local'"
                   title="由评论升级而来——点击回看原讨论" @click="emit('open-comment', it.srcCommentId)">
             来自评论<span v-if="it.srcCommentId"> #{{ it.srcCommentId }}</span><AppIcon name="arrow-up-right" :size="11" /></button>
+          <span class="jump-link" v-else-if="it.origin === 'incremental'" title="增量质检产生（变更单确认后的局部重检），处置后可重新发布">来自增量质检</span>
           <button class="jump-link" v-else @click="emit('jump', { kind: 'audit', id: it.seq })">来自体检.{{ it.seq }}<AppIcon name="arrow-up-right" :size="11" /></button>
         </div>
         <div class="q">{{ it.question }}</div>

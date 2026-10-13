@@ -115,10 +115,12 @@ describe('ChecklistTab：L 系 origin 呈现与跳回', () => {
     await link.trigger('click')
     expect(w.emitted('open-comment')[0]).toEqual([7])
   })
-  it('P 系行保持「来自体检」', async () => {
-    const items = [{ seq: 'P01', level: 'yellow', theme: '域', question: 'q', answer: '', status: 'pending', origin: 'skill' }]
+  it('P 系行保持「来自体检」；incremental 行显示「来自增量质检」', async () => {
+    const items = [{ seq: 'P01', level: 'yellow', theme: '域', question: 'q', answer: '', status: 'pending', origin: 'skill' },
+      { seq: 'P2', level: 'yellow', theme: '域', question: '增量问', answer: '', status: 'pending', origin: 'incremental' }]
     const w = await mountCheck(items)
     expect(w.text()).toContain('来自体检.P01')
+    expect(w.text()).toContain('来自增量质检')
     expect(w.text()).not.toContain('来自评论')
   })
 })

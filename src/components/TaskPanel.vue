@@ -8,7 +8,7 @@ import { fmtRel, fmtDur } from '../time.js'
 import { ask } from '../confirm.js'
 import { isDone } from '../disposition.js'
 
-const props = defineProps({ reqId: String, detail: Object })
+const props = defineProps({ reqId: String, detail: Object, operator: { type: String, default: '' } })
 const emit = defineEmits(['toast', 'refresh'])
 
 const tasks = ref([])
@@ -24,7 +24,7 @@ const casesExpanded = ref(false)       // 用例草稿表：越过限高后可�
 const collapsed = ref(true)
 const stdDraftVisible = computed(() => !!stdDraft.value && card.value.status !== 'published')
 const effectiveCollapsed = computed(() =>
-  collapsed.value && !activeTask.value && !digestDraft.value && !stdDraftVisible.value && !casesDraft.value)
+  collapsed.value && !activeTask.value && !digestDraft.value && !stdDraftVisible.value && !casesDraft.value && !incDraft.value)
 function stageStatus(type) { return latestByType.value[type]?.status || '' }   // ''|done|failed
 const latestTaskAt = computed(() => tasks.value[0]?.updatedAt || '')
 
@@ -38,6 +38,8 @@ const nextAction = computed(() => {
   if ((card.value.status === 'clarifying' || card.value.status === 'changed') && allAnswered.value && !stdDraft.value) {
     return { label: '生成标准文档', run: () => createTask('standard_doc', '标准文档合成') }
   }
+  // v4 增量未采纳：发布会被「未消化」守卫堵——引导先采纳
+  if (incDraft.value) return { label: '先采纳增量合并', run: () => { collapsed.value = false } }
   if (card.value.status === 'changed' && stdDraft.value) {
     return { label: '从草稿预览发布', run: publishStd }
   }
@@ -66,6 +68,71 @@ const latestByType = computed(() => {
 const digestDraft = computed(() => drafts.value.digest_bundle || null)
 const stdDraft = computed(() => drafts.value.standard || null)
 const casesDraft = computed(() => drafts.value.cases || null)
+// ===== v4.14 增量合并草稿（采纳 = 服务端机械合并；预览 = 受影响章节 + 新旧行对照 + 作废清单） =====
+const incDraft = computed(() => drafts.value.incremental_bundle || null)
+const incBundle = computed(() => {
+  if (!incDraft.value) return null
+  try { return JSON.parse(incDraft.value.contentJson || '{}') } catch { return null }
+})
+/** 章节区块 heading 文本解析（sections 存 heading blockId，禁 seq——§7 注意事项 6） */
+const docBlks = computed(() => props.detail?.doc?.content?.blocks || [])
+function headingText(id) {
+  const b = docBlks.value.find(x => x.id === id)
+  return b ? (b.text || id) : id
+}
+const incStats = computed(() => {
+  const p = incBundle.value
+  if (!p) return []
+  const r = p.digestRows || {}
+  const inv = p.invalidate || {}
+  const out = [
+    ['章节', (p.sections || []).length],
+    ['摘要行', (r.features || []).length + (r.flows || []).length + (r.states || []).length],
+    ['体检条目', (r.auditItems || []).length],
+    ['FR', `+${(r.frUpserts || []).length}/-${(r.frRemoves || []).length}`],
+    ['新澄清', (p.clarify?.items || []).length],
+    ['作废', (inv.digestAnchors || []).length + (inv.auditIds || []).length]
+  ]
+  return out
+})
+/** 增量行展示文本（行形状随产物而异，取惯用键回退） */
+function rowText(r) {
+  return r.name || r.title || r.text || r.summary || r.question || JSON.stringify(r).slice(0, 60)
+}
+const ROW_KIND_LABEL = { features: '功能点', flows: '流程', states: '状态', auditItems: '体检', frUpserts: '需求点' }
+const incRows = computed(() => {
+  const r = incBundle.value?.digestRows || {}
+  const out = []
+  for (const [key, label] of Object.entries(ROW_KIND_LABEL)) {
+    for (const row of r[key] || []) {
+      if (key === 'frUpserts') continue   // FR upsert 展示为 id+name 单列（含 anchor）
+      out.push({ kindLabel: label, text: rowText(row), anchor: row.anchor || '' })
+    }
+  }
+  return out
+})
+const frRemoves = computed(() => incBundle.value?.digestRows?.frRemoves || [])
+const invalidates = computed(() => [
+  ...(incBundle.value?.invalidate?.digestAnchors || []),
+  ...(incBundle.value?.invalidate?.auditIds || [])
+])
+const incClarify = computed(() => incBundle.value?.clarify?.items || [])
+async function approveInc() {
+  if (!await ask({
+    title: '采纳增量合并草稿？',
+    body: '服务端机械合并（受影响章节区间整组替换）：digest/体检/FR/机器澄清按区间更新，本地澄清（L 系）永不动；合并完成即可重新发布。',
+    confirmText: '采纳（合并）'
+  })) return
+  busy.value = true
+  try {
+    const r = await api.post(`/api/requirements/${props.reqId}/drafts/incremental_bundle/approve`,
+      { by: props.operator || '增量采纳' })
+    emit('toast', `增量合并完成：移除 ${r.removedRows} 行 / 写入 ${r.newRows} 行，digest 已刷新——可重新发布`)
+    emit('refresh')
+    loadDrafts()
+  } catch (e) { emit('toast', '采纳失败：' + e.message, 'err') }
+  finally { busy.value = false }
+}
 
 // digest 草稿统计：优先任务 result 摘要，回退解析 contentJson
 const digestStats = computed(() => {
@@ -403,6 +470,49 @@ function elapsed(t) {
       <div class="tp-btns">
         <button class="btn primary" :disabled="busy" @click="approveDigest"><AppIcon name="check-circle" :size="13" />采纳（进入待澄清）</button>
         <button class="btn danger" :disabled="busy" @click="dropDraft('digest_bundle')">丢弃</button>
+      </div>
+    </div>
+
+    <!-- v4 增量合并草稿（changed 流程）：章节 + 新旧行对照 + 作废清单 → 采纳机械合并 -->
+    <div class="tp-draft" v-if="incDraft">
+      <div class="tp-draft-h">
+        <span class="badge b-amber">待确认</span><b>{{ draftLabel.incremental_bundle }}</b>
+        <span class="chip" v-if="incBundle?.changeId">变更单 #{{ incBundle.changeId }}</span>
+        <span class="chip" v-for="[k, v] in incStats" :key="k">{{ k }} {{ v }}</span>
+        <span class="chip" v-if="incBundle?.riskTier">风险 {{ incBundle.riskTier }}</span>
+      </div>
+      <div class="inc-preview" v-if="incBundle">
+        <div class="inc-sec" v-if="(incBundle.sections || []).length">
+          <span class="lb">受影响章节</span>
+          <span class="chip" v-for="s in incBundle.sections" :key="s">{{ headingText(s) }}</span>
+        </div>
+        <div class="inc-sec" v-if="incBundle.summary">
+          <span class="lb">增量摘要</span><span>{{ incBundle.summary }}</span>
+        </div>
+        <table class="table inc-table" v-if="incRows.length">
+          <thead><tr><th style="width:88px">类别</th><th>新增行</th><th style="width:150px">锚点</th></tr></thead>
+          <tbody><tr v-for="(r, i) in incRows" :key="i">
+            <td><span class="chip">{{ r.kindLabel }}</span></td>
+            <td>{{ r.text }}</td>
+            <td class="sub"><code>{{ r.anchor || '—' }}</code></td>
+          </tr></tbody>
+        </table>
+        <div class="inc-sec" v-if="frRemoves.length || invalidates.length">
+          <span class="lb">移除 / 作废</span>
+          <span class="chip warn" v-for="x in frRemoves" :key="'fr' + x">FR {{ x }}</span>
+          <span class="chip warn" v-for="x in invalidates" :key="x"><code>{{ x }}</code></span>
+        </div>
+        <div class="inc-sec" v-if="incClarify.length">
+          <span class="lb">新增澄清（机器行，可作答处置）</span>
+          <div class="inc-clr" v-for="(c, i) in incClarify" :key="i">
+            <span class="chip">{{ c.anchor || '卡' }}</span>{{ c.question || rowText(c) }}
+          </div>
+        </div>
+      </div>
+      <div class="sub" v-else style="padding:4px 0">增量包内容不可解析（contentJson 非法）。</div>
+      <div class="tp-btns">
+        <button class="btn primary" :disabled="busy" @click="approveInc"><AppIcon name="check-circle" :size="13" />采纳（服务端机械合并）</button>
+        <button class="btn danger" :disabled="busy" @click="dropDraft('incremental_bundle')">丢弃</button>
       </div>
     </div>
 

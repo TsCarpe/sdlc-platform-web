@@ -928,3 +928,11 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .impact-row:hover{background:var(--canvas)}
 .impact-row input[type=checkbox]{margin-top:3px; accent-color:var(--blue)}
 .impact-row code{font-size:11px; color:var(--blue); flex:none}
+
+/* ---- 增量合并草稿预览（TaskPanel incremental_bundle） ---- */
+.inc-preview{border:1px solid var(--line-soft); border-radius:9px; padding:9px 12px; margin:8px 0;
+  background:var(--bg-soft); display:flex; flex-direction:column; gap:8px}
+.inc-sec{display:flex; align-items:flex-start; gap:7px; font-size:12.5px; line-height:1.6; flex-wrap:wrap}
+.inc-sec .lb{flex:none; font-weight:600; color:var(--muted); font-size:12px; margin-top:1px}
+.inc-table .chip{white-space:nowrap}
+.inc-clr{font-size:12.5px; padding:2px 0; word-break:break-word}

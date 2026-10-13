@@ -188,7 +188,7 @@ function onKey(e) {
             </div>
           </div>
           <div class="ct-ops">
-            <input v-model="replyDraft[t.root.id]" placeholder="回复…" style="flex:1"
+            <input v-model="replyDraft[t.root.id]" :name="'reply-' + t.root.id" :aria-label="'回复 ' + t.root.author" placeholder="回复…" style="flex:1"
                    @keydown.ctrl.enter.prevent="post(t.root.blockId, replyDraft[t.root.id] || '', t.root.id)">
             <button class="btn small" :disabled="busy" @click="post(t.root.blockId, replyDraft[t.root.id] || '', t.root.id)">回复</button>
             <button class="btn small" :disabled="busy" @click="toggleResolve(t)">

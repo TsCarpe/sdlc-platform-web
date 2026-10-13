@@ -288,7 +288,7 @@ function resolveDocPath(path) {
       <span v-if="card.submittedBy"><AppIcon name="user" :size="12" />{{ card.submittedBy }} · {{ fmtRel(card.createdAt) }}</span>
       <span v-if="card.syncedAt" :title="card.syncedAt"><AppIcon name="refresh-cw" :size="12" />同步 {{ fmtRel(card.syncedAt) }}</span>
       <span v-if="card.status === 'published' || card.status === 'changed'" class="op-inline" title="定稿/采纳/裁决/放行动作以此留名（无登录体系的归因方案）">
-        <AppIcon name="user" :size="12" />操作人 <input v-model="operator" class="op-input"></span>
+        <AppIcon name="user" :size="12" />操作人 <input type="text" v-model="operator" name="operator" aria-label="操作人" class="op-input"></span>
       <!-- v4 卡片级评论（整体疑问）：有评论才亮，含未解决计数 -->
       <button class="btn small link" v-if="cm && cm.comments.length" @click="openComments('')"
               title="卡片级评论（不锚定原文块的整体疑问）">

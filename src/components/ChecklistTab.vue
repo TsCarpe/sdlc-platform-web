@@ -203,7 +203,7 @@ async function reopen(it) {
           <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
           <!-- 变更确认重开的项：原答复在 note（「因变更单#N 重开，原答复：…」）——PM 需看到再重新作答 -->
           <div class="sub" v-if="it.status === 'pending' && it.note" style="width:100%;margin:2px 0">{{ it.note }}</div>
-          <textarea v-model="it.answer" :placeholder="'PM 在此作答…'"
+          <textarea v-model="it.answer" :name="'clf-answer-' + it.seq" :aria-label="it.seq + ' 作答'" :placeholder="'PM 在此作答…'"
             @blur="saveAnswer(it)" @input="autoGrow"></textarea>
           <div class="ans-ops">
             <button class="btn small link" title="认定不是问题：不进标准文档定稿" @click="askDispose(it, 'rejected')">驳回（不是问题）</button>

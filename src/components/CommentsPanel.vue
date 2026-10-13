@@ -2,7 +2,7 @@
 // v4 评论面板（DESIGN-v4 §4）：右侧抽屉——卡片级「整体疑问」+ 块锚定线程；线程级解决/重开、
 // 单条删除、升级澄清项（L 系，重复升级 409 → escalatedIds 预禁用）。评论任何状态可发（无守卫）。
 // 数据面由壳层持有（comments prop），本组件只做动作 + emit refresh 由壳层重拉。
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import { ask } from '../confirm.js'
@@ -125,6 +125,20 @@ watch(() => props.focusId, async id => {
   el.classList.add('cmt-flash')
   setTimeout(() => el.classList.remove('cmt-flash'), 1600)
 }, { immediate: true })
+
+// ===== 键盘：Esc 关升级弹层 → 关抽屉；挂载焦点落发评框 =====
+const composerInp = ref(null)
+onMounted(async () => {
+  document.addEventListener('keydown', onKey)
+  await nextTick()
+  composerInp.value?.focus()
+})
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
+function onKey(e) {
+  if (e.key !== 'Escape') return
+  if (escDlg.value) { escDlg.value = null; return }
+  emit('close')
+}
 </script>
 
 <template>
@@ -145,8 +159,9 @@ watch(() => props.focusId, async id => {
         <button class="btn small link" v-if="composeTarget" @click="composeTarget = ''">改为卡片级</button>
       </div>
       <div class="cmts-row">
-        <input v-model="author" placeholder="姓名（署名）" style="width:110px">
-        <input v-model="replyDraft.__new" placeholder="写下评论…（Ctrl+Enter 发送）" style="flex:1"
+        <input v-model="author" placeholder="姓名（署名）" style="width:110px" name="comment-author" aria-label="评论署名">
+        <input ref="composerInp" v-model="replyDraft.__new" placeholder="写下评论…（Ctrl+Enter 发送）" style="flex:1"
+               name="comment-new" aria-label="评论内容"
                @keydown.ctrl.enter.prevent="post(composeTarget, replyDraft.__new || '')">
         <button class="btn small primary" :disabled="busy" @click="post(composeTarget, replyDraft.__new || '')">发送</button>
       </div>
@@ -199,11 +214,11 @@ watch(() => props.focusId, async id => {
           <div class="field"><label>级别</label>
             <div class="seg">
               <label class="seg-opt" v-for="(lb, lv) in lvlLabel" :key="lv" :class="{ on: escDlg.level === lv }">
-                <input type="radio" :value="lv" v-model="escDlg.level"><span><span class="seg-t">{{ lb }}</span></span>
+                <input type="radio" :value="lv" v-model="escDlg.level" :name="'esc-level-' + escDlg.id"><span><span class="seg-t">{{ lb }}</span></span>
               </label>
             </div>
           </div>
-          <div class="field"><label>主题（可选，缺省「评论升级」）</label><input v-model="escDlg.theme" placeholder="如：口径歧义"></div>
+          <div class="field"><label>主题（可选，缺省「评论升级」）</label><input v-model="escDlg.theme" name="esc-theme" placeholder="如：口径歧义"></div>
         </div>
         <div class="modal-f">
           <button class="btn" @click="escDlg = null">取消</button>

@@ -4,7 +4,7 @@
 // 目录点击经 emit 上抛壳层 locate 协议；box/headEls 供壳层 needle 定位与滚动高亮。
 // v4 窗口 1（未发布卡）：块级直接编辑——BlockEditor（方案 C）+ 保存流（POST blocks/diff 预览 →
 // PUT blocks → 壳层重拉 doc.json 刷新锚点）；保存后提示「质检已过期」可一键重新质检。
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import DocBlock from './DocBlock.vue'
 import AppIcon from './AppIcon.vue'
 import TocPane from './TocPane.vue'
@@ -92,6 +92,14 @@ const editorRef = ref(null)
 const diffPreview = ref(null)     // {items, counts} —— 保存预览弹层
 const staleCheck = ref(false)     // 保存成功后「质检已过期」横幅
 const op = ref(localStorage.getItem('sdlc.op') || '')
+
+// diff 预览弹层 Esc 关闭（随开关挂摘监听）
+function onDiffKey(e) { if (e.key === 'Escape') diffPreview.value = null }
+watch(diffPreview, v => {
+  if (v) document.addEventListener('keydown', onDiffKey)
+  else document.removeEventListener('keydown', onDiffKey)
+})
+onBeforeUnmount(() => document.removeEventListener('keydown', onDiffKey))
 
 function requireOp() {
   if (!op.value.trim()) { emit('toast', '请先填写操作人（编辑留痕必填）', 'err'); return false }
@@ -186,7 +194,7 @@ async function rerunCheck() {
         <div class="bedit-topbar">
           <span class="lbl"><AppIcon name="pencil" :size="12" />编辑原文（窗口 1 · 保存即生效）</span>
           <span class="lbl">操作人</span>
-          <input v-model="op" placeholder="手填身份（留痕）" @keydown.enter="previewSave">
+          <input type="text" v-model="op" name="edit-op" placeholder="手填身份（留痕）" @keydown.enter="previewSave">
           <span class="spacer"></span>
           <button class="btn" :disabled="saving" @click="cancelEdit">取消</button>
           <button class="btn primary" :disabled="saving" @click="previewSave">

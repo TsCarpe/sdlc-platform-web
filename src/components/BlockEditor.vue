@@ -257,7 +257,7 @@ const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列�
           <div class="bedit-edit" v-if="editingId === b.id" @click.stop @focusout="editFocusOut">
             <!-- paragraph / list-item：textarea + 行内语法工具条 -->
             <template v-if="b.type === 'paragraph' || b.type === 'list-item'">
-              <textarea :id="'betext-' + b.id" :ref="setFocusEl" v-model="buf.text" rows="2" spellcheck="false"
+              <textarea :id="'betext-' + b.id" :ref="setFocusEl" v-model="buf.text" rows="2" spellcheck="false" name="blk-text"
                         @input="autoGrow" @keydown.esc.prevent="commitEdit"></textarea>
               <div class="bedit-toolbar">
                 <button title="加粗（选中段包 **）" @click="wrapSel('b')"><b>B</b></button>
@@ -275,7 +275,7 @@ const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列�
                   <option v-for="lv in [1,2,3,4,5,6]" :key="lv" :value="lv">H{{ lv }}</option>
                 </select>
               </div>
-              <input type="text" :ref="setFocusEl" v-model="buf.text" placeholder="标题文本"
+              <input type="text" :ref="setFocusEl" v-model="buf.text" name="blk-heading" placeholder="标题文本"
                      @keydown.esc.prevent="commitEdit" @keydown.enter.prevent="commitEdit">
               <div class="bedit-toolbar"><span class="bedit-hint">Esc 或失焦保存退出 · {{ TYPE_LABEL[b.type] }}</span></div>
             </template>
@@ -283,12 +283,12 @@ const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列�
             <template v-else-if="b.type === 'table-row'">
               <div class="bedit-fieldrow">
                 <label>行标识</label>
-                <input type="text" v-model="buf.rowLabel" style="max-width:220px" @keydown.esc.prevent="commitEdit">
+                <input type="text" v-model="buf.rowLabel" name="blk-rowlabel" style="max-width:220px" @keydown.esc.prevent="commitEdit">
               </div>
               <div class="bedit-cells">
                 <div class="bedit-cell" v-for="(c, ci) in buf.cells" :key="ci">
                   <span class="idx">{{ buf.head[ci] || ('列' + (ci + 1)) }}</span>
-                  <input type="text" v-model="buf.cells[ci]">
+                  <input type="text" v-model="buf.cells[ci]" :name="'blk-cell-' + ci">
                   <button class="btn small" title="删除该列（行与表头同步收缩）"
                           @click="buf.cells.splice(ci, 1); buf.head.splice(ci, 1)">
                     <AppIcon name="x" :size="11" /></button>
@@ -310,7 +310,7 @@ const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列�
               </div>
               <div class="bedit-fieldrow" v-if="b.type === 'image'">
                 <label>替代文本</label>
-                <input type="text" v-model="buf.alt" @keydown.esc.prevent="commitEdit">
+                <input type="text" v-model="buf.alt" name="blk-alt" @keydown.esc.prevent="commitEdit">
               </div>
               <div class="bedit-toolbar"><span class="bedit-hint">Esc 或失焦保存退出 · {{ TYPE_LABEL[b.type] }}</span></div>
             </template>

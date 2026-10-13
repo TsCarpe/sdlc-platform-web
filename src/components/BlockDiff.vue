@@ -2,7 +2,7 @@
 // v4 四态块级 diff 视图（DESIGN-v4 §14.1 编辑器必做件）：数据源 = POST blocks/diff 预览与
 // changes/{cid} items 同形状（{blockId,op,oldText,newText,oldAttrs,newAttrs,moved?}）——
 // 窗口 1 保存预览与变更单 confirm 界面复用同一渲染层。纯展示：文本一律插值不走 v-html。
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps({
@@ -18,6 +18,12 @@ const OP_META = {
   delete: { label: '删除', cls: 'delete' },
   move: { label: '移动', cls: 'move' }
 }
+
+// 大单防刷屏：>50 条默认收起前 50 条 + 展开入口
+const COLLAPSE_AT = 50
+const expandedAll = ref(false)
+const visibleItems = computed(() =>
+  expandedAll.value || props.items.length <= COLLAPSE_AT ? props.items : props.items.slice(0, COLLAPSE_AT))
 
 const countsRow = computed(() => {
   const c = props.counts
@@ -41,7 +47,7 @@ function fmtAttrs(v) { return JSON.stringify(v || {}, null, 1).replace(/\n\s*/g,
     </div>
     <div class="bdiff-empty sub" v-else>无内容差异（重复提交同一内容为零写入）。</div>
 
-    <div class="bdiff-row" v-for="(it, i) in items" :key="i" :class="'op-' + it.op">
+    <div class="bdiff-row" v-for="(it, i) in visibleItems" :key="i" :class="'op-' + it.op">
       <div class="bdiff-h">
         <span class="badge bd-op" :class="OP_META[it.op]?.cls || 'move'">{{ OP_META[it.op]?.label || it.op }}</span>
         <span class="chip bd-id" :title="'块锚点 ' + it.blockId">{{ it.blockId || '（新块）' }}</span>
@@ -64,6 +70,9 @@ function fmtAttrs(v) { return JSON.stringify(v || {}, null, 1).replace(/\n\s*/g,
         </div>
       </details>
     </div>
+
+    <button class="btn small link bdiff-more" v-if="items.length > COLLAPSE_AT && !expandedAll"
+            @click="expandedAll = true">显示全部 {{ items.length }} 条（已折叠前 {{ COLLAPSE_AT }} 条）</button>
 
     <!-- 软删块上的评论：不渲染块但信息不丢（§4.3）——diff 折叠区呈现 -->
     <details class="bdiff-dead" v-if="deletedComments && deletedComments.length">

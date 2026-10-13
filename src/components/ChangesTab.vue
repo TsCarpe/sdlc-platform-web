@@ -3,7 +3,7 @@
 // 不同）→ confirm 界面（块级 diff + 四类清单人可增删，随 body.impact 提交）→ abort（LIFO 仅最新）。
 // 状态×通道矩阵（交接 §5）：draft 建议与保存不限状态；confirm 仅 published/changed（reconcile 豁免）；
 // abort 仅 changed 下最新 confirmed 单。changed 发布双重守卫见 TaskPanel（草稿一致流）。
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import EmptyState from './EmptyState.vue'
@@ -202,9 +202,15 @@ async function doAbort() {
 // ===== 对账入口（§10 管理向）：粘贴 doc.json 形状解析结果 → 系统单（reconcile/rebaseline）=====
 const rec = ref(null)   // { kind, proposedBy, json }
 const recBusy = ref(false)
+const recJsonInp = ref(null)
 function openReconcile() {
   rec.value = { kind: 'reconcile', proposedBy: props.operator || '', json: '' }
+  nextTick(() => recJsonInp.value?.focus())
 }
+// 弹层 Esc 关闭（对齐全站弹层交互）；挂载期监听、组件卸载即摘
+function onKey(e) { if (e.key === 'Escape' && rec.value) rec.value = null }
+onMounted(() => document.addEventListener('keydown', onKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 /** doc.json 形状 → {blocks 内容块, comments 评论行（comment 块 thread 展开）} */
 function parseRecJson(raw) {
   let data
@@ -303,7 +309,7 @@ function fmtCounts(c) {
 
   <!-- 详情 -->
   <div v-else-if="mode === 'detail' && cur">
-    <button class="btn link" @click="backToList"><AppIcon name="arrow-left" :size="13" />返回列表</button>
+    <button class="btn link" @click="backToList"><AppIcon name="arrow-left" :size="13" />返回变更列表</button>
     <div class="card">
       <div class="chg-head">
         <h3><code>#{{ cur.id }}</code> {{ cur.title || '（无标题）' }}
@@ -360,9 +366,9 @@ function fmtCounts(c) {
             </label>
           </div>
         </div>
-        <div class="field"><label><em>*</em>提单人</label><input v-model="rec.proposedBy" style="max-width:200px" placeholder="手填身份（留痕）"></div>
+        <div class="field"><label><em>*</em>提单人</label><input type="text" v-model="rec.proposedBy" name="rec-by" style="max-width:200px" placeholder="手填身份（留痕）"></div>
         <div class="field"><label><em>*</em>解析结果 JSON（doc.json 形状）</label>
-          <textarea v-model="rec.json" rows="7" spellcheck="false" style="font-family:ui-monospace,monospace;font-size:12px"
+          <textarea ref="recJsonInp" v-model="rec.json" rows="7" spellcheck="false" name="rec-json" style="font-family:ui-monospace,monospace;font-size:12px"
                     placeholder='{"blocks":[{"id":"…","type":"paragraph","text":"…"}],"media":[]}'></textarea></div>
       </div>
       <div class="modal-f">

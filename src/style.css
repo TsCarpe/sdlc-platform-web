@@ -936,3 +936,8 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .inc-sec .lb{flex:none; font-weight:600; color:var(--muted); font-size:12px; margin-top:1px}
 .inc-table .chip{white-space:nowrap}
 .inc-clr{font-size:12.5px; padding:2px 0; word-break:break-word}
+
+/* GR-3 横幅内变更单号 chips（点入 diff） */
+.chg-chips{display:inline-flex; gap:5px; margin-left:6px; vertical-align:middle}
+.chg-chip{cursor:pointer}
+.chg-chip:hover{border-color:var(--blue)}

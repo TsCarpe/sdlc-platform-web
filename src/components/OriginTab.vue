@@ -153,6 +153,11 @@ async function rerunCheck() {
 <template>
   <!-- v4 块表权威：有块结构即结构化渲染（不依赖 snapshot 产物——source_import 直导卡无快照） -->
   <template v-if="docData">
+    <!-- v4 飞书冻结提示（§11.5）：块表权威后飞书侧评论不再同步 -->
+    <div class="banner" v-if="card.sourceType === 'feishu'">
+      <AppIcon name="lock" :size="14" />
+      <span>原文已迁入平台（块表权威）：平台内讨论请用评论与澄清；<a v-if="card.sourceUrl" :href="card.sourceUrl" target="_blank" rel="noopener">飞书侧</a>后续新增评论不再同步。</span>
+    </div>
     <div class="banner blue snap-bar" v-if="snapshot">
       <AppIcon name="clock" :size="14" />
       <span>快照 <b class="num" :title="snapshot.at">{{ fmtRel(snapshot.at) }}</b> · 本快照是质检与澄清的<b>依据版本</b></span>

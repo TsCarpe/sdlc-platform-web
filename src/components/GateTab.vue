@@ -7,7 +7,7 @@ import AppIcon from './AppIcon.vue'
 import { gatePhaseLabel } from '../lifecycle.js'
 
 const props = defineProps({ reqId: String, view: Object, operator: String })
-const emit = defineEmits(['toast', 'refresh'])
+const emit = defineEmits(['toast', 'refresh', 'jump-change'])
 
 const busy = ref(false)
 const vd = ref(null)        // 裁决弹层 {issue, verdict, note, revLocation}
@@ -66,10 +66,14 @@ const reopen = () => run(() => api.post(`/api/requirements/${props.reqId}/gate/r
       <span class="badge" :class="{ blocked: 'b-gray', running: 'b-blue', summary: 'b-amber', deciding: 'b-amber', released: 'b-green' }[phase] || 'b-gray'">{{ gatePhaseLabel[phase] || phase }}</span>
     </div>
 
-    <!-- GR-3 变更横幅（仅 released 窗口） -->
+    <!-- GR-3 变更横幅（仅 released 窗口）：原因 + 变更单号点入 diff（reqChangeIds，v4-16） -->
     <div class="banner amber-t" v-if="phase === 'released' && view.change?.changed && view.change?.window === 'released'">
       <AppIcon name="alert-triangle" :size="14" />
-      <span style="flex:1"><b>放行后产物实质变更（GR-3 内容变更检测）</b>：{{ (view.change.reasons || []).join('；') }}——确认后开新一轮，旧轮只读归档（不自动烧 token）。</span>
+      <span style="flex:1"><b>放行后产物实质变更（GR-3 内容变更检测）</b>：{{ (view.change.reasons || []).join('；') }}——确认后开新一轮，旧轮只读归档（不自动烧 token）。
+        <span class="chg-chips" v-if="(view.change.reqChangeIds || []).length">
+          <a class="chip real chg-chip" v-for="id in view.change.reqChangeIds" :key="id"
+             :title="'查看变更单 #' + id + ' 的差异与影响面'" @click="emit('jump-change', id)">变更单 #{{ id }} ↗</a>
+        </span></span>
       <button class="btn small primary" :disabled="busy" @click="reopen">开复审轮 r{{ round.roundNo + 1 }}</button>
     </div>
 

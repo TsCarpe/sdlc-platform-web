@@ -293,6 +293,9 @@ function resolveDocPath(path) {
       <button class="btn small link" v-if="cm && cm.comments.length" @click="openComments('')"
               title="卡片级评论（不锚定原文块的整体疑问）">
         <AppIcon name="message-square" :size="12" />整体疑问<template v-if="cmUnresolved">（{{ cmUnresolved }} 未解决）</template></button>
+      <!-- v4 contentRev：变更确认次数展示（单调计数，放弃不回退） -->
+      <span class="chip" v-if="card.contentRev > 0"
+            title="变更单确认次数（content_rev 单调递增；放弃变更不回退此计数）">历史变更 ×{{ card.contentRev }}</span>
       <button class="btn primary cta-btn" v-if="cta" :disabled="cta.disabled" @click="runCta">{{ cta.label }}</button>
     </div>
 
@@ -371,7 +374,7 @@ function resolveDocPath(path) {
     <!-- v2.4 门禁域（DESIGN-v2.4 D35） -->
     <template v-if="tab === 'gate'">
       <GateTab v-if="gv" :req-id="card.id" :view="gv" :operator="operator"
-               @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
+               @toast="(m, t) => emit('toast', m, t)" @refresh="load" @jump-change="openChange" />
       <EmptyState v-else icon="shield-check" title="门禁需求发布后开启"
                   desc="发布后开闸三条件（设计定稿∨轻量跳过 / 用例全部定稿 / FR 覆盖）全绿即可开评审" />
     </template>

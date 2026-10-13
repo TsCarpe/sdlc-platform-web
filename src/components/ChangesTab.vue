@@ -199,6 +199,46 @@ async function doAbort() {
   } catch (e) { emit('toast', e.message, 'err') } finally { busy.value = false }
 }
 
+// ===== 对账入口（§10 管理向）：粘贴 doc.json 形状解析结果 → 系统单（reconcile/rebaseline）=====
+const rec = ref(null)   // { kind, proposedBy, json }
+const recBusy = ref(false)
+function openReconcile() {
+  rec.value = { kind: 'reconcile', proposedBy: props.operator || '', json: '' }
+}
+/** doc.json 形状 → {blocks 内容块, comments 评论行（comment 块 thread 展开）} */
+function parseRecJson(raw) {
+  let data
+  try { data = JSON.parse(raw) } catch { throw new Error('不是合法 JSON') }
+  const blocks = Array.isArray(data) ? data : data.blocks
+  if (!Array.isArray(blocks) || !blocks.length) throw new Error('blocks 数组缺失或为空')
+  const comments = []
+  for (const b of blocks) {
+    if (b?.type !== 'comment') continue
+    for (const m of b.thread || []) {
+      if (m?.text) comments.push({ externalId: b.id || '', blockId: b.anchorBlockId || '', author: m.user || '', text: m.text })
+    }
+  }
+  return { blocks: blocks.filter(b => b?.type !== 'comment'), comments }
+}
+async function submitReconcile() {
+  const d = rec.value
+  if (!d.proposedBy.trim()) return emit('toast', '请填写提单人（留痕必填）', 'err')
+  let parsed
+  try { parsed = parseRecJson(d.json) } catch (e) { return emit('toast', '解析失败：' + e.message, 'err') }
+  recBusy.value = true
+  try {
+    const created = await api.post(`/api/requirements/${props.reqId}/changes/reconcile`, {
+      kind: d.kind, proposedBy: d.proposedBy.trim(), blocks: parsed.blocks, comments: parsed.comments
+    })
+    localStorage.setItem('sdlc.op', d.proposedBy.trim())
+    rec.value = null
+    emit('toast', `对账单 #${created.id} 已生成（系统 draft，diff 审核后 confirm）`)
+    loadList()
+    cur.value = created
+    mode.value = 'detail'
+  } catch (e) { emit('toast', e.message, 'err') } finally { recBusy.value = false }
+}
+
 function fmtCounts(c) {
   if (!c) return '无差异'
   return ['edit', 'insert', 'delete', 'move'].map(k => `${({ edit: '变更', insert: '新增', delete: '删除', move: '移动' })[k]} ${c[k] || 0}`).join(' · ')
@@ -213,6 +253,8 @@ function fmtCounts(c) {
         <h3>需求内容变更</h3>
         <span class="sub">draft 随时可提（不碰原文）；确认后才写入块表并转「变更中」。</span>
         <span class="spacer"></span>
+        <button class="btn" @click="openReconcile" title="管理向：存量解析结果对账重导（系统单，diff 审核后确认）">
+          <AppIcon name="refresh-cw" :size="13" />对账导入</button>
         <button class="btn primary" @click="startCreate"><AppIcon name="plus" :size="13" />提变更单</button>
       </div>
       <EmptyState v-if="loading" icon="inbox" title="加载中…" />
@@ -295,6 +337,37 @@ function fmtCounts(c) {
       <div class="banner" v-else-if="cur.status === 'confirmed' && card.status === 'changed'" style="margin-top:10px">
         <AppIcon name="clock" :size="14" />
         <span>已生效：等增量质检任务完成并在流水线采纳合并后，即可从草稿预览重新发布。</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 对账导入弹层（管理向） -->
+  <div class="modal-mask" v-if="rec" @click.self="rec = null">
+    <div class="modal" style="width:560px" role="dialog" aria-modal="true">
+      <div class="modal-h">对账导入（系统单）<button class="x" @click="rec = null">✕</button></div>
+      <div class="modal-b">
+        <p class="sub" style="margin-bottom:10px">粘贴新解析的原文（doc.json 形状：<code>{"blocks":[…],"media":[…]}</code>，
+          服务端机械 diff 出系统草稿，不覆盖平台数据；comment 块自动展开为评论行幂等 upsert）。人过 diff 后走确认。</p>
+        <div class="field"><label>单据类型</label>
+          <div class="seg">
+            <label class="seg-opt" :class="{ on: rec.kind === 'reconcile' }">
+              <input type="radio" value="reconcile" v-model="rec.kind">
+              <span><span class="seg-t">对账 reconcile</span><br><span class="seg-d">未发布卡确认后保持原状态</span></span>
+            </label>
+            <label class="seg-opt" :class="{ on: rec.kind === 'rebaseline' }">
+              <input type="radio" value="rebaseline" v-model="rec.kind">
+              <span><span class="seg-t">重检基准 rebaseline</span><br><span class="seg-d">放行一次全量质检（影响面=全卡）</span></span>
+            </label>
+          </div>
+        </div>
+        <div class="field"><label><em>*</em>提单人</label><input v-model="rec.proposedBy" style="max-width:200px" placeholder="手填身份（留痕）"></div>
+        <div class="field"><label><em>*</em>解析结果 JSON（doc.json 形状）</label>
+          <textarea v-model="rec.json" rows="7" spellcheck="false" style="font-family:ui-monospace,monospace;font-size:12px"
+                    placeholder='{"blocks":[{"id":"…","type":"paragraph","text":"…"}],"media":[]}'></textarea></div>
+      </div>
+      <div class="modal-f">
+        <button class="btn" @click="rec = null">取消</button>
+        <button class="btn primary" :disabled="recBusy" @click="submitReconcile">{{ recBusy ? '生成中…' : '生成对账单' }}</button>
       </div>
     </div>
   </div>

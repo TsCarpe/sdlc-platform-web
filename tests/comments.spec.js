@@ -147,3 +147,38 @@ describe('ReqList：未解决评论角标（逐卡后台拉取）', () => {
     expect(w.findAll('tbody tr')[1].find('.cmt-chip').exists()).toBe(false)
   })
 })
+
+describe('GateTab：GR-3 横幅带变更单号点入', () => {
+  it('reqChangeIds 渲染 chips，点击 emit jump-change', async () => {
+    const { default: GateTab } = await import('../src/components/GateTab.vue')
+    const view = {
+      reqId: 'REQ-1', phase: 'released', tier: 'A',
+      round: { id: 9, roundNo: 1, status: 'released' },
+      checks: [{ key: 'design', name: '设计', ok: true, detail: '' }],
+      units: [], issues: [], rounds: [],
+      change: { changed: true, window: 'released', reasons: ['digest 锚点漂移'], reqChangeIds: [156, 162] }
+    }
+    const w = mount(GateTab, { props: { reqId: 'REQ-1', view, operator: 'x' } })
+    const chips = w.findAll('.chg-chip')
+    expect(chips.length).toBe(2)
+    expect(chips[0].text()).toContain('变更单 #156')
+    await chips[1].trigger('click')
+    expect(w.emitted('jump-change')[0]).toEqual([162])
+  })
+})
+
+describe('OriginTab：飞书冻结提示（v4 §11.5）', () => {
+  it('飞书来源 + 块结构：显示冻结横幅；text 来源不显示', async () => {
+    const { default: OriginTab } = await import('../src/components/OriginTab.vue')
+    const doc = { content: { blocks: [{ id: 'b1', type: 'paragraph', text: '块' }], media: [] } }
+    const w = mount(OriginTab, { props: {
+      card: { id: 'REQ-F', status: 'published', sourceType: 'feishu', sourceUrl: 'https://feishu.cn/x' },
+      snapshot: null, doc } })
+    expect(w.text()).toContain('原文已迁入平台')
+    expect(w.text()).toContain('不再同步')
+    const w2 = mount(OriginTab, { props: {
+      card: { id: 'REQ-T', status: 'published', sourceType: 'text', sourceUrl: '', sourceText: 'x' },
+      snapshot: null, doc } })
+    expect(w2.text()).not.toContain('原文已迁入平台')
+  })
+})

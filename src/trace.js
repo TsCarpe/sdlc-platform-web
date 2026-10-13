@@ -72,6 +72,9 @@ export function firstQuote(s) {
   return m ? m[1] : ''
 }
 
+/** 体检条目 id（体检.Pxx）→ 澄清编号（Pxx）：同源 P 编号的两侧表示互转 */
+export function pidOf(id) { return String(id || '').replace('体检.', '') }
+
 /** 从覆盖描述提取体检编号，如 '⚠️仅一句话（体检.P26）' → 'P26' */
 export function covP(cov) {
   const m = String(cov || '').match(/P\d+/)

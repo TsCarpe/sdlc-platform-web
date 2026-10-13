@@ -914,3 +914,17 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
   border-color:transparent; vertical-align:1px}
 /* 段落/条款上的平台评论角标（复用 cmbadge 基础样式，靠后微调） */
 .docblk-p .cmbadge{margin-left:6px}
+
+/* ---- 变更单（ChangesTab）：列表头/四类清单网格 ---- */
+.chg-head{display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap}
+.chg-head h3{display:inline-flex; align-items:center; gap:7px; margin:0}
+.chg-head .spacer{flex:1}
+.impact-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:10px}
+.impact-col{border:1px solid var(--line-soft); border-radius:10px; padding:9px 11px; background:var(--bg-soft)}
+.impact-t{font-size:12px; font-weight:600; color:var(--charcoal); margin-bottom:6px; display:flex; gap:6px; align-items:center}
+.impact-t .sub{font-weight:400}
+.impact-row{display:flex; align-items:flex-start; gap:6px; font-size:12.5px; line-height:1.5;
+  padding:4px 2px; border-radius:6px; cursor:pointer; word-break:break-word}
+.impact-row:hover{background:var(--canvas)}
+.impact-row input[type=checkbox]{margin-top:3px; accent-color:var(--blue)}
+.impact-row code{font-size:11px; color:var(--blue); flex:none}

@@ -134,6 +134,19 @@ async function reopen(it) {
         </div>
       </div>
     </div>
+    <!-- v4 changed：变更确认后受影响澄清重开——重新处置后可重新发布 -->
+    <div class="banner amber-t sticky-clf" v-else-if="status === 'changed'">
+      <AppIcon name="alert-triangle" :size="14" />
+      <div style="flex:1;min-width:200px">
+        变更处理中：受影响澄清项已<b>重开</b>（备注带原答复），面对重开与新增项重新处置后可重新发布。
+        <div class="prog-row" style="margin-top:8px">
+          <div class="bar"><div class="bar-fill" :style="{ width: prog + '%' }"></div></div>
+          <span class="num">{{ answered }}/{{ totalQ }} 已处置</span>
+          <button class="btn small" v-if="nextUnanswered" @click="jumpNextUnanswered">
+            <AppIcon name="arrow-up-right" :size="11" />跳到下一待处置</button>
+        </div>
+      </div>
+    </div>
     <div class="banner" v-else>
       <AppIcon name="clock" :size="14" />
       <span>质检中：产物推送后进入澄清。</span>
@@ -176,17 +189,19 @@ async function reopen(it) {
           </template>
           <template v-else>{{ it.answer || '（未处置，按原需求执行）' }}</template>
         </div>
-        <div class="ans" v-else-if="status === 'clarifying' && (it.status === 'rejected' || it.status === 'deferred')">
+        <div class="ans" v-else-if="(status === 'clarifying' || status === 'changed') && (it.status === 'rejected' || it.status === 'deferred')">
           <span class="lb">{{ dispLabel(it) }}<span v-if="it.note" class="sub">（{{ it.note }}）</span></span>
           <span class="sub">
             {{ it.status === 'rejected' ? '已认定不是问题，不进定稿' : '已转遗留假设，合成时记入 需求.Axx' }}
             <button class="btn small link" @click="reopen(it)">重新作答</button>
           </span>
         </div>
-        <div class="ans" v-else-if="status === 'clarifying'">
+        <div class="ans" v-else-if="status === 'clarifying' || status === 'changed'">
           <span class="lb" :class="{ warn: !it.answer }">{{ it.answer ? '答复（可修改）' : '待答复' }}</span>
           <span class="saved" v-if="ansState[it.seq] === 'saved'"><AppIcon name="check-circle" :size="11" />已保存</span>
           <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
+          <!-- 变更确认重开的项：原答复在 note（「因变更单#N 重开，原答复：…」）——PM 需看到再重新作答 -->
+          <div class="sub" v-if="it.status === 'pending' && it.note" style="width:100%;margin:2px 0">{{ it.note }}</div>
           <textarea v-model="it.answer" :placeholder="'PM 在此作答…'"
             @blur="saveAnswer(it)" @input="autoGrow"></textarea>
           <div class="ans-ops">

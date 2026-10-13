@@ -15,8 +15,8 @@ const loading = ref(true)
 const error = ref('')
 const saving = ref(false)
 
-const statusLabel = { submitted: '已提交', reviewing: '质检中', clarifying: '待澄清', published: '已发布' }
-const statusCls = { submitted: 'b-gray', reviewing: 'b-blue', clarifying: 'b-amber', published: 'b-green' }
+const statusLabel = { submitted: '已提交', reviewing: '质检中', clarifying: '待澄清', published: '已发布', changed: '变更中' }
+const statusCls = { submitted: 'b-gray', reviewing: 'b-blue', clarifying: 'b-amber', published: 'b-green', changed: 'b-amber' }
 const sourceLabel = { feishu: '飞书文档', text: '粘贴文本' }
 // v1.3 风险分级徽章（DESIGN-v2.2 D19）：紧凑单字符，空=未分级不渲染
 const tierCls = { A: 'b-red', B: 'b-amber', C: 'b-gray' }
@@ -210,7 +210,7 @@ async function saveNewReq() {
               <span class="prog-inline" v-if="r.status === 'published'">
                 <AppIcon name="check-circle" :size="13" style="color:var(--green)" /><span class="ok">已闭环</span>
               </span>
-              <span class="prog-inline" v-else-if="r.status === 'clarifying'">
+              <span class="prog-inline" v-else-if="r.status === 'clarifying' || r.status === 'changed'">
                 <span class="bar"><span class="bar-fill" :style="{ width: (r.totalQ ? Math.round(r.answeredQ / r.totalQ * 100) : 0) + '%' }"></span></span>
                 <span class="num">{{ r.answeredQ }}/{{ r.totalQ }}</span>
               </span>

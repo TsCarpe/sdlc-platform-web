@@ -15,6 +15,7 @@ import DigestTab from './DigestTab.vue'
 import AuditTab from './AuditTab.vue'
 import ChecklistTab from './ChecklistTab.vue'
 import StdTab from './StdTab.vue'
+import ChangesTab from './ChangesTab.vue'
 import CommentsPanel from './CommentsPanel.vue'
 import { fmtRel } from '../time.js'
 import { nextActionCta } from '../lifecycle.js'
@@ -33,8 +34,8 @@ const digestMdOpen = ref(false)          // digest 原文折叠（假设引用�
 const loading = ref(true)
 const error = ref('')
 
-const statusLabel = { submitted: '已提交', reviewing: '质检中', clarifying: '待澄清', published: '已发布' }
-const statusCls = { submitted: 'b-gray', reviewing: 'b-blue', clarifying: 'b-amber', published: 'b-green' }
+const statusLabel = { submitted: '已提交', reviewing: '质检中', clarifying: '待澄清', published: '已发布', changed: '变更中' }
+const statusCls = { submitted: 'b-gray', reviewing: 'b-blue', clarifying: 'b-amber', published: 'b-green', changed: 'b-amber' }
 // v1.3 风险分级徽章（DESIGN-v2.2 D19）：空=未分级不渲染
 const tierLabel = { A: 'A级', B: 'B级', C: 'C级' }
 const tierCls = { A: 'b-red', B: 'b-amber', C: 'b-gray' }
@@ -88,7 +89,7 @@ const { activeHead, showTop, goToc, toTop } = useTocScroll({
   goOrigin: id => locate('', id)
 })
 
-const TABS = ['origin', 'digest', 'audit', 'checklist', 'std', 'cases', 'design', 'gate']
+const TABS = ['origin', 'digest', 'audit', 'checklist', 'std', 'changes', 'cases', 'design', 'gate']
 
 async function load() {
   loading.value = true
@@ -102,6 +103,7 @@ async function load() {
     emit('loaded', card.value.name)
     await loadExt()      // v2.4：设计/门禁读面（发布后），主按钮 CTA 与新 tab 的数据源
     loadComments()       // v4：评论面（不阻塞主装载；失败静默）
+    loadChanges()        // v4：变更单计数（tab 角标）
   } catch (e) {
     error.value = e.message
   } finally {
@@ -146,6 +148,18 @@ const cmBlockText = computed(() => {
 const escalatedIds = computed(() =>
   (d.value?.items || []).filter(i => i.origin === 'local' && i.srcCommentId).map(i => i.srcCommentId))
 function onCmtsRefresh() { loadComments(); load() }   // 升级会产生 L 行——澄清清单同步重拉
+
+// ===== v4 变更单域：tab 角标计数 + GR-3 点入直达协议 =====
+const chgCount = ref(0)
+const chgFocus = ref(null)
+async function loadChanges() {
+  try {
+    const rows = await api.get(`/api/requirements/${props.reqId}/changes`)
+    chgCount.value = rows.filter(c => c.status !== 'aborted').length
+  } catch { chgCount.value = 0 }
+}
+function openChange(id) { chgFocus.value = id; tab.value = 'changes' }
+defineExpose({ openChange })   // 跨组件跳转协议（GateTab GR-3 横幅点入直达变更单）
 
 async function loadExt() {
   if (card.value.status !== 'published') { dv.value = null; gv.value = null; return }
@@ -282,8 +296,15 @@ function resolveDocPath(path) {
       <button class="btn primary cta-btn" v-if="cta" :disabled="cta.disabled" @click="runCta">{{ cta.label }}</button>
     </div>
 
+    <!-- v4 changed 态：顶部提示条（增量合并后重新发布） -->
+    <div class="banner amber-t" v-if="card.status === 'changed'">
+      <AppIcon name="alert-triangle" :size="14" />
+      <span style="flex:1"><b>变更处理中</b>：增量质检完成后在流水线采纳合并，再从标准文档草稿预览重新发布；期间直接编辑与全量重推已关闭。</span>
+      <button class="btn small" @click="tab = 'changes'">查看变更单</button>
+    </div>
+
     <!-- v2.0 线上流水线：质检/标准文档/发布 任务与草稿两态 -->
-    <TaskPanel :req-id="card.id" :detail="d" @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
+    <TaskPanel :req-id="card.id" :detail="d" :operator="operator" @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
 
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" :class="{ on: tab === 'origin' }" @click="tab = 'origin'">原始需求</button>
@@ -292,8 +313,10 @@ function resolveDocPath(path) {
       <button class="tab" role="tab" :class="{ on: tab === 'audit' }" @click="tab = 'audit'">
         体检报告<span class="n num" v-if="d.audit">{{ (d.audit.content?.items || []).length }}</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'checklist' }" @click="tab = 'checklist'">
-        澄清清单<span class="n num" v-if="card.status === 'clarifying'">{{ answered }}/{{ totalQ }}</span><span class="n" v-if="card.status === 'published'">✓</span></button>
+        澄清清单<span class="n num" v-if="card.status === 'clarifying' || card.status === 'changed'">{{ answered }}/{{ totalQ }}</span><span class="n" v-if="card.status === 'published'">✓</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'std' }" @click="tab = 'std'">标准需求文档</button>
+      <button class="tab" role="tab" :class="{ on: tab === 'changes' }" @click="tab = 'changes'">
+        变更<span class="n num" v-if="chgCount">{{ chgCount }}</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'cases' }" @click="tab = 'cases'">
         用例<span class="n num" v-if="d.coverage && d.coverage.backward.total">{{ d.coverage.backward.total }}</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'design' }" @click="tab = 'design'">设计</button>
@@ -328,6 +351,11 @@ function resolveDocPath(path) {
     <!-- 标准需求文档：重写版（D6），四类引用可点击（D7） -->
     <StdTab v-if="tab === 'std'" ref="stdTabRef" :standard="d.standard" :active-head="activeHead"
             @jump="onJump" @go-toc="goToc" @toast="(m, t) => emit('toast', m, t)" />
+
+    <!-- v4 变更单 tab：列表/draft（复用块编辑器）/confirm（diff+四类清单）/abort -->
+    <ChangesTab v-if="tab === 'changes'" :req-id="card.id" :card="card" :operator="operator"
+                :blocks="docBlocks" :focus-id="chgFocus"
+                @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
 
     <!-- v2.4 用例 tab：需求内嵌用例表（与独立用例页同一组件，reqId 固定） -->
     <CaseList v-if="tab === 'cases'" :fixed-req-id="card.id" @toast="(m, t) => emit('toast', m, t)" />

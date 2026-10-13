@@ -34,16 +34,20 @@ const nextAction = computed(() => {
   if (card.value.status === 'submitted') {
     return { label: hasDigest.value ? '继续质检' : '开始质检', run: () => createTask('quality_check', hasDigest.value ? '重新质检' : '需求质检') }
   }
-  if (card.value.status === 'clarifying' && allAnswered.value && !stdDraft.value) {
+  // v4 changed：重开项答完 → 生成标准文档 → 草稿一致流发布
+  if ((card.value.status === 'clarifying' || card.value.status === 'changed') && allAnswered.value && !stdDraft.value) {
     return { label: '生成标准文档', run: () => createTask('standard_doc', '标准文档合成') }
+  }
+  if (card.value.status === 'changed' && stdDraft.value) {
+    return { label: '从草稿预览发布', run: publishStd }
   }
   return null
 })
 
 const statusLabel = { queued: '排队中', running: '执行中', done: '已完成', failed: '失败' }
-// v2.4：设计/门禁任务也经此面板展示（执行态归面板，领域态归 design/gate tab）
-const typeLabel = { quality_check: '需求质检', standard_doc: '标准文档合成', case_gen: '用例生成', design_gen: '技术设计生成', design_rev: '设计修订', gate_review: '门禁评审' }
-const draftLabel = { digest_bundle: '质检三件套草稿', standard: '标准需求文档草稿', cases: '测试用例草稿', design: '技术设计草稿', gate_issues: '门禁 issues 草稿' }
+// v4.14 增量质检任务入列呈现；v2.4：设计/门禁任务也经此面板展示（执行态归面板，领域态归 design/gate tab）
+const typeLabel = { quality_check: '需求质检', standard_doc: '标准文档合成', case_gen: '用例生成', design_gen: '技术设计生成', design_rev: '设计修订', gate_review: '门禁评审', incremental_check: '增量质检' }
+const draftLabel = { digest_bundle: '质检三件套草稿', standard: '标准需求文档草稿', cases: '测试用例草稿', design: '技术设计草稿', gate_issues: '门禁 issues 草稿', incremental_bundle: '增量合并草稿' }
 
 const card = computed(() => props.detail?.card || {})
 const items = computed(() => props.detail?.items || [])
@@ -183,10 +187,33 @@ async function saveStdDraft() {
   } catch (e) { emit('toast', '保存失败：' + e.message, 'err') }
 }
 /**
- * 发布（终态）。软守卫（评测 P0-2，用户裁决：不改「预览可编辑直发」设计）：
- * 存在 AI 草稿且编辑内容与其分叉时，发布前明示差异与「以编辑内容为准」；无草稿维持直发。
+ * 发布（终态）。clarifying 老流（verify-m2 锁死）：无草稿前置可直推编辑内容（软守卫明示差异）。
+ * v4 changed 分支（§5 发布双重守卫）：只走「从草稿预览发布」——提交内容 = 草稿逐字节一致
+ * （哈希比对守卫），不提供编辑；未消化变更单 409 → 指引增量采纳。
  */
 async function publishStd() {
+  if (card.value.status === 'changed') {
+    if (!stdDraft.value) {
+      emit('toast', '变更中发布须先「生成标准文档」并以草稿为准（草稿一致守卫）', 'err')
+      return
+    }
+    if (!await ask({
+      title: '从草稿预览发布标准需求文档？',
+      body: '变更后的发布以草稿为唯一内容源（逐字节一致校验）；发布前须无未消化变更单、增量草稿已采纳。',
+      danger: true, confirmText: '确认发布'
+    })) return
+    busy.value = true
+    try {
+      await api.post(`/api/requirements/${props.reqId}/publish`, { standardMd: stdDraft.value.md })
+      emit('toast', '已重新发布 ✓ 标准需求文档回终态（content_rev 保留）')
+      emit('refresh')
+      loadDrafts()
+    } catch (e) {
+      if ((e.message || '').includes('未消化')) emit('toast', e.message + '——请先在流水线采纳增量合并草稿', 'err')
+      else emit('toast', '发布失败：' + e.message, 'err')
+    } finally { busy.value = false }
+    return
+  }
   const md = stdText.value || stdDraft.value?.md || ''
   const drift = !!stdDraft.value && !!stdText.value.trim()
     && stdText.value.trim() !== (stdDraft.value.md || '').trim()
@@ -321,8 +348,8 @@ function elapsed(t) {
                 @click="createTask('quality_check', hasDigest ? '重新质检' : '需求质检')">
           <AppIcon name="search" :size="13" />{{ hasDigest ? '重新质检' : '开始质检' }}
         </button>
-        <button class="btn" :disabled="busy || !!activeTask || card.status !== 'clarifying' || !allAnswered"
-                :title="card.status !== 'clarifying' ? '待澄清状态才可生成' : (!allAnswered ? `尚有 ${items.length - answered} 问未答复` : '')"
+        <button class="btn" :disabled="busy || !!activeTask || (card.status !== 'clarifying' && card.status !== 'changed') || !allAnswered"
+                :title="(card.status !== 'clarifying' && card.status !== 'changed') ? '待澄清/变更中状态才可生成' : (!allAnswered ? `尚有 ${items.length - answered} 问未答复` : '')"
                 @click="createTask('standard_doc', '标准文档合成')">
           <AppIcon name="file-text" :size="13" />生成标准文档
         </button>
@@ -379,22 +406,34 @@ function elapsed(t) {
       </div>
     </div>
 
-    <!-- 标准文档草稿 -->
-    <!-- 标准文档草稿（published 后隐藏：终态即无草稿动作） -->
+    <!-- 标准文档草稿（published 后隐藏：终态即无草稿动作）；changed 下只读预览发布（草稿一致守卫） -->
     <div class="tp-draft" v-if="stdDraft && card.status !== 'published'">
-      <div class="tp-draft-h"><span class="badge b-amber">待发布</span><b>{{ draftLabel.standard }}</b></div>
-      <div class="tp-modes">
-        <button class="btn small" :class="{ 'tp-on': stdMode === 'edit' }" @click="stdMode = 'edit'">编辑</button>
-        <button class="btn small" :class="{ 'tp-on': stdMode === 'preview' }" @click="stdMode = 'preview'">渲染预览</button>
-        <span class="sub" style="flex:1"></span>
-        <button class="btn small" @click="saveStdDraft"><AppIcon name="pencil" :size="11" />保存草稿</button>
+      <div class="tp-draft-h">
+        <span class="badge" :class="card.status === 'changed' ? 'b-blue' : 'b-amber'">{{ card.status === 'changed' ? '待重新发布' : '待发布' }}</span>
+        <b>{{ draftLabel.standard }}</b>
+        <span class="sub" v-if="card.status === 'changed'">变更中发布以草稿为唯一内容源（逐字节一致），不可手改</span>
       </div>
-      <textarea v-if="stdMode === 'edit'" class="tp-editor" v-model="stdText" spellcheck="false"></textarea>
-      <div v-else class="doc tp-preview" v-html="stdPreviewHtml"></div>
-      <div class="tp-btns">
-        <button class="btn primary" :disabled="busy" @click="publishStd"><AppIcon name="send" :size="13" />发布（终态锁定）</button>
-        <button class="btn danger" :disabled="busy" @click="dropDraft('standard')">丢弃</button>
-      </div>
+      <template v-if="card.status === 'changed'">
+        <div class="doc tp-preview" v-html="stdPreviewHtml"></div>
+        <div class="tp-btns">
+          <button class="btn primary" :disabled="busy" @click="publishStd"><AppIcon name="send" :size="13" />从草稿预览发布（终态）</button>
+          <button class="btn danger" :disabled="busy" @click="dropDraft('standard')">丢弃</button>
+        </div>
+      </template>
+      <template v-else>
+        <div class="tp-modes">
+          <button class="btn small" :class="{ 'tp-on': stdMode === 'edit' }" @click="stdMode = 'edit'">编辑</button>
+          <button class="btn small" :class="{ 'tp-on': stdMode === 'preview' }" @click="stdMode = 'preview'">渲染预览</button>
+          <span class="sub" style="flex:1"></span>
+          <button class="btn small" @click="saveStdDraft"><AppIcon name="pencil" :size="11" />保存草稿</button>
+        </div>
+        <textarea v-if="stdMode === 'edit'" class="tp-editor" v-model="stdText" spellcheck="false"></textarea>
+        <div v-else class="doc tp-preview" v-html="stdPreviewHtml"></div>
+        <div class="tp-btns">
+          <button class="btn primary" :disabled="busy" @click="publishStd"><AppIcon name="send" :size="13" />发布（终态锁定）</button>
+          <button class="btn danger" :disabled="busy" @click="dropDraft('standard')">丢弃</button>
+        </div>
+      </template>
     </div>
 
     <!-- 用例草稿 -->

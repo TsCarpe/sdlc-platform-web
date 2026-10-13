@@ -17,7 +17,8 @@ export function nodesFromRow(row) {
     : row.designPhase === 'draft' ? 'doing' : 'todo'
   return [
     { label: '质检', st: s === 'submitted' ? 'todo' : s === 'reviewing' ? 'doing' : 'done' },
-    { label: '澄清', st: s === 'published' ? 'done' : s === 'clarifying' ? 'doing' : 'todo' },
+    // v4 changed：变更确认后澄清重开——回到 doing（重开项重新处置）
+    { label: '澄清', st: s === 'published' ? 'done' : (s === 'clarifying' || s === 'changed') ? 'doing' : 'todo' },
     { label: '发布', st: s === 'published' ? 'done' : 'todo' },
     { label: '设计', st: design },
     { label: '用例', st: row.caseCount > 0 ? 'done' : s === 'published' ? 'doing' : 'todo' },
@@ -32,6 +33,7 @@ export function blockerFromRow(row) {
   if (s === 'submitted') return { text: '已提交 · 启动质检', cls: 'b-gray' }
   if (s === 'reviewing') return { text: '质检进行中', cls: 'b-blue' }
   if (s === 'clarifying') return { text: `继续澄清 ${row.answeredQ}/${row.totalQ}`, cls: 'b-amber' }
+  if (s === 'changed') return { text: '变更处理中 · 待增量合并', cls: 'b-amber' }
   if (s !== 'published') return { text: '—', cls: 'b-gray' }
   if (row.gateStage === 'released') return { text: '已放行归档', cls: 'b-green' }
   if (row.gateStage === 'active') return { text: '评审处理中', cls: 'b-amber' }
@@ -51,6 +53,14 @@ export function nextActionCta(d, dv, gv) {
   if (status === 'clarifying') {
     const done = (d.items || []).filter(i => i.status === 'answered' || i.status === 'rejected' || i.status === 'deferred').length
     return { label: `继续澄清 ${done}/${(d.items || []).length}`, go: 'tab:checklist' }
+  }
+  // v4 changed：变更确认后——重开项答完走「生成标准文档 → 从草稿预览发布」（TaskPanel 草稿一致流）
+  if (status === 'changed') {
+    const done = (d.items || []).filter(i => i.status === 'answered' || i.status === 'rejected' || i.status === 'deferred').length
+    const total = (d.items || []).length
+    return done < total
+      ? { label: `变更澄清 ${done}/${total}`, go: 'tab:checklist' }
+      : { label: '变更处理中 · 去发布', go: 'tab:changes' }
   }
   if (status !== 'published' || !dv || !gv) return null
   const gate = gv.phase

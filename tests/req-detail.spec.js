@@ -63,7 +63,7 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     expect(wrapper.text()).toContain('REQ-2026-001')
     const tabs = wrapper.findAll('[role="tab"]')
     expect(tabs.map(t => t.text())).toEqual([
-      '原始需求', '需求摘要1', '体检报告1', '澄清清单0/1', '标准需求文档', '用例', '设计', '门禁'])
+      '原始需求', '需求摘要1', '体检报告1', '澄清清单0/1', '标准需求文档', '变更', '用例', '设计', '门禁'])
   })
 
   it('origin tab：doc 结构化渲染 + 快照条', async () => {
@@ -106,10 +106,10 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
   it('cases/design/gate tab：子组件消费 fixture', async () => {
     wrapper = await mountDetail()
     const tabs = wrapper.findAll('[role="tab"]')
-    await tabs[6].trigger('click')
+    await tabs[7].trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('设计 lane 需求发布后开启')  // phase=none 空态
-    await tabs[7].trigger('click')
+    await tabs[8].trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('三条件')  // gate view checks
   })

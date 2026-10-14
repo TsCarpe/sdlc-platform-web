@@ -7,6 +7,7 @@ export default defineConfig({
   base: './',
   build: { outDir: 'dist', emptyOutDir: true },
   server: {
+    host: true, // 监听 0.0.0.0，允许局域网 IP 访问
     port: 5173,
     proxy: { '/api': 'http://127.0.0.1:8080' }
   }

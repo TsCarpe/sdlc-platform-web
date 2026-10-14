@@ -251,8 +251,8 @@ async function rerunCheck() {
               <DocBlock v-else :block="p.block"
                         :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
                         :req-id="card.id"
-                        :platform-count="platformByBlock[p.block.id] || 0"
-                        @comments="emit('open-comments', p.block.id)" />
+                        :platform-by-block="platformByBlock"
+                        @comments="id => emit('open-comments', id)" />
             </template>
           </section>
           <template v-else>
@@ -268,8 +268,8 @@ async function rerunCheck() {
               <DocBlock v-else :block="p.block"
                         :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
                         :req-id="card.id"
-                        :platform-count="platformByBlock[p.block.id] || 0"
-                        @comments="emit('open-comments', p.block.id)" />
+                        :platform-by-block="platformByBlock"
+                        @comments="id => emit('open-comments', id)" />
             </template>
           </template>
         </template>

@@ -20,6 +20,7 @@ const props = defineProps({
   card: { type: Object, required: true },        // sourceType/sourceUrl/sourceText/id/status
   snapshot: { type: Object, default: null },
   doc: { type: Object, default: null },
+  docStale: { type: Boolean, default: false },   // v4.19 服务端机械判定：块表最后编辑 > digest 最近推送
   activeHead: { type: String, default: '' },     // 壳层滚动高亮（目录侧栏）
   platformByBlock: { type: Object, default: () => ({}) }   // v4 blockId → 平台评论数（角标）
 })
@@ -103,7 +104,14 @@ const editing = ref(false)
 const saving = ref(false)
 const editorRef = ref(null)
 const diffPreview = ref(null)     // {items, counts} —— 保存预览弹层
-const staleCheck = ref(false)     // 保存成功后「质检已过期」横幅
+const staleCheck = ref(false)     // 保存成功后「质检已过期」横幅（会话内即时提示）
+// v4.19 持久脱节横幅：docStale（服务端判定，刷新/重进不失忆）∨ staleCheck（保存后空窗补位）。
+// 忽略 = 本会话静默（dismissed），刷新后 docStale 仍真则横幅回归——持久提醒但不阻断；
+// changed 态不显示（digest 落后块态属增量流程中间态，走变更单引导，且重新质检在 changed 被 409）
+const staleDismissed = ref(false)
+const staleBanner = computed(() =>
+  (props.docStale || staleCheck.value) && !staleDismissed.value && !editing.value
+  && props.card.status !== 'changed')
 const op = ref(localStorage.getItem('sdlc.op') || '')
 
 // diff 预览弹层 Esc 关闭（随开关挂摘监听）
@@ -167,11 +175,13 @@ async function confirmSave() {
     emit('reload')   // 壳层重拉：insert 块拿到服务端 blk- ID，本地锚点不漂移
   } catch (e) { emit('toast', e.message, 'err') } finally { saving.value = false }
 }
-/** 编辑后重新质检（无专用端点——人工创建 quality_check 即重新质检） */
+/** 编辑后重新质检（无专用端点——人工创建 quality_check 即重新质检）；
+ *  成功后本会话静默横幅（产物待推送期间脱节仍真，docStale 随质检推送自然转 false） */
 async function rerunCheck() {
   try {
     await api.post(`/api/requirements/${props.card.id}/tasks`, { type: 'quality_check', note: '原文编辑后重新质检' })
     staleCheck.value = false
+    staleDismissed.value = true
     emit('toast', '重新质检任务已排队（可在流水线面板查看进度）')
   } catch (e) { emit('toast', e.message, 'err') }
 }
@@ -191,12 +201,12 @@ async function rerunCheck() {
       <span>最新修订以<a v-if="card.sourceUrl" :href="card.sourceUrl" target="_blank" rel="noopener">飞书文档 ↗</a><span v-else>原始来源</span>为准</span>
       <span class="sub">重推产物时快照同步刷新；发布后冻结</span>
     </div>
-    <!-- 保存成功后的质检过期提示（§4 P0：重新质检入口） -->
-    <div class="banner amber-t" v-if="staleCheck && !editing">
+    <!-- 质检过期提示（§4 P0：重新质检入口；v4.19 持久化——服务端 docStale 判定，刷新不失忆） -->
+    <div class="banner amber-t" v-if="staleBanner">
       <AppIcon name="alert-triangle" :size="14" />
       <span style="flex:1">原文已修改：既有质检产物与澄清清单基于旧版本块集，建议重新质检让产物锚定新块。</span>
       <button class="btn small primary" @click="rerunCheck"><AppIcon name="refresh-cw" :size="12" />重新质检</button>
-      <button class="btn small link" @click="staleCheck = false">忽略</button>
+      <button class="btn small link" @click="staleDismissed = true">忽略</button>
     </div>
     <div class="doc-layout">
     <div class="card doc docstruct" ref="snapshotBox">

@@ -354,7 +354,7 @@ function resolveDocPath(path) {
          v4 窗口 1 块级编辑（保存后 @reload 壳层重拉 doc.json 刷新锚点）；平台评论角标 + 面板入口 -->
     <OriginTab v-if="tab === 'origin'" ref="originTabRef"
                :card="card" :snapshot="d.snapshot" :doc="d.doc" :active-head="activeHead"
-               :platform-by-block="cmByBlock"
+               :doc-stale="!!d.docStale" :platform-by-block="cmByBlock"
                @locate="locate" @go-toc="goToc" @open-comments="id => openComments(id)"
                @toast="(m, t) => emit('toast', m, t)" @reload="load" />
 

@@ -97,7 +97,7 @@ function toggleComments() { openComments.value = !openComments.value }
       </div>
     </div>
     <div class="rowmeta" v-if="cellPairs.length">
-      <span v-for="p in cellPairs" :key="p.label" class="cellpair"><b>{{ p.label }}：</b><span v-html="p.html"></span></span>
+      <span v-for="p in cellPairs" :key="p.label" class="cellpair"><b>{{ p.label }}：</b><span class="cp-val" v-html="p.html"></span></span>
     </div>
     <DocBlock v-for="c in children" :key="c.id" :block="c" :children-by-parent="childrenByParent"
               :comment-by-ref="commentByRef" :req-id="reqId" class="docblk-child" />
@@ -109,7 +109,8 @@ function toggleComments() { openComments.value = !openComments.value }
       <!-- v2.2：渲染数据自带 width/height 固有尺寸——懒加载图片有占位，scrollIntoView 目标位置不被加载过程推移 -->
       <img :src="mediaUrl" :alt="block.alt" loading="lazy" :width="block.width" :height="block.height">
     </a>
-    <figcaption v-if="block.alt"><AppIcon name="image" :size="12" />{{ block.alt }}</figcaption>
+    <!-- caption 优先（parse_doc ≥0.4 图片说明），alt 兜底 -->
+    <figcaption v-if="block.caption || block.alt"><AppIcon name="image" :size="12" />{{ block.caption || block.alt }}</figcaption>
   </figure>
 
   <!-- 附件 -->

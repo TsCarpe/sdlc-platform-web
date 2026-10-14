@@ -288,7 +288,9 @@ const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列�
               <div class="bedit-cells">
                 <div class="bedit-cell" v-for="(c, ci) in buf.cells" :key="ci">
                   <span class="idx">{{ buf.head[ci] || ('列' + (ci + 1)) }}</span>
-                  <input type="text" v-model="buf.cells[ci]" :name="'blk-cell-' + ci">
+                  <!-- textarea：cell 含 \n 段落边界时可编辑（行数自适应，单行 cell 视觉同 input） -->
+                  <textarea v-model="buf.cells[ci]" :name="'blk-cell-' + ci"
+                            :rows="Math.min(6, Math.max(1, (buf.cells[ci] || '').split('\n').length))"></textarea>
                   <button class="btn small" title="删除该列（行与表头同步收缩）"
                           @click="buf.cells.splice(ci, 1); buf.head.splice(ci, 1)">
                     <AppIcon name="x" :size="11" /></button>

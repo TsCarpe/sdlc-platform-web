@@ -5,7 +5,7 @@
 // 共用本组件，仅提交端点不同。拖拽 = HTML5 原生 DnD 仅限同父兄弟（跨层走菜单升降级，规避行内子块
 // 紧随约束违例）；不引 contenteditable/dnd 库（§14.2 边界）。编辑控件内的按钮一律 mousedown.prevent
 // 防抢焦点触发失焦提交。
-import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import DocBlock from './DocBlock.vue'
 import AppIcon from './AppIcon.vue'
 import {
@@ -233,6 +233,14 @@ function getPayload() {
 }
 function isDirty() { return JSON.stringify(toPayload(rows.value)) !== initialJson }
 defineExpose({ getPayload, isDirty })
+
+// 脏编辑时拦截 F5/关标签（P2 修复）：本应用无 vue-router、切 tab 即卸载组件，页面级
+// beforeunload 是唯一可靠的兜底防线（块级失焦保存已把丢失窗口收窄到跨块未落盘区间）
+function guardUnload(e) {
+  if (isDirty()) { e.preventDefault(); e.returnValue = '' }
+}
+onMounted(() => window.addEventListener('beforeunload', guardUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', guardUnload))
 
 const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列表项', 'table-row': '表格行', image: '图片', attachment: '附件', whiteboard: '画板', title: '文档标题' }
 </script>

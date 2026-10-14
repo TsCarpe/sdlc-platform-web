@@ -229,6 +229,10 @@ export function convertType(rows, id, newType) {
  * ①id 非空唯一；②type 白名单；③parent 必须在本块之前出现；④行内子块（parent=table-row）紧随其行或同父子块 */
 export function validate(rows) {
   const problems = []
+  if (!Array.isArray(rows) || !rows.length) {   // 空块数组（后端 parse_blocks 同拒）
+    problems.push({ index: 0, id: '', msg: '块数组为空——原文至少需要一个内容块' })
+    return problems
+  }
   const seen = new Set()
   const types = new Map()
   rows.forEach((b, i) => {

@@ -118,7 +118,12 @@ function requireOp() {
   if (!op.value.trim()) { emit('toast', '请先填写操作人（编辑留痕必填）', 'err'); return false }
   return true
 }
-function startEdit() { if (canEdit.value) editing.value = true }
+const editBaseRev = ref(0)   // 编辑会话基线（P2-3 乐观锁）：进编辑时取 contentRev，保存时携带
+function startEdit() {
+  if (!canEdit.value) return
+  editBaseRev.value = props.card.contentRev || 0
+  editing.value = true
+}
 async function cancelEdit() {
   if (editorRef.value?.isDirty() && !await ask({
     title: '放弃未保存的编辑？', body: '本地改动将丢失（服务端块表未受影响）。', danger: true, confirmText: '放弃改动'
@@ -151,7 +156,8 @@ async function confirmSave() {
   if (!blocks) { diffPreview.value = null; return }
   saving.value = true
   try {
-    const r = await api.put(`/api/requirements/${props.card.id}/blocks`, { updatedBy: op.value.trim(), blocks })
+    const r = await api.put(`/api/requirements/${props.card.id}/blocks`,
+      { updatedBy: op.value.trim(), blocks, baseContentRev: editBaseRev.value })
     localStorage.setItem('sdlc.op', op.value.trim())
     diffPreview.value = null
     editing.value = false

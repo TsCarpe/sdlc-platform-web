@@ -40,6 +40,11 @@ const nextAction = computed(() => {
   }
   // v4 增量未采纳：发布会被「未消化」守卫堵——引导先采纳
   if (incDraft.value) return { label: '先采纳增量合并', run: () => { collapsed.value = false } }
+  // v4 changed 死锁逃生：增量草稿被丢弃/增量任务终局失败后影响面无人消化（无自动重排）——
+  // 手动补排增量质检（后端守卫 changed ∧ confirmed 单 ∧ 影响面非空）
+  if (card.value.status === 'changed' && !stdDraft.value) {
+    return { label: '重排增量质检', run: () => createTask('incremental_check', '增量质检') }
+  }
   if (card.value.status === 'changed' && stdDraft.value) {
     return { label: '从草稿预览发布', run: publishStd }
   }
@@ -159,12 +164,19 @@ const casesRows = computed(() => {
 })
 const stdPreviewHtml = computed(() => linkifyRefs(render(stdText.value || stdDraft.value?.md || '')))
 
+let loadGen = 0   // 请求代次号：reqId 切换/整体重装载时自增——迟到的旧响应整体丢弃（防过期回写）
 async function loadTasks() {
-  try { tasks.value = await api.get(`/api/tasks?req_id=${props.reqId}`) } catch { /* 轮询失败保旧态，下次 tick 重试 */ }
+  const g = loadGen
+  try {
+    const list = await api.get(`/api/tasks?req_id=${props.reqId}`)
+    if (g === loadGen) tasks.value = list
+  } catch { /* 轮询失败保旧态，下次 tick 重试 */ }
 }
 async function loadDrafts() {
+  const g = loadGen
   try {
     const list = await api.get(`/api/requirements/${props.reqId}/drafts`)
+    if (g !== loadGen) return
     const m = {}
     for (const x of list) m[x.type] = x
     // standard 草稿首次载入或被外部重写时同步编辑缓冲
@@ -174,17 +186,19 @@ async function loadDrafts() {
     drafts.value = m
   } catch { /* 草稿拉取失败保持现状（轮询补齐） */ }
 }
-function reloadAll() { loadTasks(); loadDrafts() }
+function reloadAll() { loadGen++; loadTasks(); loadDrafts() }
 
 let timer = null
 const KNOWN = {}
 /** 轮询单次：页面不可见时跳过（省无效读放大），恢复可见由 visibilitychange 立即补一次 */
 async function tick() {
   if (document.hidden) return
+  const g = loadGen
   const before = {}
   for (const [k, t] of Object.entries(KNOWN)) before[k] = t
   try {
     const list = await api.get(`/api/tasks?req_id=${props.reqId}`)
+    if (g !== loadGen) return   // 重装载已发起——本轮响应过期
     // 有任务从 queued/running 变为终态 → 刷新草稿
     for (const t of list) {
       if (before[t.id] && before[t.id] !== t.status && (t.status === 'done' || t.status === 'failed')) loadDrafts()
@@ -276,7 +290,7 @@ async function publishStd() {
       emit('refresh')
       loadDrafts()
     } catch (e) {
-      if ((e.message || '').includes('未消化')) emit('toast', e.message + '——请先在流水线采纳增量合并草稿', 'err')
+      if ((e.message || '').includes('未消化')) emit('toast', e.message + '——请先在流水线采纳增量合并草稿；若草稿已丢弃，用「增量质检」按钮重排', 'err')
       else emit('toast', '发布失败：' + e.message, 'err')
     } finally { busy.value = false }
     return
@@ -347,7 +361,12 @@ async function forceCases() {
   } catch (e) { emit('toast', '覆盖失败：' + e.message, 'err') }
 }
 async function dropDraft(type) {
-  if (!await ask({ title: `丢弃${draftLabel[type]}？`, body: '丢弃后如需该产物须重新生成对应任务。', danger: true, confirmText: '丢弃' })) return
+  // incremental_bundle 专用后果说明（P1 修复配套）：changed 卡丢弃后无自动重排——影响面
+  // 未消化堵发布，须手动重排增量质检（本区「增量质检」按钮）
+  const warn = type === 'incremental_bundle' && card.value.status === 'changed'
+    ? '变更中丢弃增量草稿后影响面仍未消化——须重排「增量质检」重新生成，否则无法重新发布。'
+    : ''
+  if (!await ask({ title: `丢弃${draftLabel[type]}？`, body: `丢弃后如需该产物须重新生成对应任务。${warn}`, danger: true, confirmText: '丢弃' })) return
   try { await api.del(`/api/requirements/${props.reqId}/drafts/${type}`); conflicts.value = null; emit('toast', '草稿已丢弃'); loadDrafts() }
   catch (e) { emit('toast', '丢弃失败：' + e.message, 'err') }
 }
@@ -424,6 +443,11 @@ function elapsed(t) {
                 title="基于质检产物生成测试用例（发布前后均可）"
                 @click="createTask('case_gen', '用例生成')">
           <AppIcon name="clipboard-list" :size="13" />生成用例
+        </button>
+        <button class="btn" v-if="card.status === 'changed'" :disabled="busy || !!activeTask"
+                title="变更后影响面的增量梳理（L2 自动排不上/草稿被丢弃时的人工逃生门）"
+                @click="createTask('incremental_check', '增量质检')">
+          <AppIcon name="refresh-cw" :size="13" />增量质检
         </button>
       </div>
     </div>

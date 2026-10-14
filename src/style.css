@@ -958,6 +958,11 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
   border-color:transparent; vertical-align:1px}
 /* 段落/条款上的平台评论角标（复用 cmbadge 基础样式，靠后微调） */
 .docblk-p .cmbadge{margin-left:6px}
+/* 无评论块的评论入口（ghost）：默认隐藏，hover 所在块全量浮现（图标+「评论」文字）——破"有评论才有入口"的死锁 */
+.cmbadge.ghost{opacity:0; transition:opacity .12s ease}
+.docblk-sub:hover .cmbadge.ghost, .docblk-p:hover .cmbadge.ghost,
+.clause-line:hover .cmbadge.ghost, .rowcard-h:hover .cmbadge.ghost{opacity:1}
+.cmbadge.ghost:hover, .cmbadge.ghost:focus-visible{opacity:1}
 
 /* ---- 变更单（ChangesTab）：列表头/四类清单网格 ---- */
 .chg-head{display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap}

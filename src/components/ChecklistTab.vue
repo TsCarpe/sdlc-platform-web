@@ -62,18 +62,26 @@ function autoGrow(e) {
   el.style.height = el.scrollHeight + 'px'
 }
 
+const savingSeqs = new Set()   // per-seq 在途集：失焦重入防并发同 seq 双 PUT
 async function saveAnswer(it) {
   if ((it.answer || '') === (originAnswers.value[it.seq] ?? '')) return
+  if (savingSeqs.has(it.seq)) return
+  savingSeqs.add(it.seq)
+  const sent = it.answer   // 发送时值快照——响应回来时输入已再变则不回写（乱序防旧覆新）
   ansState.value[it.seq] = 'saving'
   try {
-    await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: it.answer })
-    originAnswers.value[it.seq] = it.answer
-    it.status = it.answer.trim() ? 'answered' : 'pending'   // 后端同口径回写，本地即时反映（D21）
-    ansState.value[it.seq] = 'saved'
-    setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
+    await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: sent })
+    if ((it.answer || '') === sent) {
+      originAnswers.value[it.seq] = sent
+      it.status = sent.trim() ? 'answered' : 'pending'   // 后端同口径回写，本地即时反映（D21）
+      ansState.value[it.seq] = 'saved'
+      setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
+    }
   } catch (e) {
     delete ansState.value[it.seq]
     emit('toast', '保存失败：' + e.message, 'err')
+  } finally {
+    savingSeqs.delete(it.seq)
   }
 }
 

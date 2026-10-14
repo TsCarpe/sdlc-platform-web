@@ -24,12 +24,24 @@ import { isDone } from '../disposition.js'
 import { provideGroupCollapse } from '../composables/group-collapse.js'
 import { useTraceJump } from '../composables/trace-jump.js'
 import { useTocScroll } from '../composables/toc-scroll.js'
+import { ask } from '../confirm.js'
 
 const props = defineProps({ reqId: String })
 const emit = defineEmits(['back', 'toast', 'loaded'])
 
 const d = ref(null)
 const tab = ref('origin')
+const changesRef = ref(null)
+/** 统一页签切换（E3 守卫）：从变更单页签切走且草稿编辑未保存 → 先确认（tab 用 v-if 切换，
+ * 卸载即丢未保存编辑）；其余方向直切 */
+async function switchTab(t) {
+  if (t === tab.value) return
+  if (tab.value === 'changes' && changesRef.value?.isEditingDirty?.()
+      && !await ask({ title: '放弃未保存的编辑？',
+                      body: '切换页签将丢弃当前变更单草稿编辑（已保存的草稿不受影响）。',
+                      danger: true, confirmText: '放弃并切换' })) return
+  tab.value = t
+}
 const digestMdOpen = ref(false)          // digest 原文折叠（假设引用跳入时自动展开）
 const loading = ref(true)
 const error = ref('')
@@ -132,6 +144,8 @@ async function loadComments() {
 function openComments(blockId = '', focusId = null) {
   cmtsComposeBlock.value = blockId || ''
   cmtsFocus.value = focusId
+  // 面板已开时再点角标只是换目标——无提示会被当成"点击没反应"，明确反馈一句
+  if (cmtsOpen.value && !focusId) emit('toast', blockId ? '评论目标已切到选中块' : '已切回卡片级评论')
   cmtsOpen.value = true
 }
 const cmByBlock = computed(() => {
@@ -142,7 +156,16 @@ const cmByBlock = computed(() => {
 const cmUnresolved = computed(() => cm.value?.unresolvedCount || 0)
 const cmBlockText = computed(() => {
   const m = {}
-  for (const b of docBlocks.value) if (b.text) m[b.id] = b.text
+  for (const b of docBlocks.value) {
+    // 可读标签：行卡带行号+首个子块文本、条款带序号，无 text 的块兜底——绝不裸显块 ID
+    let label = b.text || ''
+    if (b.type === 'table-row') {
+      const fc = (childrenByParent.value[b.id] || []).find(c => c.text)
+      label = `行${b.rowLabel} ${fc?.text || ''}`.trim()
+    }
+    if (b.type === 'list-item' && b.ordinal) label = `${b.ordinal} ${label}`
+    m[b.id] = label || '原文块'
+  }
   return m
 })
 const escalatedIds = computed(() =>
@@ -158,7 +181,7 @@ async function loadChanges() {
     chgCount.value = rows.filter(c => c.status !== 'aborted').length
   } catch { chgCount.value = 0 }
 }
-function openChange(id) { chgFocus.value = id; tab.value = 'changes' }
+function openChange(id) { chgFocus.value = id; switchTab('changes') }
 defineExpose({ openChange })   // 跨组件跳转协议（GateTab GR-3 横幅点入直达变更单）
 
 async function loadExt() {
@@ -180,24 +203,24 @@ async function runCta() {
   try {
     if (c.go === 'design:gen') {
       await api.post(`${base}/tasks`, { type: 'design_gen', note: '技术设计生成（主按钮）' })
-      emit('toast', 'design_gen 任务已排队'); tab.value = 'design'
+      emit('toast', 'design_gen 任务已排队'); switchTab('design')
     } else if (c.go === 'design:skip') {
       await api.post(`${base}/design/skip`, { by: operator.value })
-      emit('toast', '已声明轻量跳过（自查档）'); tab.value = 'design'
+      emit('toast', '已声明轻量跳过（自查档）'); switchTab('design')
     } else if (c.go === 'gate:open') {
       await api.post(`${base}/gate/open`, { by: operator.value })
-      emit('toast', '已开闸（三条件全绿），评审任务排队中'); tab.value = 'gate'
+      emit('toast', '已开闸（三条件全绿），评审任务排队中'); switchTab('gate')
     } else if (c.go === 'gate:ingest') {
       await api.post(`${base}/gate/rounds/${gv.value.round.id}/ingest`, { by: operator.value })
-      emit('toast', '评审汇总已入库，进入裁决'); tab.value = 'gate'
+      emit('toast', '评审汇总已入库，进入裁决'); switchTab('gate')
     } else if (c.go === 'gate:release') {
       const r = await api.post(`/api/gate/rounds/${gv.value.round.id}/release`, { by: operator.value })
-      emit('toast', `已放行 r${r.roundNo}（关卡互认 ${r.casesConfirmed} 条草稿用例置已定稿）`); tab.value = 'gate'
+      emit('toast', `已放行 r${r.roundNo}（关卡互认 ${r.casesConfirmed} 条草稿用例置已定稿）`); switchTab('gate')
     } else if (c.go === 'gate:reopen') {
       await api.post(`${base}/gate/reopen`, { by: operator.value })
-      emit('toast', '已开复审轮（旧轮只读归档）'); tab.value = 'gate'
+      emit('toast', '已开复审轮（旧轮只读归档）'); switchTab('gate')
     } else if (c.go.startsWith('tab:')) {
-      tab.value = c.go.slice(4)
+      switchTab(c.go.slice(4))
       return
     }
     await load()
@@ -289,8 +312,8 @@ function resolveDocPath(path) {
       <span v-if="card.syncedAt" :title="card.syncedAt"><AppIcon name="refresh-cw" :size="12" />同步 {{ fmtRel(card.syncedAt) }}</span>
       <span v-if="card.status === 'published' || card.status === 'changed'" class="op-inline" title="定稿/采纳/裁决/放行动作以此留名（无登录体系的归因方案）">
         <AppIcon name="user" :size="12" />操作人 <input type="text" v-model="operator" name="operator" aria-label="操作人" class="op-input"></span>
-      <!-- v4 卡片级评论（整体疑问）：有评论才亮，含未解决计数 -->
-      <button class="btn small link" v-if="cm && cm.comments.length" @click="openComments('')"
+      <!-- v4 卡片级评论（整体疑问）：常显——零评论也可发第一条（破"有评论才亮"死锁）；有未解决才带计数 -->
+      <button class="btn small link" v-if="cm" @click="openComments('')"
               title="卡片级评论（不锚定原文块的整体疑问）">
         <AppIcon name="message-square" :size="12" />整体疑问<template v-if="cmUnresolved">（{{ cmUnresolved }} 未解决）</template></button>
       <!-- v4 contentRev：变更确认次数展示（单调计数，放弃不回退） -->
@@ -303,27 +326,27 @@ function resolveDocPath(path) {
     <div class="banner amber-t" v-if="card.status === 'changed'">
       <AppIcon name="alert-triangle" :size="14" />
       <span style="flex:1"><b>变更处理中</b>：增量质检完成后在流水线采纳合并，再从标准文档草稿预览重新发布；期间直接编辑与全量重推已关闭。</span>
-      <button class="btn small" @click="tab = 'changes'">查看变更单</button>
+      <button class="btn small" @click="switchTab('changes')">查看变更单</button>
     </div>
 
     <!-- v2.0 线上流水线：质检/标准文档/发布 任务与草稿两态 -->
     <TaskPanel :req-id="card.id" :detail="d" :operator="operator" @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
 
     <div class="tabs" role="tablist">
-      <button class="tab" role="tab" :class="{ on: tab === 'origin' }" @click="tab = 'origin'">原始需求</button>
-      <button class="tab" role="tab" :class="{ on: tab === 'digest' }" @click="tab = 'digest'">
+      <button class="tab" role="tab" :class="{ on: tab === 'origin' }" @click="switchTab('origin')">原始需求</button>
+      <button class="tab" role="tab" :class="{ on: tab === 'digest' }" @click="switchTab('digest')">
         需求摘要<span class="n num" v-if="d.digest">{{ d.frPoints.length }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'audit' }" @click="tab = 'audit'">
+      <button class="tab" role="tab" :class="{ on: tab === 'audit' }" @click="switchTab('audit')">
         体检报告<span class="n num" v-if="d.audit">{{ (d.audit.content?.items || []).length }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'checklist' }" @click="tab = 'checklist'">
+      <button class="tab" role="tab" :class="{ on: tab === 'checklist' }" @click="switchTab('checklist')">
         澄清清单<span class="n num" v-if="card.status === 'clarifying' || card.status === 'changed'">{{ answered }}/{{ totalQ }}</span><span class="n" v-if="card.status === 'published'">✓</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'std' }" @click="tab = 'std'">标准需求文档</button>
-      <button class="tab" role="tab" :class="{ on: tab === 'changes' }" @click="tab = 'changes'">
+      <button class="tab" role="tab" :class="{ on: tab === 'std' }" @click="switchTab('std')">标准需求文档</button>
+      <button class="tab" role="tab" :class="{ on: tab === 'changes' }" @click="switchTab('changes')">
         变更<span class="n num" v-if="chgCount">{{ chgCount }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'cases' }" @click="tab = 'cases'">
+      <button class="tab" role="tab" :class="{ on: tab === 'cases' }" @click="switchTab('cases')">
         用例<span class="n num" v-if="d.coverage && d.coverage.backward.total">{{ d.coverage.backward.total }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'design' }" @click="tab = 'design'">设计</button>
-      <button class="tab" role="tab" :class="{ on: tab === 'gate' }" @click="tab = 'gate'">
+      <button class="tab" role="tab" :class="{ on: tab === 'design' }" @click="switchTab('design')">设计</button>
+      <button class="tab" role="tab" :class="{ on: tab === 'gate' }" @click="switchTab('gate')">
         门禁<span class="n num" v-if="gv && gv.round">{{ gv.round.status === 'released' ? '✓' : gv.round.roundNo + '轮' }}</span></button>
     </div>
 
@@ -356,7 +379,7 @@ function resolveDocPath(path) {
             @jump="onJump" @go-toc="goToc" @toast="(m, t) => emit('toast', m, t)" />
 
     <!-- v4 变更单 tab：列表/draft（复用块编辑器）/confirm（diff+四类清单）/abort -->
-    <ChangesTab v-if="tab === 'changes'" :req-id="card.id" :card="card" :operator="operator"
+    <ChangesTab v-if="tab === 'changes'" ref="changesRef" :req-id="card.id" :card="card" :operator="operator"
                 :blocks="docBlocks" :focus-id="chgFocus"
                 @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
 

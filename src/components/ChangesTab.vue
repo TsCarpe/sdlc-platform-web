@@ -53,7 +53,17 @@ onMounted(async () => {
   await loadList()
   if (props.focusId != null) openDetail(props.focusId)
 })
-watch(() => props.focusId, id => { if (id != null) openDetail(id) })
+/** 草稿编辑脏态（E3：壳层切页签/GR-3 跳转前确认——v-if 卸载即丢未保存编辑） */
+const isEditingDirty = () => (mode.value === 'create' || mode.value === 'edit') && !!editorRef.value?.isDirty()
+defineExpose({ isEditingDirty })
+watch(() => props.focusId, async id => {
+  if (id == null) return
+  if (isEditingDirty() && !await ask({
+    title: '放弃未保存的编辑？', body: '跳转到指定变更单将丢弃当前草稿编辑（已保存的草稿不受影响）。',
+    danger: true, confirmText: '放弃并跳转'
+  })) return
+  openDetail(id)
+})
 
 // ===== 详情 / 编辑 / 新建 =====
 async function openDetail(id) {
@@ -125,6 +135,10 @@ const confirmedBy = ref('')
 const impactLoading = ref(false)
 
 async function startConfirm() {
+  // reconcile 系统单豁免状态门（后端同款豁免）；kind=change 未发布卡就地拦——不再走完
+  // confirm 界面才被 409 拒（P2 修复）
+  if (cur.value?.kind !== 'reconcile' && !canConfirm.value)
+    return emit('toast', `当前卡片状态「${props.card.status}」不可确认变更（仅已发布/变更中；未发布卡的原文修改走窗口 1 直接编辑）`, 'err')
   confirmedBy.value = props.operator || ''
   impactLoading.value = true
   mode.value = 'confirm'
@@ -177,8 +191,15 @@ async function doConfirm() {
     emit('refresh')
     backToList()
   } catch (e) {
-    // §6 关键词分流：未消化 → 指引增量通道；基线漂移 → 刷新重编
-    emit('toast', e.message, 'err')
+    // §6 关键词分流：未消化 → 指引增量通道；基线漂移 → 指引重编草稿
+    const msg = String(e.message || '')
+    if (msg.includes('未消化')) {
+      emit('toast', msg + '——先到流水线面板采纳增量合并草稿（草稿已丢弃则用「增量质检」按钮重排）', 'err')
+    } else if (msg.includes('已被后续修改')) {
+      emit('toast', msg + '——块基线已漂移：请返回编辑，以最新块态重编本变更单草稿后再确认', 'err')
+    } else {
+      emit('toast', msg, 'err')
+    }
   } finally { busy.value = false }
 }
 
@@ -220,8 +241,9 @@ function parseRecJson(raw) {
   const comments = []
   for (const b of blocks) {
     if (b?.type !== 'comment') continue
+    if (b.origin === 'platform') continue   // 平台自身评论（导出回粘）：非对账对象，跳过防复制
     for (const m of b.thread || []) {
-      if (m?.text) comments.push({ externalId: b.id || '', blockId: b.anchorBlockId || '', author: m.user || '', text: m.text })
+      if (m?.text) comments.push({ externalId: b.id || '', blockId: b.anchorBlockId || '', author: m.user || '', text: m.text, origin: b.origin || '' })
     }
   }
   return { blocks: blocks.filter(b => b?.type !== 'comment'), comments }
@@ -319,8 +341,8 @@ function fmtCounts(c) {
         <template v-if="cur.status === 'draft'">
           <button class="btn" :disabled="busy" @click="startEdit"><AppIcon name="pencil" :size="12" />编辑</button>
           <button class="btn danger" :disabled="busy" @click="delDraft"><AppIcon name="trash" :size="12" />删除</button>
-          <button class="btn primary" :disabled="busy" @click="startConfirm"
-                  :title="canConfirm ? '应用块表并转变更中' : '仅已发布/变更中卡片可确认（未发布卡的原文修改走窗口 1 直接编辑）'">
+          <button class="btn primary" :disabled="busy || (cur.kind !== 'reconcile' && !canConfirm)" @click="startConfirm"
+                  :title="canConfirm || cur.kind === 'reconcile' ? '应用块表并转变更中' : '仅已发布/变更中卡片可确认（未发布卡的原文修改走窗口 1 直接编辑）'">
             <AppIcon name="check-circle" :size="13" />确认变更…</button>
         </template>
         <button class="btn danger" v-if="cur.status === 'confirmed' && card.status === 'changed' && cur.id === latestConfirmedId"

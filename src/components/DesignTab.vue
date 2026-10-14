@@ -51,10 +51,13 @@ const rev = () => run(() => api.post(`/api/requirements/${props.reqId}/tasks`, {
 const skip = () => run(() => api.post(`/api/requirements/${props.reqId}/design/skip`, { by: props.operator }), '已声明轻量跳过（留痕可审计）；门禁将以自查档执行')
 const retry = () => run(() => api.post(`/api/tasks/${task.value.id}/retry`), '任务已重新排队')
 const openFinalize = () => { finalizeDlg.value = { by: props.operator } }
-const confirmFinalize = () => run(async () => {
-  await api.post(`/api/requirements/${props.reqId}/drafts/design/approve`, { by: finalizeDlg.value.by })
-  finalizeDlg.value = null
-}, '设计已定稿（确认点②：定稿 ≠ 放行，放行唯一口径 = 门禁已放行）')
+const confirmFinalize = () => {
+  if (!String(finalizeDlg.value.by || '').trim()) return emit('toast', '请填写定稿人（留痕必填）', 'err')
+  return run(async () => {
+    await api.post(`/api/requirements/${props.reqId}/drafts/design/approve`, { by: finalizeDlg.value.by.trim() })
+    finalizeDlg.value = null
+  }, '设计已定稿（确认点②：定稿 ≠ 放行，放行唯一口径 = 门禁已放行）')
+}
 </script>
 
 <template>

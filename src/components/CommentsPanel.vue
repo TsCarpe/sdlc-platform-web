@@ -59,9 +59,12 @@ const unresolved = computed(() => props.comments.filter(c => !c.resolved).length
 const escalated = computed(() => new Set(props.escalatedIds))
 
 function blkText(id) { return (props.blockText[id] || '').slice(0, 60) || id }
+/** 目标 chip 短标签：24 字截断带省略号（全文走 title 悬停） */
+function blkShort(id) { const t = blkText(id); return t.length > 24 ? t.slice(0, 24) + '…' : t }
 
 // ===== 动作 =====
 async function post(rootBlockId, text, replyTo = null) {
+  if (busy.value) return   // Ctrl+Enter 键盘路径绕过按钮 disabled——在途防双发（P2 修复）
   if (!text.trim()) return emit('toast', '评论内容不能为空', 'err')
   if (!author.value.trim()) return emit('toast', '请先填写姓名（署名留痕）', 'err')
   busy.value = true
@@ -154,7 +157,7 @@ function onKey(e) {
     <div class="cmts-compose">
       <div class="cmts-target">
         <span class="sub">发到：</span>
-        <span class="chip" v-if="composeTarget" :title="blkText(composeTarget)">块 · {{ blkText(composeTarget) }}</span>
+        <span class="chip" v-if="composeTarget" :title="blkText(composeTarget)">「{{ blkShort(composeTarget) }}」</span>
         <span class="chip" v-else>卡片级（整体疑问）</span>
         <button class="btn small link" v-if="composeTarget" @click="composeTarget = ''">改为卡片级</button>
       </div>

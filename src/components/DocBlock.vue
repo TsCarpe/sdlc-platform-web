@@ -70,15 +70,15 @@ function toggleComments() { openComments.value = !openComments.value }
   <!-- 段落小标题（parse_doc ≥0.5 内容格粗体独占段，subheading）：▍左竖条，短标题不折叠 -->
   <div v-else-if="block.type === 'paragraph' && block.subheading" class="docblk-sub" :data-blk="block.id">
     <span v-html="inlineHtml"></span>
-    <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
-            @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
+    <button class="cmbadge" :class="{ ghost: !platformCount }" :title="platformCount ? platformCount + ' 条平台评论' : '评论此块'"
+            @click="emit('comments')"><AppIcon name="message-square" :size="11" />{{ platformCount || '评论' }}</button>
   </div>
 
   <!-- 段落：长文本默认折叠（CSS line-clamp，DOM 常驻），可展开 -->
   <p v-else-if="block.type === 'paragraph'" class="docblk-p" :data-blk="block.id">
     <ClampText :html="inlineHtml" :lines="4" :threshold="170" />
-    <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
-            @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
+    <button class="cmbadge" :class="{ ghost: !platformCount }" :title="platformCount ? platformCount + ' 条平台评论' : '评论此块'"
+            @click="emit('comments')"><AppIcon name="message-square" :size="11" />{{ platformCount || '评论' }}</button>
   </p>
 
   <!-- 列表项（条款）：最小引用单位 -->
@@ -86,8 +86,8 @@ function toggleComments() { openComments.value = !openComments.value }
     <div class="clause-line">
       <span class="ordinal" v-if="block.marker">{{ block.marker.replace(/\s+/g, '') }}</span>
       <span class="clause-text" v-html="inlineHtml"></span>
-      <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
-              @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
+      <button class="cmbadge" :class="{ ghost: !platformCount }" :title="platformCount ? platformCount + ' 条平台评论' : '评论此块'"
+              @click="emit('comments')"><AppIcon name="message-square" :size="11" />{{ platformCount || '评论' }}</button>
       <button class="cmbadge" v-if="commentThreads.length" @click="toggleComments"
           :title="'评论区：' + commentThreads[0]?.quote">
         <AppIcon name="message-square" :size="10" />{{ commentThreads.length }}</button>
@@ -105,8 +105,8 @@ function toggleComments() { openComments.value = !openComments.value }
     <div class="rowcard-h">
       <span class="chip">{{ block.rowLabel }}</span>
       <span v-for="(v, vi) in scalars.headerVals" :key="vi" class="rc-chip" :class="chipCls(v)">{{ v }}</span>
-      <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
-              @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
+      <button class="cmbadge" :class="{ ghost: !platformCount }" :title="platformCount ? platformCount + ' 条平台评论' : '评论此块'"
+              @click="emit('comments')"><AppIcon name="message-square" :size="11" />{{ platformCount || '评论' }}</button>
       <button class="cmbadge" v-if="commentThreads.length" @click="toggleComments">
         <AppIcon name="message-square" :size="10" />{{ commentThreads.length }}</button>
       <div class="cthread" v-for="t in (openComments ? commentThreads : [])" :key="t.id">

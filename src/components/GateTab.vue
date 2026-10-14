@@ -45,12 +45,19 @@ const loadDraft = async () => {
 const VERDICT_LABEL = { revise: '落改', reject: '驳回', query: '存疑', filed: '备案' }
 const ROUND_LABEL = { pending: '待裁决', released: '已放行' }
 const askVerdict = (issue, verdict) => { vd.value = { issue, verdict, note: '', revLocation: '' } }
-const confirmVerdict = () => run(async () => {
+const confirmVerdict = () => {
   const v = vd.value
-  await api.post(`/api/gate/issues/${v.issue.id}/verdict`,
-    { verdict: v.verdict, note: v.note.trim(), revLocation: v.revLocation.trim(), by: props.operator })
-  vd.value = null
-}, '裁决已记录（按裁决单元批量生效）')
+  // 前置校验（表单 * 必填项不再全靠服务端兜底）：落改必填落点；驳回必填理由；存疑必填去向
+  if (v.verdict === 'revise' && !v.revLocation.trim()) return emit('toast', '请填写落点（<文件+位置>）', 'err')
+  if (v.verdict !== 'revise' && !v.note.trim()) {
+    return emit('toast', v.verdict === 'reject' ? '请填写驳回理由（沉淀误报模式）' : '请填写作出向（如：拉 PM / 留下轮）', 'err')
+  }
+  return run(async () => {
+    await api.post(`/api/gate/issues/${v.issue.id}/verdict`,
+      { verdict: v.verdict, note: v.note.trim(), revLocation: v.revLocation.trim(), by: props.operator })
+    vd.value = null
+  }, '裁决已记录（按裁决单元批量生效）')
+}
 const markExecuted = issue => run(() => api.post(`/api/gate/issues/${issue.id}/revision`, { revStatus: 'done' }), '落改已执行')
 const release = () => run(() => api.post(`/api/gate/rounds/${round.value.id}/release`, { by: props.operator }),
   '已放行（GR-4 全绿）·关卡互认：用例关卡1 视同通过')

@@ -148,7 +148,7 @@ tr:hover .row-arrow{opacity:1; color:var(--muted)}
 .cell-empty:hover{background:var(--canvas) !important}
 .cell-pts{max-width:260px}
 .tablewrap{overflow-x:auto}
-/* v2.3 流程/状态机投影表断点行（gap=true 即 digest §5/§6 的 ❓ 原文断点） */
+/* v2.3 流程/状态机投影表断点行（gap=true 即 digest §5/§6 的 🤔 原文断点） */
 tr.row-gap td{background:var(--yellow-light)}
 tr.row-gap td .gapmark{color:var(--yellow-dark)}
 /* overflow-x 容器会接管 sticky 基准，Chrome 下 scrollY=0 也偏移 top —— 容器内改用静态表头 */

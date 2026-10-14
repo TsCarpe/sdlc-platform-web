@@ -80,23 +80,23 @@ function frByModule(m) {
       </div>
     </div>
 
-    <!-- v2.3 主流程投影（DESIGN-v2.3）：digest §5 步骤表，gap 行 = 原文 ❓ 断点 -->
+    <!-- v2.3 主流程投影（DESIGN-v2.3）：digest §5 步骤表，gap 行 = 原文 🤔 断点 -->
     <div class="card" v-if="digestFlows.length">
-      <h3>主流程（§5 步骤投影；❓ = 原文断点）</h3>
+      <h3>主流程（§5 步骤投影；🤔 = 原文断点）</h3>
       <div class="tablewrap">
       <table class="table"><thead><tr>
         <th style="width:110px">角色</th><th style="min-width:220px">步骤</th><th style="width:150px">去向</th><th style="width:100px">出处</th>
       </tr></thead>
         <tbody><tr v-for="(f, i) in digestFlows" :key="i" :class="{ 'row-gap': f.gap }" style="cursor:default">
           <td>{{ f.role }}</td><td>{{ f.step }}</td>
-          <td>{{ f.next }}<span v-if="f.gap" class="gapmark" title="原文未定义去向（❓）"> ❓</span></td>
+          <td>{{ f.next }}<span v-if="f.gap" class="gapmark" title="原文未定义去向（🤔）"> 🤔</span></td>
           <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.src" @click="emit('locate', f.src, f.anchor)">{{ f.src }}<span v-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
         </tr></tbody>
       </table>
       </div>
     </div>
 
-    <!-- v2.3 状态机流转投影（DESIGN-v2.3）：digest §6 边表，按对象分组折叠，gap 行 = 原文 ❓ 断点 -->
+    <!-- v2.3 状态机流转投影（DESIGN-v2.3）：digest §6 边表，按对象分组折叠，gap 行 = 原文 🤔 断点 -->
     <div class="card" v-if="digestStates.length">
       <h3>状态机流转（§6 边表投影，共 {{ digestStates.length }} 条）</h3>
       <div class="grp" v-for="g in stateGroups" :key="g.name" :class="{ closed: !openGrps.has(g.name) }">
@@ -109,7 +109,7 @@ function frByModule(m) {
         </tr></thead>
           <tbody><tr v-for="(s, i) in g.items" :key="i" :class="{ 'row-gap': s.gap }" style="cursor:default">
             <td>{{ s.from }}</td><td>{{ s.on }}</td>
-            <td>{{ s.to }}<span v-if="s.gap" class="gapmark" title="原文未定义去向（❓）"> ❓</span></td>
+            <td>{{ s.to }}<span v-if="s.gap" class="gapmark" title="原文未定义去向（🤔）"> 🤔</span></td>
             <td class="sub"><a class="cite" :class="{ anchored: s.anchor }" v-if="s.src" @click="emit('locate', s.src, s.anchor)">{{ s.src }}<span v-if="s.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
           </tr></tbody>
         </table>

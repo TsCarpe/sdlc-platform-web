@@ -75,11 +75,39 @@ export function newBlock(type, { text = '', parent = '', level = 2 } = {}) {
   return b
 }
 
-/** 在某块的子树之后插入新块（兄弟语义：同 parent）——行内子块不会插进行区间中间 */
+/** 行子树内的行内子块插入位（排他下标）：行直接子块必须连续紧随行块（§2.3）——子树尾若挂着
+ * 嵌套子树（如 li 的嵌套项），回退到最后一个直接子块之后，防新行内子块隔断连续区 */
+function rowChildInsertPos(rows, rowIdx) {
+  const rowId = rows[rowIdx].id
+  let p = subtreeEnd(rows, rowIdx)
+  while (p > rowIdx + 1 && rows[p - 1].parent !== rowId) p--
+  return p
+}
+
+/** 在某块的子树之后插入新块（兄弟语义：同 parent）——行内子块不会插进行区间中间。
+ * v4.1 行内子树感知：锚块自身或其祖先链在 table-row 子树内时，插入统一落行子树内
+ * （防行内子块连续区被拦腰截断违紧随约束）；paragraph/list-item 挂行（parent=rowId +
+ * 继承锚块 cell 戳，无戳不补）——内容格段落从行内插入不再漂到根块 */
 export function insertAfter(rows, afterId, block) {
   const i = rows.findIndex(b => b.id === afterId)
   if (i < 0) return rows
   const host = rows[i]
+  let anc = host
+  const seen = new Set()
+  while (anc && !seen.has(anc.id)) {
+    seen.add(anc.id)
+    if (anc.type === 'table-row') break
+    anc = anc.parent ? rows.find(b => b.id === anc.parent) : null
+  }
+  if (anc?.type === 'table-row') {
+    if (block.type === 'paragraph' || block.type === 'list-item') {
+      block.parent = anc.id
+      if (host.cell != null) block.cell = host.cell
+    }
+    const out = [...rows]
+    out.splice(rowChildInsertPos(rows, rows.findIndex(b => b.id === anc.id)), 0, block)
+    return out
+  }
   if (block.type === 'list-item' && host.type === 'list-item') {
     block.parent = host.parent || undefined
     if (!block.parent) delete block.parent

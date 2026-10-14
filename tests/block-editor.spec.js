@@ -150,3 +150,106 @@ describe('OriginTab：编辑入口与保存流闭环', () => {
     expect(w.emitted('toast')[0][0]).toContain('无内容变更')
   })
 })
+
+// ===== v4.1 行卡片层级数据（parse_doc 0.5 形状）：渲染 / 行编辑 / 行内插入 / mini 表格 =====
+
+// table-row（head 非空、cells 含空串内容格）+ 段落子块（cell:3，1 个 subheading）+ 2 个 li（cell:3）+ image（cell:4）
+const rowBlocks = () => [
+  { id: 'fs-h1', type: 'heading', level: 2, text: '需求详情' },
+  { id: 'r1', type: 'table-row', rowLabel: '1',
+    head: ['序号', '优先级', '功能模块', '需求描述', '原型图'], cells: ['1', 'P0', '教研活动', '', ''] },
+  { id: 'rp1', type: 'paragraph', parent: 'r1', cell: 3, subheading: true, text: '**活动创建**' },
+  { id: 'rp2', type: 'paragraph', parent: 'r1', cell: 3, text: 'PC端' },
+  { id: 'rli1', type: 'list-item', parent: 'r1', cell: 3, marker: '1.', text: '条款一' },
+  { id: 'rli2', type: 'list-item', parent: 'r1', cell: 3, marker: '2.', text: '条款二' },
+  { id: 'rimg1', type: 'image', parent: 'r1', cell: 4, media: 'm-1', caption: '原型图一', text: '' }
+]
+
+describe('OriginTab：行卡片层级渲染（v4.1）', () => {
+  const mountOrigin = async (blocks) => {
+    const { default: OriginTab } = await import('../src/components/OriginTab.vue')
+    return mount(OriginTab, { props: {
+      card: { id: 'REQ-1', status: 'published', sourceType: 'text', sourceText: 'x', sourceUrl: '' },
+      snapshot: null,
+      doc: { content: { blocks, media: [] } }
+    } })
+  }
+
+  it('行卡：卡头轻 chip（P0 优先级变体）+ 内容格组名 + leadgrp 挂靠 + 图廊 + ▍小标题', async () => {
+    const w = await mountOrigin(rowBlocks())
+    expect(w.find('.rowcard').exists()).toBe(true)
+    const chips = w.findAll('.rc-chip')
+    expect(chips.map(c => c.text())).toEqual(['P0', '教研活动'])
+    expect(chips[0].classes()).toContain('pri')
+    expect(chips[0].classes()).toContain('p0')
+    expect(w.findAll('.gname').map(g => g.text())).toEqual(['需求描述', '原型图'])
+    expect(w.find('.docblk-sub').text()).toContain('活动创建')
+    const lead = w.find('.leadgrp')
+    expect(lead.text()).toContain('PC端')
+    expect(lead.text()).toContain('条款一')
+    expect(w.find('.gal .imgcard').exists()).toBe(true)
+    expect(w.find('.gal figcaption').text()).toContain('原型图一')
+    expect(w.text()).not.toContain('列1')   // 「列N」自造标签兜底已删除
+  })
+
+  it('全标量小表聚合为 mini 表格，tr[data-blk] 可 querySelector 命中（锚点/目录定位）', async () => {
+    const w = await mountOrigin([
+      { id: 'fs-h2', type: 'heading', level: 2, text: '文档变更' },
+      { id: 't1', type: 'table-row', rowLabel: '1', head: ['版本', '日期', '内容'], cells: ['V1', '2026年7月9日', '拆分出部分需求'] },
+      { id: 't2', type: 'table-row', rowLabel: '2', head: ['版本', '日期', '内容'], cells: ['V2', '2026年10月1日', '优化'] },
+      { id: 'p-after', type: 'paragraph', text: '表后段' }
+    ])
+    expect(w.find('table.mini').exists()).toBe(true)
+    expect(w.findAll('table.mini thead th').map(t => t.text())).toEqual(['版本', '日期', '内容'])
+    expect(w.element.querySelector('tr[data-blk="t2"]')).not.toBeNull()
+    expect(w.find('[data-blk="p-after"]').exists()).toBe(true)   // 表后块照旧渲染
+  })
+})
+
+describe('BlockEditor：table-row 行编辑（v4.1 内容列只读）', () => {
+  const mountRowEditor = async () => {
+    const Editor = (await import('../src/components/BlockEditor.vue')).default
+    return mount(Editor, { props: { reqId: 'REQ-1', blocks: rowBlocks() } })
+  }
+
+  it('标量列 textarea 可编辑；内容列（有段落子块）只读提示 + 删列置灰，cells 值原样保留', async () => {
+    const w = await mountRowEditor()
+    await w.findAll('.bedit-body')[1].trigger('click')   // r1 行表单
+    const ta = w.find('textarea[name="blk-cell-1"]')    // 优先级列（标量）
+    expect(ta.exists()).toBe(true)
+    expect(w.find('textarea[name="blk-cell-3"]').exists()).toBe(false)   // 需求描述列 = 内容列
+    expect(w.findAll('.bedit-cell .cellro')).toHaveLength(2)             // 需求描述 + 原型图
+    const roCell = w.findAll('.bedit-cell')[3]
+    expect(roCell.text()).toContain('长文内容在下方段落块中编辑')
+    expect(roCell.find('button').attributes('disabled')).toBeDefined()
+    await ta.setValue('P1')
+    await w.find('.bedit-edit').trigger('focusout')
+    const r = w.vm.getPayload()
+    const r1 = r.blocks.find(b => b.id === 'r1')
+    expect(r1.cells).toEqual(['1', 'P1', '教研活动', '', ''])   // 内容列空串原样保留
+  })
+
+  it('行内插入 paragraph：payload parent=rowId + 继承锚块 cell 锚', async () => {
+    const w = await mountRowEditor()
+    await w.findAll('.bedit-row')[2].findAll('.bedit-handle button')[1].trigger('click')   // rp1 的「+」
+    const ins = w.findAll('.bedit-menu button').find(b => b.text().includes('插入段落'))
+    await ins.trigger('click')
+    const r = w.vm.getPayload()
+    const nb = r.blocks.find(b => b.id.startsWith('tmp-'))
+    expect(nb).toMatchObject({ type: 'paragraph', parent: 'r1', cell: 3 })
+    expect(r.ok).toBe(true)
+  })
+
+  it('追加列（head/cells 变长）不重排已有子块 cell 锚', async () => {
+    const w = await mountRowEditor()
+    await w.findAll('.bedit-body')[1].trigger('click')
+    await w.find('.bedit-toolbar button').trigger('click')   // + 列
+    await w.find('.bedit-edit').trigger('focusout')
+    const r = w.vm.getPayload()
+    const r1 = r.blocks.find(b => b.id === 'r1')
+    expect(r1.head).toHaveLength(6)
+    expect(r1.cells).toHaveLength(6)
+    expect(r.blocks.find(b => b.id === 'rp1').cell).toBe(3)
+    expect(r.blocks.find(b => b.id === 'rimg1').cell).toBe(4)
+  })
+})

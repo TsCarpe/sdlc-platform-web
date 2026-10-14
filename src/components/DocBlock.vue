@@ -7,6 +7,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
 import ClampText from './ClampText.vue'
+import { splitRowScalars, groupRowChildren } from '../docview.js'
 
 const props = defineProps({
   block: { type: Object, required: true },
@@ -38,15 +39,23 @@ const headingTag = computed(() => {
   return 'h' + Math.min(Math.max(lv + 1, 2), 6)   // title/heading 降一级渲染，文档标题让位页面标题
 })
 
-const cellPairs = computed(() => {
-  const head = props.block.head || []
-  const cells = props.block.cells || []
-  return cells.map((c, i) => ({
-    label: head[i] || ('列' + (i + 1)),
-    text: c,
-    html: c ? DOMPurify.sanitize(marked.parseInline(c)) : ''
-  })).filter(p => p.text)
-})
+// v4.1 D1 标量分流（docview.splitRowScalars）：卡头轻 chip（headerVals，只显值）+ 标签值对
+// （metaPairs，label 空只显值）——替代旧 cellPairs 的「列N」自造标签兜底（head 空时全落 meta 无标签）
+const scalars = computed(() => splitRowScalars(props.block))
+
+// v4.1 行内子块分组（cell 戳 → 内容格分组树 + 尾部图廊 + 列表视觉挂靠前导段）
+const groupedChildren = computed(() =>
+  props.block.type === 'table-row' ? groupRowChildren(children.value, props.block.head || []) : [])
+
+/** 卡头 chip 优先级样式：/^P\d/ 形态加 pri（P0 红 / P1 橙 / 其余中性）——纯形态判断，非列名语义识别 */
+function chipCls(v) {
+  const m = /^P(\d)/.exec(String(v))
+  if (!m) return ''
+  return m[1] === '0' ? 'pri p0' : m[1] === '1' ? 'pri p1' : 'pri'
+}
+
+/** 图廊竖图判定（figure.tall 高版封面）：宽高属性齐全且高>宽（H5 长截图） */
+function isPortrait(b) { return !!b.width && !!b.height && b.height > b.width }
 
 function toggleComments() { openComments.value = !openComments.value }
 </script>
@@ -57,6 +66,13 @@ function toggleComments() { openComments.value = !openComments.value }
              :data-blk="block.id" class="docblk-h" :class="'h' + (block.level || 1)">
     {{ block.text }}
   </component>
+
+  <!-- 段落小标题（parse_doc ≥0.5 内容格粗体独占段，subheading）：▍左竖条，短标题不折叠 -->
+  <div v-else-if="block.type === 'paragraph' && block.subheading" class="docblk-sub" :data-blk="block.id">
+    <span v-html="inlineHtml"></span>
+    <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
+            @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
+  </div>
 
   <!-- 段落：长文本默认折叠（CSS line-clamp，DOM 常驻），可展开 -->
   <p v-else-if="block.type === 'paragraph'" class="docblk-p" :data-blk="block.id">
@@ -84,10 +100,11 @@ function toggleComments() { openComments.value = !openComments.value }
               :comment-by-ref="commentByRef" :req-id="reqId" class="docblk-child" />
   </div>
 
-  <!-- 表格行：行卡片 + 单元格元信息 + 内嵌条款树 -->
+  <!-- 表格行：行卡片（卡头 rowLabel chip + 标量轻 chip）+ 标签值对 + 内容格分组树（v4.1 层级还原） -->
   <div v-else-if="block.type === 'table-row'" class="docblk rowcard" :data-blk="block.id">
     <div class="rowcard-h">
       <span class="chip">{{ block.rowLabel }}</span>
+      <span v-for="(v, vi) in scalars.headerVals" :key="vi" class="rc-chip" :class="chipCls(v)">{{ v }}</span>
       <button class="cmbadge" v-if="platformCount" :title="platformCount + ' 条平台评论'"
               @click="emit('comments')"><AppIcon name="message-square" :size="10" />{{ platformCount }}</button>
       <button class="cmbadge" v-if="commentThreads.length" @click="toggleComments">
@@ -96,11 +113,34 @@ function toggleComments() { openComments.value = !openComments.value }
         <div class="ct-msg" v-for="(m, i) in t.thread" :key="i"><b>{{ m.user }}</b>：{{ m.text }}</div>
       </div>
     </div>
-    <div class="rowmeta" v-if="cellPairs.length">
-      <span v-for="p in cellPairs" :key="p.label" class="cellpair"><b>{{ p.label }}：</b><span class="cp-val" v-html="p.html"></span></span>
+    <div class="rowmeta" v-if="scalars.metaPairs.length">
+      <span v-for="p in scalars.metaPairs" :key="p.idx" class="cellpair">
+        <b v-if="p.label">{{ p.label }}：</b><span class="cp-val">{{ p.value }}</span>
+      </span>
     </div>
-    <DocBlock v-for="c in children" :key="c.id" :block="c" :children-by-parent="childrenByParent"
-              :comment-by-ref="commentByRef" :req-id="reqId" class="docblk-child" />
+    <div class="rowbody" v-if="groupedChildren.length">
+      <div v-for="g in groupedChildren" :key="g.cellIdx" class="rowgrp">
+        <!-- 多内容格才显组名（组名 = 列表头）；单一内容组/无表头组不显 -->
+        <div class="gname" v-if="groupedChildren.length > 1 && g.label">{{ g.label }}</div>
+        <template v-for="item in g.tree" :key="item.block.id">
+          <!-- lead：连续列表 run 视觉挂靠最近非 subheading 前导段（数据层 parent 仍 = 行块） -->
+          <div v-if="item.kind === 'lead'" class="leadgrp">
+            <DocBlock :block="item.block" :children-by-parent="childrenByParent"
+                      :comment-by-ref="commentByRef" :req-id="reqId" />
+            <DocBlock v-for="li in item.listChildren" :key="li.id" :block="li" :children-by-parent="childrenByParent"
+                      :comment-by-ref="commentByRef" :req-id="reqId" class="docblk-child" />
+          </div>
+          <DocBlock v-else :block="item.block" :children-by-parent="childrenByParent"
+                    :comment-by-ref="commentByRef" :req-id="reqId" class="docblk-child" />
+        </template>
+        <!-- 尾部媒体块图廊（image 自带 caption；竖图 tall 高版封面） -->
+        <div class="gal" v-if="g.gallery.length">
+          <DocBlock v-for="m in g.gallery" :key="m.id" :block="m" :children-by-parent="childrenByParent"
+                    :comment-by-ref="commentByRef" :req-id="reqId"
+                    :class="{ tall: m.type === 'image' && isPortrait(m) }" />
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 图片 -->

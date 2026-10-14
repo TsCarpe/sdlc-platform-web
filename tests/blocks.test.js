@@ -173,3 +173,50 @@ describe('validate：提交前本地校验（服务端 parse_blocks 同款守卫
     expect(problems.some(p => p.index === 2 && p.msg.includes('紧随'))).toBe(true)
   })
 })
+
+describe('insertAfter：行内子树感知（v4.1 parse_doc 0.5 配套）', () => {
+  const rowFixture = () => [
+    { id: 'fs-h1', type: 'heading', level: 2, text: '需求详情' },
+    { id: 'r1', type: 'table-row', rowLabel: '1', head: ['序号', '优先级', '需求描述'], cells: ['1', 'P0', ''] },
+    { id: 'rp1', type: 'paragraph', parent: 'r1', cell: 2, text: '描述段' },
+    { id: 'rli1', type: 'list-item', parent: 'r1', cell: 2, marker: '1.', text: '行内条款' },
+    { id: 'after', type: 'paragraph', text: '行后段落' }
+  ]
+
+  it('锚=行内 paragraph → 新块挂行（parent=rowId + 继承 cell 锚），落行子树尾且校验通过', () => {
+    let rows = rowFixture()
+    const nb = newBlock('paragraph', { text: '新段' })
+    rows = insertAfter(rows, 'rp1', nb)
+    expect(nb.parent).toBe('r1')
+    expect(nb.cell).toBe(2)
+    expect(rows.map(b => b.id)).toEqual(['fs-h1', 'r1', 'rp1', 'rli1', nb.id, 'after'])
+    expect(validate(rows)).toEqual([])
+  })
+
+  it('锚=行块本体 → 新块落子树尾 parent=rowId（无 cell 可继承则不补）', () => {
+    let rows = rowFixture()
+    const nb = newBlock('list-item', { text: '新项' })
+    rows = insertAfter(rows, 'r1', nb)
+    expect(nb.parent).toBe('r1')
+    expect(nb.cell).toBeUndefined()
+    expect(rows.map(b => b.id)).toEqual(['fs-h1', 'r1', 'rp1', 'rli1', nb.id, 'after'])
+    expect(validate(rows)).toEqual([])
+  })
+
+  it('锚=行内嵌套 list-item → 祖先链达行块；插入位回退到末位直接子块后（紧随约束不破）', () => {
+    let rows = rowFixture()
+    rows.splice(4, 0, { id: 'rli2', type: 'list-item', parent: 'rli1', marker: '1)', text: '嵌套项' })
+    const nb = newBlock('list-item', { text: '同列新项' })
+    rows = insertAfter(rows, 'rli2', nb)
+    expect(nb.parent).toBe('r1')
+    expect(nb.cell).toBeUndefined()   // 继承只看锚块自身 cell 键（rli2 无 → 不补）
+    expect(rows.map(b => b.id)).toEqual(['fs-h1', 'r1', 'rp1', 'rli1', nb.id, 'rli2', 'after'])
+    expect(validate(rows)).toEqual([])
+  })
+
+  it('行内子块 cell 锚过 toPayload 不剥（提交面保留列戳）', () => {
+    const payload = toPayload(rowFixture())
+    expect(payload.find(b => b.id === 'rp1').cell).toBe(2)
+    expect(payload.find(b => b.id === 'rli1').cell).toBe(2)
+  })
+})

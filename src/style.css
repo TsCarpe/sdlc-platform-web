@@ -483,6 +483,43 @@ a.chip.linklike:hover{background:var(--blue-light); border-color:transparent; co
   display:flex; align-items:center; justify-content:center; flex:none}
 .docstruct .docblk-child{margin-left:0}
 
+/* ===== v4.1 层级还原（parse_doc ≥0.5 配套）：小标题 / 卡头轻 chip / 内容格分组 / 图廊 / mini 表格 ===== */
+/* 内容格粗体独占段 → ▍小标题 */
+.docstruct .docblk-sub{margin:14px 0 5px; font-weight:700; font-size:14px; color:var(--ink-deep); line-height:1.6}
+.docstruct .docblk-sub::before{content:"▍"; color:var(--blue); margin-right:4px}
+.docstruct .docblk-sub .cmbadge{vertical-align:1px; margin-left:6px}
+/* 行卡头标量轻 chip（D1 第 2 列起连续短值）：P0/P1/其它优先级形态变体（仅样式判断，非语义识别） */
+.docstruct .rc-chip{font-size:12px; font-weight:600; color:var(--slate); background:var(--bg-active);
+  border-radius:6px; padding:1px 8px; line-height:1.7; overflow-wrap:anywhere}
+.docstruct .rc-chip.pri{font-size:11px; font-weight:700; border-radius:5px; padding:1px 7px}
+.docstruct .rc-chip.pri.p0{color:var(--red-deep); background:var(--red-soft)}
+.docstruct .rc-chip.pri.p1{color:var(--amber-deep); background:var(--amber-soft)}
+/* 行体：内容格分组（cell 戳分桶）。多组间上虚线分隔，组名 = 列表头（◇ 前缀小灰字） */
+.docstruct .rowbody{padding:2px 2px 4px}
+.docstruct .rowgrp{border-top:1px dashed var(--line); margin-top:12px; padding-top:10px}
+.docstruct .rowgrp:first-child{border-top:none; margin-top:0; padding-top:0}
+.docstruct .gname{font-size:12px; color:var(--muted); font-weight:600; letter-spacing:1px; margin-bottom:6px}
+.docstruct .gname::before{content:"◇ "; color:var(--faint)}
+/* 列表视觉挂靠：连续 li run 挂最近前导段（lead）——前导段加重、列表缩进表达从属 */
+.docstruct .leadgrp{margin:6px 0 4px}
+.docstruct .leadgrp > .docblk-p{font-weight:600; margin:6px 0 2px; color:var(--charcoal)}
+.docstruct .leadgrp .docblk-child{margin-left:14px}
+/* 尾部媒体块图廊：figure 定宽封面（竖图 tall 高版），figcaption 居中小字 */
+.docstruct .gal{display:flex; flex-wrap:wrap; gap:12px; margin:8px 0}
+.docstruct .gal .imgcard, .docstruct .gal .mediacard{width:200px; flex:none; margin:0}
+.docstruct .gal .imgcard img{width:200px; height:130px; max-width:none; object-fit:cover; object-position:top}
+.docstruct .gal .imgcard.tall img{height:210px}
+.docstruct .gal .imgcard figcaption{justify-content:center; text-align:center; font-size:11.5px; flex-wrap:wrap}
+/* 全标量小表还原（连续纯标量同 head 行聚合）：圆角外框 + 灰底表头 + 常规 td，tr[data-blk] 保锚点 */
+.docstruct table.mini{border-collapse:separate; border-spacing:0; width:100%; margin:10px 0; font-size:13px;
+  border:1px solid var(--line); border-radius:8px; overflow:hidden}
+.docstruct table.mini th, .docstruct table.mini td{padding:7px 12px; border-right:1px solid var(--line-soft);
+  border-bottom:1px solid var(--line-soft); text-align:left; overflow-wrap:anywhere}
+.docstruct table.mini th{background:var(--bg-soft); color:var(--muted); font-weight:600}
+.docstruct table.mini td{color:var(--charcoal)}
+.docstruct table.mini th:last-child, .docstruct table.mini td:last-child{border-right:none}
+.docstruct table.mini tbody tr:last-child td{border-bottom:none}
+
 /* v1.2 块锚点直达标识：⌖ → crosshair 图标徽标 */
 .cite .anchored-mark{display:inline-flex; align-items:center; color:var(--teal); margin-left:3px; vertical-align:-1px}
 .cite.anchored{border-bottom-style:solid; border-bottom-color:rgba(14,147,132,.5)}
@@ -857,6 +894,10 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .bedit-cell .idx{flex:none; font-size:11px; color:var(--faint); width:34px; text-align:right}
 .bedit-cell input{flex:1}
 .bedit-cell textarea{flex:1; resize:vertical; font:inherit; min-height:28px}
+/* v4.1 内容列只读提示（cell 戳上有行内子块——长文在段落子块编辑） */
+.bedit-cell .cellro{flex:1; font-size:12px; color:var(--stone); background:var(--bg-soft);
+  border:1px dashed var(--line); border-radius:6px; padding:5px 9px}
+.bedit-cell.is-content .idx{color:var(--muted)}
 .bedit-media{display:flex; align-items:center; gap:8px; padding:6px 0; flex-wrap:wrap}
 /* 顶条（操作人 + 保存/取消） */
 .bedit-topbar{display:flex; align-items:center; gap:8px; padding:8px 12px; margin-bottom:10px;

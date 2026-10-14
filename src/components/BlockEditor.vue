@@ -96,6 +96,12 @@ function autoGrow(e) {
   el.style.height = 'auto'
   el.style.height = el.scrollHeight + 'px'
 }
+/** v4.1 内容列判定（编辑中的 table-row）：该列 cell 戳上有行内子块 → 长文在段落子块编辑，
+ * 列内 textarea 只读化（防 cells 与子块双份文本）、删列置灰（防 cell 戳错位） */
+function isContentCol(ci) {
+  if (!editingId.value) return false
+  return rows.value.some(b => b.parent === editingId.value && b.cell === ci)
+}
 /** 行内语法按钮：选中段包标记（B=** / 删除线=~~ / 行内代码=`）；mousedown.prevent 防失焦提交 */
 function wrapSel(kind) {
   const el = document.getElementById('betext-' + editingId.value)
@@ -286,12 +292,16 @@ const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列�
                 <input type="text" v-model="buf.rowLabel" name="blk-rowlabel" style="max-width:220px" @keydown.esc.prevent="commitEdit">
               </div>
               <div class="bedit-cells">
-                <div class="bedit-cell" v-for="(c, ci) in buf.cells" :key="ci">
+                <div class="bedit-cell" v-for="(c, ci) in buf.cells" :key="ci"
+                     :class="{ 'is-content': isContentCol(ci) }">
                   <span class="idx">{{ buf.head[ci] || ('列' + (ci + 1)) }}</span>
+                  <!-- 内容列（cell 戳上有行内子块）：只读提示——长文在下方段落块编辑，防双份文本 -->
+                  <div class="cellro" v-if="isContentCol(ci)">长文内容在下方段落块中编辑</div>
                   <!-- textarea：cell 含 \n 段落边界时可编辑（行数自适应，单行 cell 视觉同 input） -->
-                  <textarea v-model="buf.cells[ci]" :name="'blk-cell-' + ci"
+                  <textarea v-else v-model="buf.cells[ci]" :name="'blk-cell-' + ci"
                             :rows="Math.min(6, Math.max(1, (buf.cells[ci] || '').split('\n').length))"></textarea>
-                  <button class="btn small" title="删除该列（行与表头同步收缩）"
+                  <button class="btn small" :disabled="isContentCol(ci)"
+                          :title="isContentCol(ci) ? '先删除该列的段落子块' : '删除该列（行与表头同步收缩）'"
                           @click="buf.cells.splice(ci, 1); buf.head.splice(ci, 1)">
                     <AppIcon name="x" :size="11" /></button>
                 </div>

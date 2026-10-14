@@ -14,6 +14,7 @@ import { api } from '../api.js'
 import { ask } from '../confirm.js'
 import { render } from '../render.js'
 import { fmtRel } from '../time.js'
+import { partitionRows } from '../docview.js'
 
 const props = defineProps({
   card: { type: Object, required: true },        // sourceType/sourceUrl/sourceText/id/status
@@ -62,6 +63,18 @@ const docSections = computed(() => {
   }
   return preface ? [preface, ...secs] : secs
 })
+// v4.1 全标量小表还原（parse_doc ≥0.5）：章节块序过 partitionRows——连续纯标量同 head 行聚合为
+// mini 表格（head = 表头，tr 带 data-blk 保锚点/目录定位），有子块/评论/内容格的行照旧行卡承载
+const childCountBy = computed(() => {
+  const m = new Map()
+  for (const b of docBlocks.value) {
+    const p = b.parent || ''
+    m.set(p, (m.get(p) || 0) + 1)
+  }
+  return m
+})
+const partitionedSections = computed(() =>
+  docSections.value.map(sec => ({ ...sec, parts: partitionRows(sec.blocks, childCountBy.value) })))
 const commentByRef = computed(() => {
   const m = {}
   for (const b of docBlocks.value) if (b.type === 'comment') m[b.ref] = b
@@ -214,23 +227,44 @@ async function rerunCheck() {
                @click="emit('locate', '', h.id)">{{ h.text }}</a>
           </div>
         </details>
-        <!-- 章节分组渲染：heading 标题 + 直属块包裹进 .docsec 容器（缩进+引导线表达归属）；前言组平铺 -->
-        <template v-for="sec in docSections" :key="sec.key">
+        <!-- 章节分组渲染：heading 标题 + 直属块包裹进 .docsec 容器（缩进+引导线表达归属）；前言组平铺。
+             块序先过 partitionRows：纯标量表 run → mini 表格，其余块照旧 DocBlock（v4.1） -->
+        <template v-for="sec in partitionedSections" :key="sec.key">
           <section v-if="sec.heading" class="docsec" :class="sec.cls">
             <DocBlock :block="sec.heading" :children-by-parent="childrenByParent"
                       :comment-by-ref="commentByRef" :req-id="card.id" />
-            <DocBlock v-for="b in sec.blocks" :key="b.id" :block="b"
-                      :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
-                      :req-id="card.id"
-                      :platform-count="platformByBlock[b.id] || 0"
-                      @comments="emit('open-comments', b.id)" />
+            <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.block.id">
+              <table v-if="p.kind === 'table'" class="mini">
+                <thead><tr><th v-for="(h, hi) in p.head" :key="hi">{{ h }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="row in p.rows" :key="row.id" :data-blk="row.id">
+                    <td v-for="(c, ci) in row.cells" :key="ci">{{ c }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <DocBlock v-else :block="p.block"
+                        :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
+                        :req-id="card.id"
+                        :platform-count="platformByBlock[p.block.id] || 0"
+                        @comments="emit('open-comments', p.block.id)" />
+            </template>
           </section>
           <template v-else>
-            <DocBlock v-for="b in sec.blocks" :key="b.id" :block="b"
-                      :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
-                      :req-id="card.id"
-                      :platform-count="platformByBlock[b.id] || 0"
-                      @comments="emit('open-comments', b.id)" />
+            <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.block.id">
+              <table v-if="p.kind === 'table'" class="mini">
+                <thead><tr><th v-for="(h, hi) in p.head" :key="hi">{{ h }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="row in p.rows" :key="row.id" :data-blk="row.id">
+                    <td v-for="(c, ci) in row.cells" :key="ci">{{ c }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <DocBlock v-else :block="p.block"
+                        :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
+                        :req-id="card.id"
+                        :platform-count="platformByBlock[p.block.id] || 0"
+                        @comments="emit('open-comments', p.block.id)" />
+            </template>
           </template>
         </template>
       </template>

@@ -120,17 +120,41 @@ function locateCheck(seq) {
   })
 }
 
-// ===== 澄清导航（三态筛选：全部/待处置/已处置）=====
+// ===== v5 就绪度覆盖地图（§2.2，D3/D12）：维度 = items[].layer（1-7，v1.6 可选），
+// 分母口径 = clarify 表全量（空 layer 入「未分类」桶——与发布门禁 counts 一致永不分裂；
+// 已定论卡不在 clarify 表不计分母）。items 无任何 layer → 不渲染维度条只留进度（降级不冒充，
+// 重推质检产出 layer 后自然点亮）。层名待三期 dimensions.md 契约对齐，先 L<n> 标签。
+const dimFilter = ref('')   // 选中维度桶 key（'' = 全部）；与三态筛选叠加
+const layerStats = computed(() => {
+  const buckets = {}
+  for (const it of props.items) {
+    const k = it.layer ? String(it.layer) : 'na'
+    const b = (buckets[k] = buckets[k] || { key: k, layer: it.layer || null, total: 0, done: 0 })
+    b.total++
+    if (isDone(it)) b.done++
+  }
+  return Object.values(buckets).sort((a, b) => (a.layer ?? 99) - (b.layer ?? 99))
+})
+const hasLayers = computed(() => props.items.some(it => it.layer))
+const rdyPct = computed(() => totalQ.value ? Math.round(answered.value / totalQ.value * 100) : 0)
+
+// ===== 澄清导航（三态筛选：全部/待处置/已处置；与维度过滤叠加）=====
 const clfFilter = ref('all')   // 'all' | 'pending' | 'done'
 const visibleCheckGroups = computed(() => {
-  if (clfFilter.value === 'all') return props.groups
+  let groups = props.groups
+  if (dimFilter.value) {
+    groups = groups
+      .map(g => ({ name: g.name, items: g.items.filter(it => (it.layer ? String(it.layer) : 'na') === dimFilter.value) }))
+      .filter(g => g.items.length)
+  }
+  if (clfFilter.value === 'all') return groups
   const pred = clfFilter.value === 'pending' ? isPending : isDone
-  return props.groups
+  return groups
     .map(g => ({ name: g.name, items: g.items.filter(pred) }))
     .filter(g => g.items.length)
 })
 const nextUnanswered = computed(() => props.items.find(isPending) || null)
-watch(clfFilter, on => { if (on !== 'all') expandAll(props.groups) })   // 过滤视图下组不再折叠，待处置项直接可见
+watch([clfFilter, dimFilter], ([on]) => { if (on !== 'all') expandAll(props.groups) })   // 过滤视图下组不再折叠，待处置项直接可见
 function jumpNextUnanswered() {
   const it = nextUnanswered.value
   if (!it) return
@@ -294,8 +318,27 @@ async function reopen(it) {
   <EmptyState v-if="!items.length && !audit" icon="inbox" title="质检产物尚未推送"
               desc="推送后此处为澄清工作台（问题作答 + 原文上下文）" />
   <template v-else>
-    <!-- v5 工作台顶条：澄清进度 + 导航（wb-top 右卡形态，就绪度地图随 v1.6 layer 字段点亮） -->
-    <div class="wb-top" v-if="status === 'clarifying' || status === 'changed'">
+    <!-- v5 工作台顶条（§2.1/§2.2）：就绪度覆盖地图（维度条，v1.6 layer 产出后点亮）+ 澄清进度 -->
+    <div class="wb-top" :class="{ duo: hasLayers }" v-if="status === 'clarifying' || status === 'changed'">
+      <div class="readiness" v-if="hasLayers">
+        <h3>需求就绪度 <span class="sub">按缺陷维度看缺口，点维度过滤下方问题</span></h3>
+        <div class="rdy-body">
+          <div class="rdy-score">
+            <div class="n">{{ rdyPct }}%</div>
+            <div class="l">就绪度</div>
+            <div class="go">处置完全部问题<br>即可合成标准文档</div>
+          </div>
+          <div class="dims">
+            <button v-for="d in layerStats" :key="d.key" class="dim" :class="{ on: dimFilter === d.key }"
+                    :title="d.layer ? '第 ' + d.layer + ' 缺陷层' : '未携带分层（v1.6 前存量）'"
+                    @click="dimFilter = dimFilter === d.key ? '' : d.key">
+              <span class="dim-name">{{ d.layer ? 'L' + d.layer : '未分类' }}</span>
+              <span class="dim-bar"><span class="dim-fill" :style="{ width: (d.total ? Math.round(d.done / d.total * 100) : 0) + '%' }"></span></span>
+              <span class="dim-cnt"><template v-if="d.total - d.done"><b>{{ d.total - d.done }}</b> 待澄清</template><template v-else><span class="ok">✓ 澄清完成</span></template></span>
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="wb-prog" :class="{ amber: status === 'changed' }">
         <div class="row1">
           <span class="lbl"><AppIcon name="info" :size="13" />{{ status === 'changed' ? '变更重开项重新处置' : '逐题作答（点选即保存）｜不是问题可驳回、本期不处理可挂起' }}</span>

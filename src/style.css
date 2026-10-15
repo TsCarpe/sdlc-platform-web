@@ -1023,8 +1023,29 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .tab-hint{font-size:11px;color:var(--faint);margin-left:6px;align-self:center}
 .tab .n.warn{background:var(--amber-soft);color:var(--amber-deep);border-color:#f3e3c2}
 
-/* 工作台顶条（§2.1 wb-top：就绪度地图随 v1.6 layer 字段点亮，一期先进度卡独占） */
+/* 工作台顶条（§2.1/§2.2：就绪度地图随 v1.6 layer 字段点亮，一期无 layer 时进度卡独占） */
 .wb-top{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:14px;align-items:stretch}
+.wb-top.duo{grid-template-columns:minmax(0,1fr) 300px}
+.readiness{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:12px 16px;
+  box-shadow:0 1px 2px 0 rgba(16,24,40,.05)}
+.readiness h3{font-size:13px;font-weight:650;display:flex;align-items:center;gap:8px}
+.readiness h3 .sub{font-weight:400;font-size:11.5px;color:var(--faint)}
+.rdy-body{display:flex;gap:22px;margin-top:8px}
+.rdy-score{flex:none;width:96px;text-align:center;border-right:1px solid var(--line-soft);padding-right:18px}
+.rdy-score .n{font-size:30px;font-weight:750;letter-spacing:-1px;color:var(--primary);line-height:1.1}
+.rdy-score .l{font-size:11px;color:var(--stone)}
+.rdy-score .go{font-size:11px;color:var(--faint);margin-top:5px;line-height:1.5}
+.dims{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:4px 26px;align-content:center}
+.dim{display:flex;align-items:center;gap:8px;padding:2px 6px;border-radius:7px;border:none;
+  background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit}
+.dim:hover{background:var(--bg-soft)}
+.dim.on{background:var(--blue-light)}
+.dim-name{font-size:12.5px;color:var(--charcoal);width:60px;flex:none;font-weight:500}
+.dim-bar{flex:1;height:6px;border-radius:9999px;background:var(--bg-active);overflow:hidden}
+.dim-fill{height:100%;border-radius:9999px;background:var(--primary);transition:width .3s}
+.dim-cnt{font-size:11px;color:var(--stone);width:76px;text-align:right;flex:none}
+.dim-cnt b{color:var(--red-deep);font-weight:600}
+.dim-cnt .ok{color:var(--green);font-weight:600}
 .wb-prog{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:12px 16px;
   box-shadow:0 1px 2px 0 rgba(16,24,40,.05);display:flex;flex-direction:column;justify-content:center;gap:9px}
 .wb-prog .row1{display:flex;align-items:baseline;gap:8px}

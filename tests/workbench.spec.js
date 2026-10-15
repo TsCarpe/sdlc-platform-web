@@ -103,3 +103,31 @@ describe('WorkbenchTab：选择题化作答（v5 §2.3）', () => {
     expect(w.findAll('.opt').length).toBe(0)
   })
 })
+
+describe('WorkbenchTab：就绪度覆盖地图（v5 §2.2，D3/D12）', () => {
+  const LAYER_ITEMS = [
+    { seq: 'P01', level: 'red', theme: '域', question: 'q1', answer: '', status: 'answered', note: '', origin: 'skill', layer: 2 },
+    { seq: 'P02', level: 'yellow', theme: '域', question: 'q2', answer: '', status: 'pending', note: '', origin: 'skill', layer: 2 },
+    { seq: 'P03', level: 'yellow', theme: '域', question: 'q3', answer: '', status: 'pending', note: '', origin: 'skill', layer: 5 },
+    { seq: 'P04', level: 'blue', theme: '域', question: 'q4', answer: '', status: 'pending', note: '', origin: 'skill' },  // 无 layer → 未分类桶
+  ]
+  it('维度条渲染：layer 桶 + 未分类桶（空 layer 计分母）；点击维度过滤左栏（与三态叠加）', async () => {
+    const w = await mountWb(LAYER_ITEMS)
+    expect(w.findAll('.dim').length).toBe(3)          // L2 / L5 / 未分类
+    expect(w.text()).toContain('L2')
+    expect(w.text()).toContain('未分类')
+    // L2 桶：1/2 已处置 → 1 待澄清
+    const l2 = w.findAll('.dim').find(d => d.text().includes('L2'))
+    expect(l2.text()).toContain('1')
+    await l2.trigger('click')                          // 点维度过滤
+    expect(w.findAll('[data-pid]').map(el => el.attributes('data-pid')).sort()).toEqual(['P01', 'P02'])
+    await l2.trigger('click')                          // 再点取消
+    expect(w.findAll('[data-pid]').length).toBe(4)
+  })
+  it('无 layer 数据降级：不渲染维度条（D12 降级不冒充——不以 theme 近似维度）', async () => {
+    const items = [{ seq: 'P01', level: 'yellow', theme: '教研活动', question: 'q', answer: '', status: 'pending', note: '', origin: 'skill' }]
+    const w = await mountWb(items)
+    expect(w.find('.readiness').exists()).toBe(false)
+    expect(w.find('.wb-prog').exists()).toBe(true)    // 进度卡保留
+  })
+})

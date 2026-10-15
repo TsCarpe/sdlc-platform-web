@@ -25,6 +25,7 @@ import { provideGroupCollapse } from '../composables/group-collapse.js'
 import { useTraceJump } from '../composables/trace-jump.js'
 import { useTocScroll } from '../composables/toc-scroll.js'
 import { ask } from '../confirm.js'
+import { mdPlain } from '../docview.js'
 
 const props = defineProps({ reqId: String })
 const emit = defineEmits(['back', 'toast', 'loaded'])
@@ -157,11 +158,12 @@ const cmUnresolved = computed(() => cm.value?.unresolvedCount || 0)
 const cmBlockText = computed(() => {
   const m = {}
   for (const b of docBlocks.value) {
-    // 可读标签：行卡带行号+首个子块文本、条款带序号，无 text 的块兜底——绝不裸显块 ID
-    let label = b.text || ''
+    // 可读标签：行卡带行号+首个子块文本、条款带序号，无 text 的块兜底——绝不裸显块 ID；
+    // 块 text 是 md 行内源码，纯文本插值前先 mdPlain 剥标记（**/`/[]() 等不再露进 chip）
+    let label = mdPlain(b.text)
     if (b.type === 'table-row') {
       const fc = (childrenByParent.value[b.id] || []).find(c => c.text)
-      label = `行${b.rowLabel} ${fc?.text || ''}`.trim()
+      label = `行${b.rowLabel} ${mdPlain(fc?.text || '')}`.trim()
     }
     if (b.type === 'list-item' && b.ordinal) label = `${b.ordinal} ${label}`
     m[b.id] = label || '原文块'

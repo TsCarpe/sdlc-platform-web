@@ -14,7 +14,7 @@ import { api } from '../api.js'
 import { ask } from '../confirm.js'
 import { render } from '../render.js'
 import { fmtRel } from '../time.js'
-import { partitionRows } from '../docview.js'
+import { partitionRows, mdPlain } from '../docview.js'
 
 const props = defineProps({
   card: { type: Object, required: true },        // sourceType/sourceUrl/sourceText/id/status
@@ -88,7 +88,7 @@ const docToc = computed(() => docBlocks.value
   .map(b => ({
     id: b.id,
     level: b.type === 'table-row' ? 3 : (b.level || 1),
-    text: b.type === 'table-row' ? (b.rowLabel || '') : (b.text || '')
+    text: b.type === 'table-row' ? (b.rowLabel || '') : mdPlain(b.text)
   })))
 
 /** 当前目录标题元素序列（壳层 onScroll 高亮计算用） */

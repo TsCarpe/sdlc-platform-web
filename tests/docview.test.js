@@ -1,7 +1,7 @@
 // docview.js 纯函数单测（v4.1 层级还原渲染层）：全标量小表聚合 / D1 标量分流 / cell 分组 + lead 挂靠。
 // 夹具形状对齐 parse_doc 0.5 产物（head 非空、cells 与列数等长、内容格空串、行内子块带 cell 锳）。
 import { describe, it, expect } from 'vitest'
-import { partitionRows, splitRowScalars, groupRowChildren } from '../src/docview.js'
+import { partitionRows, splitRowScalars, groupRowChildren, mdPlain } from '../src/docview.js'
 
 const row = (id, head, cells, extra = {}) =>
   ({ id, type: 'table-row', rowLabel: id, head, cells, ...extra })
@@ -161,5 +161,31 @@ describe('groupRowChildren：cell 分组 + 尾部图廊 + lead 挂靠', () => {
     const items = groups[0].tree
     expect(items.every(it => it.kind === 'block')).toBe(true)
     expect(items.map(it => it.block.id)).toEqual(['sub1', 'li1', 'lead1'])
+  })
+})
+
+describe('mdPlain：块文本 md 行内源码 → 纯文本标签', () => {
+  it('剥粗体/删除线/行内代码标记，内容保留', () => {
+    expect(mdPlain('**顶部按钮图配置**')).toBe('顶部按钮图配置')
+    expect(mdPlain('~~废弃说法~~')).toBe('废弃说法')
+    expect(mdPlain('字段 `status` 限定')).toBe('字段 status 限定')
+    expect(mdPlain('*斜体强调*')).toBe('斜体强调')
+  })
+
+  it('链接/图片留锚文本，行内 HTML 标签剥除', () => {
+    expect(mdPlain('见[配置说明](https://x.com/a)详情')).toBe('见配置说明详情')
+    expect(mdPlain('![登录页截图](https://x.com/i.png)')).toBe('登录页截图')
+    expect(mdPlain('换行<br>后的文本')).toBe('换行后的文本')
+  })
+
+  it('不成对孤立标记与词内下划线原样保留（snake_case 不误伤）', () => {
+    expect(mdPlain('user_id 字段')).toBe('user_id 字段')
+    expect(mdPlain('费率上限 0.8*')).toBe('费率上限 0.8*')
+  })
+
+  it('空值兜底空串', () => {
+    expect(mdPlain('')).toBe('')
+    expect(mdPlain(null)).toBe('')
+    expect(mdPlain(undefined)).toBe('')
   })
 })

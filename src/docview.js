@@ -99,6 +99,22 @@ export function groupRowChildren(children, head = []) {
   return groups
 }
 
+/**
+ * 块文本（md 行内源码）→ 纯文本标签：剥图片/链接（留锚文本）、粗体/斜体/删除线/行内代码标记、行内 HTML 标签。
+ * 纯文本插值场景用（评论目标 chip、目录）；v-html 渲染场景不走这里（仍 marked.parseInline）。
+ * 单下划线不剥（词内 `_` 常见于 snake_case 标识符，成对才误伤）；不成对的孤立标记原样保留。
+ */
+export function mdPlain(t) {
+  return String(t || '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')            // ![alt](url)/[text](url) → alt/text
+    .replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, '$2')   // **粗**/__粗__/~~删~~ → 内容
+    .replace(/\*(?=\S)([\s\S]*?\S)\*/g, '$1')             // *斜* → 内容
+    .replace(/`+([^`]*)`+/g, '$1')                        // `code` → 内容
+    .replace(/<[^>]*>/g, '')                              // 行内 HTML 标签
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** tree 块序 → 渲染项序（lead 挂靠）：连续 list-item run 挂最近前驱非 subheading 段落 */
 function attachLeads(tree) {
   const items = []

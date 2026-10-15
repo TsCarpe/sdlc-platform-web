@@ -18,7 +18,9 @@ const props = defineProps({
   reqId: { type: String, required: true },
   blocks: { type: Array, default: () => [] }      // doc.json 全量块（含派生键/评论块——内部滤洗）
 })
-const emit = defineEmits(['error'])               // 媒体上传失败等组件内不可恢复错误（壳层 toast）
+// error：媒体上传失败等组件内不可恢复错误（壳层 toast）；
+// view-media：渲染态图片/画板点击开页内灯箱（v4.20，转发宿主 OriginTab）
+const emit = defineEmits(['error', 'view-media'])
 
 const rows = ref(toEditable(props.blocks))
 const initialJson = JSON.stringify(toPayload(rows.value))
@@ -342,7 +344,8 @@ const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列�
 
           <!-- 渲染态：DocBlock 单块渲染（childrenByParent 置空防递归——树序与缩进由编辑器管理） -->
           <template v-else>
-            <DocBlock :block="b" :children-by-parent="{}" :comment-by-ref="{}" :req-id="reqId" />
+            <DocBlock :block="b" :children-by-parent="{}" :comment-by-ref="{}" :req-id="reqId"
+                      @view-media="id => emit('view-media', id)" />
             <div class="sub" style="padding:0 0 4px 2px"
                  v-if="!b.text && !['image', 'table-row', 'whiteboard'].includes(b.type)">（空块，点击填写）</div>
           </template>

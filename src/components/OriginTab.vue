@@ -10,6 +10,7 @@ import AppIcon from './AppIcon.vue'
 import TocPane from './TocPane.vue'
 import BlockEditor from './BlockEditor.vue'
 import BlockDiff from './BlockDiff.vue'
+import ImgViewer from './ImgViewer.vue'
 import { api } from '../api.js'
 import { ask } from '../confirm.js'
 import { render } from '../render.js'
@@ -96,6 +97,59 @@ function headEls() {
   return docToc.value.map(h => document.querySelector(`[data-blk="${h.id}"]`)).filter(Boolean)
 }
 defineExpose({ box: snapshotBox, headEls })
+
+// v4.20 页内图片灯箱（ImgViewer）：替代点图新开窗口的割裂体验。
+// 块结构路径：全量块表按文档序取 image/画板缩略图作图源（←→ 翻图按此序），DocBlock 逐层上抛块 id 定位；
+// 降级快照 md 直渲无块结构——容器点击委托，命中 img 临时构造单图列表
+const mediaList = computed(() => docBlocks.value
+  .filter(b => (b.type === 'image' || b.type === 'whiteboard') && b.media)
+  .map(b => ({
+    id: b.id,
+    url: `/api/requirements/${props.card.id}/media/${b.media}`,
+    caption: b.caption || b.alt || (b.type === 'whiteboard' ? '画板缩略图' : '')
+  })))
+const viewerList = ref([])    // 灯箱当前列表（块结构 = mediaList；降级快照 = 点击时构造的单图）
+const viewerIdx = ref(-1)     // -1 = 关闭
+function openViewer(list, idx) { viewerList.value = list; viewerIdx.value = idx }
+/** 块图片/画板点击（DocBlock 逐层上抛块 id）→ 按文档序定位下标开灯箱 */
+function onDocMedia(id) {
+  const i = mediaList.value.findIndex(m => m.id === id)
+  if (i >= 0) openViewer(mediaList.value, i)
+}
+/** 降级快照 md 直渲：容器点击委托——点到 img 即单图灯箱（v-html 内无法绑组件事件） */
+function onSnapClick(e) {
+  const img = e.target.closest('img')
+  if (img?.src) openViewer([{ url: img.src, caption: img.alt || '' }], 0)
+}
+
+// ===== v4 建卡自动导入可见性（降级态专用）：无块无快照时轮询 source_import 最新任务——
+// 该任务不在流水线主三段展示，失败曾在页面无任何出口；导入中/失败就地提示 + 失败重试。
+// 完成→块落库的刷新由 TaskPanel 轮询 emit refresh 壳层重拉 doc 驱动，此处仅降态期间轮询 =====
+const importTask = ref(null)
+const importing = computed(() => !docData.value && !props.snapshot)
+async function loadImportTask() {
+  try {
+    const list = await api.get(`/api/tasks?req_id=${props.card.id}`)
+    importTask.value = list.find(t => t.type === 'source_import') || null   // 列表 id 倒序，首个即最新
+  } catch { /* 拉取失败保旧态，下轮补齐 */ }
+}
+const importFail = computed(() => {
+  if (!importTask.value || importTask.value.status !== 'failed') return null
+  try { return JSON.parse(importTask.value.result || '{}') } catch { return {} }
+})
+async function retryImport() {
+  try {
+    await api.post(`/api/tasks/${importTask.value.id}/retry`)
+    emit('toast', '原文导入已重新排队')
+    loadImportTask()
+  } catch (e) { emit('toast', '重试失败：' + e.message, 'err') }
+}
+let importTimer = null
+watch(importing, v => {
+  clearInterval(importTimer)
+  if (v) { loadImportTask(); importTimer = setInterval(loadImportTask, 5000) }
+}, { immediate: true })
+onBeforeUnmount(() => clearInterval(importTimer))
 
 // ===== v4 窗口 1：块级直接编辑（未发布卡；changed 关闭走变更单） =====
 const canEdit = computed(() =>
@@ -230,7 +284,7 @@ async function rerunCheck() {
             <AppIcon name="check-circle" :size="13" />{{ saving ? '处理中…' : '保存（先预览差异）' }}</button>
         </div>
         <BlockEditor ref="editorRef" :req-id="card.id" :blocks="docBlocks"
-                     @error="e => emit('toast', e.message, 'err')" />
+                     @error="e => emit('toast', e.message, 'err')" @view-media="onDocMedia" />
       </template>
       <!-- 阅读模式：目录 + 章节分组渲染 -->
       <template v-else>
@@ -262,7 +316,7 @@ async function rerunCheck() {
                         :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
                         :req-id="card.id"
                         :platform-by-block="platformByBlock"
-                        @comments="id => emit('open-comments', id)" />
+                        @comments="id => emit('open-comments', id)" @view-media="onDocMedia" />
             </template>
           </section>
           <template v-else>
@@ -279,7 +333,7 @@ async function rerunCheck() {
                         :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
                         :req-id="card.id"
                         :platform-by-block="platformByBlock"
-                        @comments="id => emit('open-comments', id)" />
+                        @comments="id => emit('open-comments', id)" @view-media="onDocMedia" />
             </template>
           </template>
         </template>
@@ -313,14 +367,29 @@ async function rerunCheck() {
       <span>最新修订以<a v-if="card.sourceUrl" :href="card.sourceUrl" target="_blank" rel="noopener">飞书文档 ↗</a><span v-else>原始来源</span>为准</span>
       <span class="sub">重推产物时快照同步刷新；发布后冻结</span>
     </div>
-    <div class="card doc" ref="snapshotBox" v-html="snapshotHtml"></div>
+    <div class="card doc snap-imgs" ref="snapshotBox" v-html="snapshotHtml" @click="onSnapClick"></div>
   </template>
-  <!-- 降级 2：无块表无快照（按来源） -->
+  <!-- 降级 2：无块表无快照——source_import 导入中/失败就地可见（失败可重试），其余按来源降级 -->
   <template v-else>
-    <div class="card" v-if="card.sourceType === 'feishu'">
+    <div class="card" v-if="importTask && importTask.status === 'failed'">
+      <h3>原文导入失败</h3>
+      <p style="font-size:13px;color:var(--red-deep);margin-bottom:6px;word-break:break-all">{{ importFail?.error || '导入失败' }}</p>
+      <p class="sub" style="font-size:12px;margin-bottom:12px" v-if="importFail?.hint">{{ importFail.hint }}</p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn primary" @click="retryImport"><AppIcon name="refresh-cw" :size="13" />重试导入</button>
+        <a v-if="card.sourceUrl" :href="card.sourceUrl" target="_blank" rel="noopener">
+          <button class="btn"><AppIcon name="external-link" :size="13" />打开飞书文档</button></a>
+      </div>
+    </div>
+    <div class="card" v-else-if="importTask && (importTask.status === 'queued' || importTask.status === 'running')">
+      <h3>原文导入中</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+        正在解析来源文档为原文块（{{ importTask.runner || '排队/执行中' }}），完成后自动呈现，无需手动刷新。</p>
+    </div>
+    <div class="card" v-else-if="card.sourceType === 'feishu'">
       <h3>飞书需求文档</h3>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
-        尚无原文快照——快照将由 sdlc-sync 首次推送产物时生成；在此之前请到飞书查看原文。</p>
+        尚无原文快照——v4 建卡自动导入原文（见下方「线上流水线」）；老卡快照由 sdlc-sync 首次推送产物时生成。</p>
       <a :href="card.sourceUrl" target="_blank" rel="noopener">
         <button class="btn"><AppIcon name="external-link" :size="13" />打开飞书文档</button></a>
     </div>
@@ -329,4 +398,7 @@ async function rerunCheck() {
       <pre class="srctext">{{ card.sourceText }}</pre>
     </div>
   </template>
+
+  <!-- v4.20 页内图片灯箱（根级全分支共用：块结构 / 降级快照 / 编辑预览同源入口） -->
+  <ImgViewer v-if="viewerIdx >= 0" :list="viewerList" v-model:index="viewerIdx" @close="viewerIdx = -1" />
 </template>

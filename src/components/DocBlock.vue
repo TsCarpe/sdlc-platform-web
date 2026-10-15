@@ -16,7 +16,9 @@ const props = defineProps({
   reqId: { type: String, default: '' },
   platformByBlock: { type: Object, default: () => ({}) }   // v4 平台评论数 map（blockId → 数量，整 map 下传——子块递归也能查到自己的计数）
 })
-const emit = defineEmits(['comments'])   // 平台评论角标点击（携块 id 逐层上抛，壳层开评论面板）
+// comments：平台评论角标点击（携块 id 逐层上抛，壳层开评论面板）；
+// view-media：图片/画板缩略图点击（携块 id 逐层上抛，宿主开页内灯箱——v4.20 替代新开窗口）
+const emit = defineEmits(['comments', 'view-media'])
 
 const openComments = ref(false)
 
@@ -100,7 +102,7 @@ function toggleComments() { openComments.value = !openComments.value }
     </div>
     <DocBlock v-for="c in children" :key="c.id" :block="c" :children-by-parent="childrenByParent"
               :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
-              class="docblk-child" @comments="id => emit('comments', id)" />
+              class="docblk-child" @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)" />
   </div>
 
   <!-- 表格行：行卡片（卡头 rowLabel chip + 标量轻 chip）+ 标签值对 + 内容格分组树（v4.1 层级还原） -->
@@ -130,32 +132,32 @@ function toggleComments() { openComments.value = !openComments.value }
           <div v-if="item.kind === 'lead'" class="leadgrp">
             <DocBlock :block="item.block" :children-by-parent="childrenByParent"
                       :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
-                      @comments="id => emit('comments', id)" />
+                      @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)" />
             <DocBlock v-for="li in item.listChildren" :key="li.id" :block="li" :children-by-parent="childrenByParent"
                       :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
-                      class="docblk-child" @comments="id => emit('comments', id)" />
+                      class="docblk-child" @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)" />
           </div>
           <DocBlock v-else :block="item.block" :children-by-parent="childrenByParent"
                     :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
-                    class="docblk-child" @comments="id => emit('comments', id)" />
+                    class="docblk-child" @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)" />
         </template>
         <!-- 尾部媒体块图廊（image 自带 caption；竖图 tall 高版封面） -->
         <div class="gal" v-if="g.gallery.length">
           <DocBlock v-for="m in g.gallery" :key="m.id" :block="m" :children-by-parent="childrenByParent"
                     :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
-                    @comments="id => emit('comments', id)"
+                    @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)"
                     :class="{ tall: m.type === 'image' && isPortrait(m) }" />
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 图片 -->
+  <!-- 图片（v4.20 点击页内灯箱放大——替代新开窗口，不再跳出应用） -->
   <figure v-else-if="block.type === 'image'" class="docblk imgcard" :data-blk="block.id">
-    <a :href="mediaUrl" target="_blank" rel="noopener">
-      <!-- v2.2：渲染数据自带 width/height 固有尺寸——懒加载图片有占位，scrollIntoView 目标位置不被加载过程推移 -->
-      <img :src="mediaUrl" :alt="block.alt" loading="lazy" :width="block.width" :height="block.height">
-    </a>
+    <!-- v2.2：渲染数据自带 width/height 固有尺寸——懒加载图片有占位，scrollIntoView 目标位置不被加载过程推移 -->
+    <img class="iv-open" :src="mediaUrl" :alt="block.alt" loading="lazy" :width="block.width" :height="block.height"
+         role="button" tabindex="0" title="点击放大查看"
+         @click="emit('view-media', block.id)" @keydown.enter="emit('view-media', block.id)">
     <!-- caption 优先（parse_doc ≥0.4 图片说明），alt 兜底 -->
     <figcaption v-if="block.caption || block.alt"><AppIcon name="image" :size="12" />{{ block.caption || block.alt }}</figcaption>
   </figure>
@@ -172,7 +174,9 @@ function toggleComments() { openComments.value = !openComments.value }
 
   <!-- 画板（缩略图） -->
   <div v-else-if="block.type === 'whiteboard'" class="docblk imgcard" :data-blk="block.id">
-    <img v-if="mediaUrl" :src="mediaUrl" alt="画板缩略图" loading="lazy">
+    <img v-if="mediaUrl" class="iv-open" :src="mediaUrl" alt="画板缩略图" loading="lazy"
+         role="button" tabindex="0" title="点击放大查看"
+         @click="emit('view-media', block.id)" @keydown.enter="emit('view-media', block.id)">
     <div class="sub"><AppIcon name="layers" :size="12" />飞书画板缩略图（原图请到飞书文档查看）</div>
   </div>
 

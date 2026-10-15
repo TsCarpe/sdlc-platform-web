@@ -26,6 +26,9 @@ const stdDraftVisible = computed(() => !!stdDraft.value && card.value.status !==
 const effectiveCollapsed = computed(() =>
   collapsed.value && !activeTask.value && !digestDraft.value && !stdDraftVisible.value && !casesDraft.value && !incDraft.value)
 function stageStatus(type) { return latestByType.value[type]?.status || '' }   // ''|done|failed
+// v4 建卡自动导入阶段：仅当存在 source_import 任务记录才入列（老卡走 sdlc-sync 推送，无此环节）
+const summaryStages = computed(() =>
+  latestByType.value.source_import ? ['source_import', 'quality_check', 'standard_doc', 'case_gen'] : ['quality_check', 'standard_doc', 'case_gen'])
 const latestTaskAt = computed(() => tasks.value[0]?.updatedAt || '')
 
 /** 摘要态主操作（评测 P1-2/P1-9）：与展开态按钮的 disabled 条件同源——答完题后的关键动作不再藏进折叠区 */
@@ -53,7 +56,7 @@ const nextAction = computed(() => {
 
 const statusLabel = { queued: '排队中', running: '执行中', done: '已完成', failed: '失败' }
 // v4.14 增量质检任务入列呈现；v2.4：设计/门禁任务也经此面板展示（执行态归面板，领域态归 design/gate tab）
-const typeLabel = { quality_check: '需求质检', standard_doc: '标准文档合成', case_gen: '用例生成', design_gen: '技术设计生成', design_rev: '设计修订', gate_review: '门禁评审', incremental_check: '增量质检' }
+const typeLabel = { source_import: '原文导入', quality_check: '需求质检', standard_doc: '标准文档合成', case_gen: '用例生成', design_gen: '技术设计生成', design_rev: '设计修订', gate_review: '门禁评审', incremental_check: '增量质检' }
 const draftLabel = { digest_bundle: '质检三件套草稿', standard: '标准需求文档草稿', cases: '测试用例草稿', design: '技术设计草稿', gate_issues: '门禁 issues 草稿', incremental_bundle: '增量合并草稿' }
 
 const card = computed(() => props.detail?.card || {})
@@ -199,9 +202,10 @@ async function tick() {
   try {
     const list = await api.get(`/api/tasks?req_id=${props.reqId}`)
     if (g !== loadGen) return   // 重装载已发起——本轮响应过期
-    // 有任务从 queued/running 变为终态 → 刷新草稿
+    // 有任务从 queued/running 变为终态 → 刷新草稿；source_import 完成 → 块表已落库，上抛壳层重拉 doc.json
     for (const t of list) {
       if (before[t.id] && before[t.id] !== t.status && (t.status === 'done' || t.status === 'failed')) loadDrafts()
+      if (before[t.id] && before[t.id] !== t.status && t.type === 'source_import' && t.status === 'done') emit('refresh')
       KNOWN[t.id] = t.status
     }
     tasks.value = list
@@ -413,7 +417,7 @@ function elapsed(t) {
          @keydown.enter="collapsed = false">
       <div class="tp-title"><AppIcon name="layers" :size="15" />线上流水线</div>
       <div class="tp-stages">
-        <span class="tp-stage" v-for="ty in ['quality_check', 'standard_doc', 'case_gen']" :key="ty">
+        <span class="tp-stage" v-for="ty in summaryStages" :key="ty">
           <i class="st-dot" :class="stageStatus(ty)"></i>{{ typeLabel[ty] }}
         </span>
       </div>
@@ -464,7 +468,7 @@ function elapsed(t) {
       <span class="sub">{{ activeTask.runner || '' }} · 已 {{ elapsed(activeTask) }}</span>
       <button class="btn small link" v-if="activeTask.status === 'queued'" @click="cancelTask(activeTask)">取消</button>
     </div>
-    <div class="tp-task" v-for="t in [latestByType.quality_check, latestByType.standard_doc, latestByType.case_gen].filter(x => x && x.status !== 'queued' && x.status !== 'running')" :key="t.id">
+    <div class="tp-task" v-for="t in [latestByType.source_import, latestByType.quality_check, latestByType.standard_doc, latestByType.case_gen].filter(x => x && x.status !== 'queued' && x.status !== 'running')" :key="t.id">
       <span class="badge" :class="t.status === 'done' ? 'b-green' : (failInfo(t).reason === 'superseded-by-publish' ? 'b-gray' : 'b-red')">{{ t.status === 'done' ? statusLabel.done : (failInfo(t).reason === 'superseded-by-publish' ? '已作废' : statusLabel.failed) }}</span>
       <b>{{ typeLabel[t.type] }}</b><span class="chip" v-if="autoBy(t)">自动</span>
       <span class="sub" v-if="t.status === 'done'" :title="fmtResultFull(t)">{{ fmtResult(t).startsWith('drainedBy') ? '（校验用）' : fmtResult(t) }}</span>

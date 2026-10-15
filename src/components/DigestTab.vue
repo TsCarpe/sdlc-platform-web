@@ -1,7 +1,11 @@
 <script setup>
-// 需求摘要 tab（AUDIT D6-2 拆分自 ReqDetail）：概述/角色/功能点地图/主流程/状态机/RTM/需求点注册表/摘要原文。
+// 需求摘要 tab（AUDIT D6-2 拆分自 ReqDetail；DESIGN-v5 §3 重定位——摘要 = AI 理解了什么，
+// 就绪度 = 哪里不清楚，工作台 = 把不清楚变清楚的地方）：AI 理解摘要卡（概述+角色+模块 chips）/
+// 功能点地图/主流程泳道图（表格保留降级）/状态机/RTM/需求点注册表/遗留假设独立卡/摘要原文。
 // 出处定位与跨域跳转经 emit 上抛壳层；折叠协议 inject 消费；mdBox 供壳层 asm 假设定位。
 import { ref, computed } from 'vue'
+import LaneFlow from './LaneFlow.vue'
+import { isPending } from '../disposition.js'
 import AppIcon from './AppIcon.vue'
 import ClampText from './ClampText.vue'
 import ChipList from './ChipList.vue'
@@ -15,7 +19,8 @@ const props = defineProps({
   frPoints: { type: Array, default: () => [] },
   coverage: { type: Object, default: null },
   frGroups: { type: Array, default: () => [] },        // 壳层按出处分组（revealGrpFor 共用）
-  digestMdOpen: { type: Boolean, default: false }      // 摘要原文折叠（asm 跳入时壳层自动展开）
+  digestMdOpen: { type: Boolean, default: false },     // 摘要原文折叠（asm 跳入时壳层自动展开）
+  items: { type: Array, default: () => [] }            // v5 澄清 items（模块待澄清角标——v1.6 module 产出前降级隐藏）
 })
 const emit = defineEmits(['locate', 'jump', 'update:digestMdOpen'])
 
@@ -38,19 +43,54 @@ function frByModule(m) {
   const key = String(m || '').replace('⭐ ', '')
   return props.frPoints.filter(f => f.module === key)
 }
+
+// ===== v5 摘要重定位（§3，D9/D18）=====
+/** 模块 chips 数据：fr_points[].module 聚合去重（首现序） */
+const modules = computed(() => {
+  const out = []
+  for (const f of props.frPoints) {
+    if (f.module && !out.includes(f.module)) out.push(f.module)
+  }
+  return out
+})
+/** 模块待澄清数（依赖 v1.6 items[].module——字段缺失整体隐藏角标，降级不冒充 D18） */
+const modulePend = computed(() => {
+  if (!props.items.some(it => it.module)) return null
+  const m = {}
+  for (const it of props.items) {
+    if (it.module && isPending(it)) m[it.module] = (m[it.module] || 0) + 1
+  }
+  return m
+})
+/** 遗留假设独立卡数据：从摘要 markdown 提出「需求.Axx」行（D9——折叠 md 保留，asm 跳转协议依赖） */
+const assumptions = computed(() => {
+  const out = []
+  for (const ln of String(props.digest?.markdown || '').split('\n')) {
+    const m = ln.match(/^\s*(?:[-*•]\s*)?(需求\.A\d+)\s*[：:]\s*(.+)$/)
+    if (m) out.push({ id: m[1], text: m[2].trim() })
+  }
+  return out
+})
 </script>
 
 <template>
   <EmptyState v-if="!digest" icon="inbox" title="质检产物尚未推送"
               desc="本地运行 sdlc-intent 产出三件套后，由 sdlc-sync 推送至此" />
   <template v-else>
-    <div class="card">
-      <h3>需求概述</h3>
-      <p class="summary"><ClampText :text="digest.content?.summary || ''" :lines="4" :threshold="140" /></p>
-    </div>
-    <div class="card" v-if="(digest.content?.roles || []).length">
-      <h3>涉及角色</h3>
-      <span class="chip" v-for="r in digest.content?.roles || []" :key="r">{{ r }}</span>
+    <!-- v5 AI 理解摘要卡（§3/D9）：先花 10 秒校验 AI 把需求理解成了什么样——偏了立刻能感知 -->
+    <div class="card und-card">
+      <h3>AI 理解摘要 <span class="sub">先花 10 秒校验：AI 把你的需求理解成了什么样——偏了立刻能感知</span></h3>
+      <p class="summary"><ClampText :text="digest.content?.summary || ''" :lines="5" :threshold="140" /></p>
+      <div class="chiprow" v-if="(digest.content?.roles || []).length">
+        <span class="lb">角色</span>
+        <span class="rolechip" v-for="r in digest.content?.roles || []" :key="r">{{ r }}</span>
+      </div>
+      <div class="chiprow" v-if="modules.length">
+        <span class="lb">模块</span>
+        <span class="mchip" v-for="m in modules" :key="m"
+              :title="modulePend && modulePend[m] ? m + '：' + modulePend[m] + ' 题待澄清（到澄清工作台处置）' : '模块归属（fr_points[].module）'"
+              :class="{ hot: !!(modulePend && modulePend[m]) }">{{ m }} <span class="b" v-if="modulePend && modulePend[m]">{{ modulePend[m] }}</span></span>
+      </div>
     </div>
 
     <div class="card" v-if="(digest.content?.features || []).length">
@@ -80,20 +120,25 @@ function frByModule(m) {
       </div>
     </div>
 
-    <!-- v2.3 主流程投影（DESIGN-v2.3）：digest §5 步骤表，gap 行 = 原文 🤔 断点 -->
+    <!-- v5 主流程泳道图（§3/D6）：flows 的另一 projection——角色泳道/时序流动/🤔 虚线断点节点
+         （点击直达对应澄清，pids 降级原文定位）；表格保留为「无图模式/复制导出」降级形态 -->
     <div class="card" v-if="digestFlows.length">
-      <h3>主流程（§5 步骤投影；🤔 = 原文断点）</h3>
-      <div class="tablewrap">
-      <table class="table"><thead><tr>
-        <th style="width:110px">角色</th><th style="min-width:220px">步骤</th><th style="width:150px">去向</th><th style="width:100px">出处</th>
-      </tr></thead>
-        <tbody><tr v-for="(f, i) in digestFlows" :key="i" :class="{ 'row-gap': f.gap }" style="cursor:default">
-          <td>{{ f.role }}</td><td>{{ f.step }}</td>
-          <td>{{ f.next }}<span v-if="f.gap" class="gapmark" title="原文未定义去向（🤔）"> 🤔</span></td>
-          <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.src" @click="emit('locate', f.src, f.anchor)">{{ f.src }}<span v-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
-        </tr></tbody>
-      </table>
-      </div>
+      <h3>主流程泳道 <span class="sub">🤔 虚线节点 = 原文未定义断点，点击定位对应澄清</span></h3>
+      <LaneFlow :flows="digestFlows" @locate="(s, a) => emit('locate', s, a)" @jump="j => emit('jump', j)" />
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted)">表格视图（无图模式 / 复制导出）</summary>
+        <div class="tablewrap" style="margin-top:8px">
+        <table class="table"><thead><tr>
+          <th style="width:110px">角色</th><th style="min-width:220px">步骤</th><th style="width:150px">去向</th><th style="width:100px">出处</th>
+        </tr></thead>
+          <tbody><tr v-for="(f, i) in digestFlows" :key="i" :class="{ 'row-gap': f.gap }" style="cursor:default">
+            <td>{{ f.role }}</td><td>{{ f.step }}</td>
+            <td>{{ f.next }}<span v-if="f.gap" class="gapmark" title="原文未定义去向（🤔）"> 🤔</span></td>
+            <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.src" @click="emit('locate', f.src, f.anchor)">{{ f.src }}<span v-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
+          </tr></tbody>
+        </table>
+        </div>
+      </details>
     </div>
 
     <!-- v2.3 状态机流转投影（DESIGN-v2.3）：digest §6 边表，按对象分组折叠，gap 行 = 原文 🤔 断点 -->
@@ -179,6 +224,17 @@ function frByModule(m) {
         </div></div>
       </div>
       <p class="sub" style="margin-top:8px">测试用例通过关联这些编号挂到需求点，构成追溯链；点用例编号直达用例详情。</p>
+    </div>
+
+    <!-- v5 遗留假设独立卡（§3/D9）：从摘要 markdown 提出——合成标准文档时写入 需求.Axx；
+         点击走 asm 协议定位折叠 md 原文（折叠保留，协议依赖） -->
+    <div class="card" v-if="assumptions.length">
+      <h3>遗留假设 <span class="sub">合成标准文档时将写入 需求.Axx 条目</span></h3>
+      <div class="asm-item" v-for="a in assumptions" :key="a.id">
+        <code>{{ a.id }}</code>
+        <span class="asm-txt">{{ a.text }}</span>
+        <button class="btn small link" title="在摘要原文中定位该假设" @click="emit('jump', { kind: 'asm', id: a.text.slice(0, 16) })">原文 ↗</button>
+      </div>
     </div>
 
     <details class="card" :open="digestMdOpen" v-if="digest.markdown">

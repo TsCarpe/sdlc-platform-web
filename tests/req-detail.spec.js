@@ -82,12 +82,13 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     expect(wrapper.text()).toContain('结构化原文块')  // doc.content.blocks
   })
 
-  it('digest tab：概述/角色/需求点注册表', async () => {
+  it('digest tab：AI 理解摘要卡（v5 重定位）/需求点注册表', async () => {
     wrapper = await mountDetail()
     await wrapper.findAll('[role="tab"]')[1].trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('需求概述')
-    expect(wrapper.text()).toContain('涉及角色')
+    expect(wrapper.text()).toContain('AI 理解摘要')          // v5 §3：概述+角色+模块合并卡
+    expect(wrapper.text()).toContain('概要')
+    expect(wrapper.text()).toContain('角色')
     expect(wrapper.text()).toContain('需求点注册表')
     expect(wrapper.text()).toContain('需求.FR-01')
   })

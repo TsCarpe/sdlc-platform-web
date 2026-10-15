@@ -389,9 +389,10 @@ function resolveDocPath(path) {
                @clarify="seq => onJump({ kind: 'check', id: seq })"
                @toast="(m, t) => emit('toast', m, t)" @reload="load" />
 
-    <!-- 结构化 Digest -->
+    <!-- 结构化 Digest（v5 §3 重定位：AI 理解卡 + 泳道主流程 + 遗留假设独立卡） -->
     <DigestTab v-if="tab === 'digest'" ref="digestTabRef"
                :digest="d.digest" :fr-points="d.frPoints" :coverage="d.coverage" :fr-groups="frGroups"
+               :items="d.items"
                v-model:digest-md-open="digestMdOpen"
                @locate="locate" @jump="onJump" />
 

@@ -1155,3 +1155,36 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .done-ans{display:flex;align-items:flex-start;gap:8px;font-size:12.8px;margin-top:2px;width:100%}
 .done-ans .txt{color:var(--charcoal);flex:1;min-width:0;line-height:1.6}
 .done-ans .redo, .redo{margin-left:auto;flex:none}
+
+/* ---- v5 摘要重定位（§3，D6/D9）：AI 理解摘要卡 / 模块 chips / 遗留假设卡 / 主流程泳道 ---- */
+.und-card{border-left:4px solid var(--primary)}
+.und-card .summary{font-size:13px;color:var(--charcoal);line-height:1.7}
+.chiprow{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;align-items:center}
+.chiprow .lb{font-size:11.5px;color:var(--faint);margin-right:2px;flex:none}
+.rolechip{font-size:12px;color:var(--slate);background:var(--bg-soft);border:1px solid var(--line);border-radius:9999px;padding:1px 11px}
+.mchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--charcoal);background:var(--bg-soft);
+  border:1px solid var(--line);border-radius:9999px;padding:1px 11px}
+.mchip.hot{border-color:var(--blue-border)}
+.mchip .b{font-size:10.5px;font-weight:650;background:var(--amber-soft);color:var(--amber-deep);border-radius:9999px;padding:0 6px}
+.asm-item{display:flex;gap:9px;padding:7px 2px;border-bottom:1px dashed var(--line-soft);font-size:12.8px;align-items:baseline}
+.asm-item:last-child{border-bottom:none}
+.asm-item code{font-size:11.5px;color:var(--primary);background:var(--blue-light);border-radius:4px;padding:0 6px;flex:none}
+.asm-item .asm-txt{flex:1;min-width:0;color:var(--charcoal)}
+/* 主流程泳道（LaneFlow，§3/D6） */
+.lane-wrap{overflow-x:auto;padding:4px 0 2px}
+.lane-svg{display:block;min-width:100%}
+.lane-head{fill:var(--bg-soft);stroke:var(--line-soft)}
+.lane-band{fill:var(--canvas)}
+.lane-band.alt{fill:var(--bg-soft)}
+.lane-name{font-size:11.5px;font-weight:650;fill:var(--charcoal)}
+.node{border:1px solid var(--line-strong);background:var(--canvas);border-radius:8px;padding:5px 6px 4px;
+  font-size:10.8px;line-height:1.45;color:var(--charcoal);height:100%;display:flex;flex-direction:column;
+  justify-content:center;text-align:center;box-shadow:0 1px 2px 0 rgba(16,24,40,.05);box-sizing:border-box;overflow:hidden}
+.node .no{font-size:9px;color:var(--faint);font-weight:600;margin-bottom:1px}
+.node b{font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.node .src{font-size:9px;color:var(--primary);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node.gap{border:1.5px dashed var(--amber);background:var(--amber-soft);cursor:pointer}
+.node.gap .no,.node.gap b{color:var(--amber-deep)}
+.node.gap:hover{filter:brightness(.97)}
+.lane-arrow{stroke:var(--line-strong);stroke-width:1.3;fill:none}
+.lane-arrow.gapout{stroke-dasharray:4 3}

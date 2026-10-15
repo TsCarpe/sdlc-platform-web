@@ -3,7 +3,7 @@
 // audit 合并（D1/D14）：audit 是 clarify 的超集，差集 ∧ go✅ 条目以「已定论」只读折叠组获得宿主
 // （组名带「已定论·」前缀防与 check 组撞名联动，同状态机前缀先例）；audit 字段归宿——去向/关联
 // 用例进问题卡「影响分析」折叠，audit.md 原文折叠挪页尾。作答/处置/三态筛选/跳转等既有能力全保留。
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import EmptyState from './EmptyState.vue'
@@ -153,8 +153,82 @@ function autoGrow(e) {
   el.style.height = el.scrollHeight + 'px'
 }
 
+// ===== v5 选择题化作答（§2.3，D16/D18）：点选即 PUT + per-seq 串行发送链（最后值胜） =====
+// picked/extra 为独立本地态（textarea v-model 永不直绑 answer，r4#12）；一期 answer 写纯文本
+// 【A】选项全文（+（补充：…））——二期结构化上线前所有下游消费的仍是合法纯文本（D18 零污染）。
+const picked = reactive({})     // seq → optionKey（PUT 载荷内部标识——永不做回显匹配键，r4#11）
+const extra = reactive({})      // seq → 补充说明文本（「以上都不对」自由输入）
+const extraOpen = reactive({})  // seq → 补充说明 textarea 展开
+
+/** PUT 装配（r4#12 全量装配、来源装配）：任一 PUT（点选或 blur）都装配完整 answer */
+function assembleAnswer(it) {
+  const key = picked[it.seq]
+  if (key) {
+    const opt = (it.options || []).find(o => o.key === key)
+    const head = opt ? `【${key}】${opt.text}` : `【${key}】`
+    const ex = (extra[it.seq] || '').trim()
+    return ex ? `${head}（补充：${ex}）` : head
+  }
+  return (extra[it.seq] || '').trim()
+}
+
+// per-seq 串行发送链（D16）：同 seq 的 PUT 依次排队、前一个完成才发下一个——与 savingSeqs 的
+// 「在途丢弃」语义相反（点选即 PUT 沿用会静默丢答）。makeBody 延迟到实际发送时装配：排队等待
+// 期间值再变，轮到发送时取最新值（最后值胜）。处置确认与重开同链——防 set_disposition 三元组
+// 整行覆写与在途作答 PUT 后到者胜（互斥条款 ③）。
+const putChain = {}   // seq → Promise 链尾
+function enqueuePut(seq, makeBody) {
+  const run = async () => {
+    await api.put(`/api/requirements/${props.reqId}/answers/${seq}`, makeBody())
+  }
+  putChain[seq] = (putChain[seq] ?? Promise.resolve()).catch(() => {}).then(run)
+  return putChain[seq]
+}
+
+/** 点选即 PUT（无 debounce）：body 显式携带 {answer, status:'answered'}，不依赖服务端按非空推断 */
+function pickOption(it, key) {
+  if (disposeDlg.value) return            // 处置弹窗打开——选项点击抑制（互斥条款 ①）
+  if (it.status === 'rejected' || it.status === 'deferred') return
+  picked[it.seq] = key
+  ansState.value[it.seq] = 'saving'
+  enqueuePut(it.seq, () => ({ answer: assembleAnswer(it), status: 'answered' }))
+    .then(() => {
+      it.answer = assembleAnswer(it)      // 已答快照本地回写（与发送值同源装配）
+      it.status = 'answered'
+      originAnswers.value[it.seq] = it.answer
+      ansState.value[it.seq] = 'saved'
+      setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
+    })
+    .catch(e => { delete ansState.value[it.seq]; emit('toast', '保存失败：' + e.message, 'err') })
+}
+
+/** 「以上都不对」补充说明失焦保存：沿用 savingSeqs 在途丢弃语义、不进发送链（§2.3）；
+ *  装配仍是全量（picked 存在则 【A】…（补充：…）） */
+async function saveExtra(it) {
+  if (disposeDlg.value) return            // 处置弹窗打开——抑制该题 blur 保存（互斥条款 ②）
+  const val = assembleAnswer(it)
+  if (val === (originAnswers.value[it.seq] ?? '') || val === (it.answer || '')) return
+  if (savingSeqs.has(it.seq)) return
+  savingSeqs.add(it.seq)
+  ansState.value[it.seq] = 'saving'
+  try {
+    await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: val })
+    it.answer = val
+    it.status = val.trim() ? 'answered' : 'pending'
+    originAnswers.value[it.seq] = val
+    ansState.value[it.seq] = 'saved'
+    setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
+  } catch (e) {
+    delete ansState.value[it.seq]
+    emit('toast', '保存失败：' + e.message, 'err')
+  } finally {
+    savingSeqs.delete(it.seq)
+  }
+}
+
 const savingSeqs = new Set()   // per-seq 在途集：失焦重入防并发同 seq 双 PUT
 async function saveAnswer(it) {
+  if (disposeDlg.value) return            // 处置互斥：弹窗打开期间抑制失焦保存（§2.3）
   if ((it.answer || '') === (originAnswers.value[it.seq] ?? '')) return
   if (savingSeqs.has(it.seq)) return
   savingSeqs.add(it.seq)
@@ -188,7 +262,9 @@ async function confirmDispose() {
   if (!dlg) return
   if (dlg.required && !dlg.note.trim()) { emit('toast', '驳回必须填写理由', 'err'); return }
   try {
-    await api.put(`/api/requirements/${props.reqId}/answers/${dlg.seq}`, { status: dlg.status, note: dlg.note.trim() })
+    // 处置 PUT 进 per-seq 发送链（§2.3 互斥条款 ③）：防弹窗确认与在途作答 PUT 后到者胜——
+    // set_disposition 是 answer/status/note 三元组整行覆写
+    await enqueuePut(dlg.seq, () => ({ status: dlg.status, note: dlg.note.trim() }))
     const it = props.items.find(i => i.seq === dlg.seq)
     if (it) { it.status = dlg.status; it.note = dlg.note.trim() }
     disposeDlg.value = null
@@ -198,12 +274,15 @@ async function confirmDispose() {
   }
 }
 
-/** 重开：驳回/挂起行转回待确认（后端保留已填 answer），随后正常作答即转 answered */
+/** 重开：驳回/挂起/已答行转回待确认（后端保留已填 answer）；选项卡清 picked/extra——
+ *  「重新作答 = 清空重选，不预选」（r4#11：不做选中态恢复，optionKey 不做回显匹配键） */
 async function reopen(it) {
   try {
-    await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: it.answer || '', status: 'pending' })
+    await enqueuePut(it.seq, () => ({ answer: it.answer || '', status: 'pending' }))
     it.status = 'pending'
     it.note = ''
+    delete picked[it.seq]
+    delete extra[it.seq]
     emit('toast', `已重开 ${it.seq}，可继续作答`)
   } catch (e) {
     emit('toast', '重开失败：' + e.message, 'err')
@@ -323,6 +402,46 @@ async function reopen(it) {
             {{ it.status === 'rejected' ? '已认定不是问题，不进定稿' : '已转遗留假设，合成时记入 需求.Axx' }}
             <button class="btn small link" @click="reopen(it)">重新作答</button>
           </span>
+        </div>
+        <!-- v5 选择题化作答（§2.3）：pending = 选项区（AI 推荐常显理由）；answered = 全文快照 + 重新作答
+             （清空重选不预选，r4#11）；无 options 卡走下方 textarea 降级 -->
+        <div class="ans optans" v-else-if="(status === 'clarifying' || status === 'changed') && (it.options || []).length">
+          <!-- 变更确认重开的项：原答复在 note——PM 需看到再重新作答 -->
+          <div class="sub" v-if="it.status === 'pending' && it.note" style="width:100%;margin:2px 0">{{ it.note }}</div>
+          <template v-if="it.status === 'answered'">
+            <span class="lb">已答复（可修改）</span>
+            <span class="saved" v-if="ansState[it.seq] === 'saved'"><AppIcon name="check-circle" :size="11" />已保存</span>
+            <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
+            <div class="done-ans">
+              <span class="txt">{{ it.answer }}</span>
+              <button class="btn small link redo" @click="reopen(it)">重新作答</button>
+            </div>
+          </template>
+          <template v-else>
+            <div class="opts">
+              <button v-for="o in it.options" :key="o.key" class="opt"
+                      :class="{ rec: o.recommended, picked: picked[it.seq] === o.key }"
+                      :disabled="!!disposeDlg" @click="pickOption(it, o.key)">
+                <span class="radio"></span>
+                <span class="body">
+                  <span v-if="o.recommended" class="rec-tag">✦ AI 推荐</span>
+                  <b>{{ o.key }} · {{ o.text }}</b>
+                  <span class="why" v-if="o.why">{{ o.recommended ? '推荐理由：' : '' }}{{ o.why }}</span>
+                </span>
+              </button>
+            </div>
+            <div class="ans-ops">
+              <button class="btn small link" title="认定不是问题：不进标准文档定稿" @click="askDispose(it, 'rejected')">驳回（不是问题）</button>
+              <button class="btn small link" title="本期不处理：合成时转遗留假设" @click="askDispose(it, 'deferred')">挂起（转遗留假设）</button>
+              <button class="more-answer" @click="extraOpen[it.seq] = !extraOpen[it.seq]">{{ extraOpen[it.seq] ? '收起补充说明 ▴' : '以上都不对，我要自己写 ▾' }}</button>
+              <span class="saved" v-if="ansState[it.seq] === 'saved'"><AppIcon name="check-circle" :size="11" />已保存</span>
+              <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
+            </div>
+            <textarea v-if="extraOpen[it.seq]" v-model="extra[it.seq]" class="extra-ta"
+                      :aria-label="it.seq + ' 补充说明'"
+                      placeholder="补充说明：选「其他」时填写具体口径，将写入标准文档对应条款…"
+                      @blur="saveExtra(it)" @input="autoGrow"></textarea>
+          </template>
         </div>
         <div class="ans" v-else-if="status === 'clarifying' || status === 'changed'">
           <span class="lb" :class="{ warn: !it.answer }">{{ it.answer ? '答复（可修改）' : '待答复' }}</span>

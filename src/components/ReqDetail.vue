@@ -19,7 +19,7 @@ import CommentsPanel from './CommentsPanel.vue'
 import { fmtRel } from '../time.js'
 import { nextActionCta } from '../lifecycle.js'
 import { jumpTo, groupItems, groupByFirstAppearance, pidOf } from '../trace.js'
-import { isDone } from '../disposition.js'
+import { isDone, isPending } from '../disposition.js'
 import { provideGroupCollapse } from '../composables/group-collapse.js'
 import { useTraceJump } from '../composables/trace-jump.js'
 import { useTocScroll } from '../composables/toc-scroll.js'
@@ -185,6 +185,14 @@ const cmBlockText = computed(() => {
 })
 const escalatedIds = computed(() =>
   (d.value?.items || []).filter(i => i.origin === 'local' && i.srcCommentId).map(i => i.srcCommentId))
+// v5 §4 原文反向角标数据（OriginTab 全宽阅读与工作台侧栏共用）：anchor → 待澄清 seq[]
+const pendingByBlock = computed(() => {
+  const m = {}
+  for (const it of d.value?.items || []) {
+    if (it.anchor && isPending(it)) (m[it.anchor] = m[it.anchor] || []).push(it.seq)
+  }
+  return m
+})
 function onCmtsRefresh() { loadComments(); load() }   // 升级会产生 L 行——澄清清单同步重拉
 
 // ===== v4 变更单域：tab 角标计数 + GR-3 点入直达协议 =====
@@ -372,11 +380,13 @@ function resolveDocPath(path) {
     </div>
 
     <!-- 原始需求：全文快照（D1）；v1.2 有块结构时结构化渲染（不堆叠/图片/锚点），否则 md 渲染降级；
-         v4 窗口 1 块级编辑（保存后 @reload 壳层重拉 doc.json 刷新锚点）；平台评论角标 + 面板入口 -->
+         v4 窗口 1 块级编辑（保存后 @reload 壳层重拉 doc.json 刷新锚点）；平台评论角标 + 面板入口；
+         v5 §4 待澄清反向角标（点击经 check: 跳转协议切工作台定位） -->
     <OriginTab v-if="tab === 'origin'" ref="originTabRef"
                :card="card" :snapshot="d.snapshot" :doc="d.doc" :active-head="activeHead"
-               :doc-stale="!!d.docStale" :platform-by-block="cmByBlock"
+               :doc-stale="!!d.docStale" :platform-by-block="cmByBlock" :pending-by-block="pendingByBlock"
                @locate="locate" @go-toc="goToc" @open-comments="id => openComments(id)"
+               @clarify="seq => onJump({ kind: 'check', id: seq })"
                @toast="(m, t) => emit('toast', m, t)" @reload="load" />
 
     <!-- 结构化 Digest -->
@@ -385,10 +395,12 @@ function resolveDocPath(path) {
                v-model:digest-md-open="digestMdOpen"
                @locate="locate" @jump="onJump" />
 
-    <!-- v5 澄清工作台（audit 已并入，D1）：作答/处置/已定论卡/影响分析/孤儿提示；L 系行可跳回原评论 -->
+    <!-- v5 澄清工作台（audit 已并入，D1）：作答/处置/已定论卡/影响分析/孤儿提示 + 原文侧栏；L 系行可跳回原评论 -->
     <WorkbenchTab v-if="tab === 'checklist'" :req-id="card.id" :items="d.items" :status="card.status"
                   :groups="checklistGroups" :audit="d.audit" :concluded-groups="concludedGroups"
+                  :doc="d.doc" :snapshot="d.snapshot"
                   @locate="locate" @jump="onJump" @open-comment="id => openComments('', id)"
+                  @open-origin="switchTab('origin')"
                   @toast="(m, t) => emit('toast', m, t)" />
 
     <!-- 标准需求文档：重写版（D6），四类引用可点击（D7） -->

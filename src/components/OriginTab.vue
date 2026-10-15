@@ -15,7 +15,7 @@ import { api } from '../api.js'
 import { ask } from '../confirm.js'
 import { render } from '../render.js'
 import { fmtRel } from '../time.js'
-import { partitionRows, mdPlain } from '../docview.js'
+import { useDocStructure } from '../composables/doc-structure.js'
 
 const props = defineProps({
   card: { type: Object, required: true },        // sourceType/sourceUrl/sourceText/id/status
@@ -23,91 +23,25 @@ const props = defineProps({
   doc: { type: Object, default: null },
   docStale: { type: Boolean, default: false },   // v4.19 服务端机械判定：块表最后编辑 > digest 最近推送
   activeHead: { type: String, default: '' },     // 壳层滚动高亮（目录侧栏）
-  platformByBlock: { type: Object, default: () => ({}) }   // v4 blockId → 平台评论数（角标）
+  platformByBlock: { type: Object, default: () => ({}) },  // v4 blockId → 平台评论数（角标）
+  pendingByBlock: { type: Object, default: () => ({}) }    // v5 §4 blockId → 待澄清 seq[]（反向角标）
 })
-const emit = defineEmits(['locate', 'go-toc', 'toast', 'reload', 'open-comments'])
+const emit = defineEmits(['locate', 'go-toc', 'toast', 'reload', 'open-comments', 'clarify'])
 
 const snapshotBox = ref(null)            // 快照渲染容器（needle 定位，expose 给壳）
 const tocOpen = ref(false)
 
 const snapshotHtml = computed(() => render(props.snapshot?.md))
 
-// ===== v1.2 原文块结构（doc）：结构化渲染 + 锚点直达 =====
-const docData = computed(() => props.doc?.content || null)
-const docBlocks = computed(() => docData.value?.blocks || [])
-const childrenByParent = computed(() => {
-  const m = {}
-  for (const b of docBlocks.value) {
-    const p = b.parent || ''
-    ;(m[p] = m[p] || []).push(b)
-  }
-  return m
-})
-const rootBlocks = computed(() => docBlocks.value.filter(b => !b.parent && b.type !== 'comment'))
-// v2.2 原文块章节分组：heading 栈切分（零文本假设）——按 level 弹栈建组，跳级自动压平（h2→h4 = 深度0→1），
-// 非标题块归属栈顶组；首个标题前的内容归前言平铺（无 heading 文档整体退化为平铺，渲染行为不变）
-const docSections = computed(() => {
-  const secs = []
-  const stack = []
-  let preface = null
-  const host = () => stack.length ? stack[stack.length - 1]
-    : (preface ??= { key: 'preface', heading: null, blocks: [] })
-  for (const b of rootBlocks.value) {
-    if (b.type === 'heading') {
-      const lv = b.level || 2        // 与 DocBlock headingTag 的缺省口径一致
-      while (stack.length && stack[stack.length - 1].lv >= lv) stack.pop()
-      const sec = { key: b.id, lv, cls: 'd' + Math.min(stack.length, 3), heading: b, blocks: [] }
-      stack.push(sec)
-      secs.push(sec)
-    } else {
-      host().blocks.push(b)
-    }
-  }
-  return preface ? [preface, ...secs] : secs
-})
-// v4.1 全标量小表还原（parse_doc ≥0.5）：章节块序过 partitionRows——连续纯标量同 head 行聚合为
-// mini 表格（head = 表头，tr 带 data-blk 保锚点/目录定位），有子块/评论/内容格的行照旧行卡承载
-const childCountBy = computed(() => {
-  const m = new Map()
-  for (const b of docBlocks.value) {
-    const p = b.parent || ''
-    m.set(p, (m.get(p) || 0) + 1)
-  }
-  return m
-})
-const partitionedSections = computed(() =>
-  docSections.value.map(sec => ({ ...sec, parts: partitionRows(sec.blocks, childCountBy.value) })))
-const commentByRef = computed(() => {
-  const m = {}
-  for (const b of docBlocks.value) if (b.type === 'comment') m[b.ref] = b
-  return m
-})
-// v2.2 目录纳入 table-row 行卡片（巨表文档主体在行级，heading 导航不到）；排除版本号形态 rowLabel（修订记录行）
-const docToc = computed(() => docBlocks.value
-  .filter(b => b.type === 'heading' || b.type === 'title'
-    || (b.type === 'table-row' && !/^\d+(\.\d+)+$/.test(String(b.rowLabel || ''))))
-  .map(b => ({
-    id: b.id,
-    level: b.type === 'table-row' ? 3 : (b.level || 1),
-    text: b.type === 'table-row' ? (b.rowLabel || '') : mdPlain(b.text)
-  })))
+// ===== v1.2 原文块结构（doc）：结构化渲染 + 锚点直达（v5 抽 useDocStructure，与工作台侧栏共享同源计算） =====
+const { docData, docBlocks, childrenByParent, partitionedSections, commentByRef, docToc, mediaList } =
+  useDocStructure(() => props.doc, () => props.card.id)
 
 /** 当前目录标题元素序列（壳层 onScroll 高亮计算用） */
 function headEls() {
   return docToc.value.map(h => document.querySelector(`[data-blk="${h.id}"]`)).filter(Boolean)
 }
 defineExpose({ box: snapshotBox, headEls })
-
-// v4.20 页内图片灯箱（ImgViewer）：替代点图新开窗口的割裂体验。
-// 块结构路径：全量块表按文档序取 image/画板缩略图作图源（←→ 翻图按此序），DocBlock 逐层上抛块 id 定位；
-// 降级快照 md 直渲无块结构——容器点击委托，命中 img 临时构造单图列表
-const mediaList = computed(() => docBlocks.value
-  .filter(b => (b.type === 'image' || b.type === 'whiteboard') && b.media)
-  .map(b => ({
-    id: b.id,
-    url: `/api/requirements/${props.card.id}/media/${b.media}`,
-    caption: b.caption || b.alt || (b.type === 'whiteboard' ? '画板缩略图' : '')
-  })))
 const viewerList = ref([])    // 灯箱当前列表（块结构 = mediaList；降级快照 = 点击时构造的单图）
 const viewerIdx = ref(-1)     // -1 = 关闭
 function openViewer(list, idx) { viewerList.value = list; viewerIdx.value = idx }
@@ -302,7 +236,8 @@ async function rerunCheck() {
         <template v-for="sec in partitionedSections" :key="sec.key">
           <section v-if="sec.heading" class="docsec" :class="sec.cls">
             <DocBlock :block="sec.heading" :children-by-parent="childrenByParent"
-                      :comment-by-ref="commentByRef" :req-id="card.id" />
+                      :comment-by-ref="commentByRef" :req-id="card.id" :pending-by-block="pendingByBlock"
+                      @clarify="seq => emit('clarify', seq)" />
             <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.block.id">
               <table v-if="p.kind === 'table'" class="mini">
                 <thead><tr><th v-for="(h, hi) in p.head" :key="hi">{{ h }}</th></tr></thead>
@@ -315,8 +250,9 @@ async function rerunCheck() {
               <DocBlock v-else :block="p.block"
                         :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
                         :req-id="card.id"
-                        :platform-by-block="platformByBlock"
-                        @comments="id => emit('open-comments', id)" @view-media="onDocMedia" />
+                        :platform-by-block="platformByBlock" :pending-by-block="pendingByBlock"
+                        @comments="id => emit('open-comments', id)" @view-media="onDocMedia"
+                        @clarify="seq => emit('clarify', seq)" />
             </template>
           </section>
           <template v-else>
@@ -332,8 +268,9 @@ async function rerunCheck() {
               <DocBlock v-else :block="p.block"
                         :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
                         :req-id="card.id"
-                        :platform-by-block="platformByBlock"
-                        @comments="id => emit('open-comments', id)" @view-media="onDocMedia" />
+                        :platform-by-block="platformByBlock" :pending-by-block="pendingByBlock"
+                        @comments="id => emit('open-comments', id)" @view-media="onDocMedia"
+                        @clarify="seq => emit('clarify', seq)" />
             </template>
           </template>
         </template>

@@ -1057,3 +1057,53 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 
 /* 维度小标签（v1.6 可选 layer；层名待三期契约对齐先 L<n>） */
 .lvl-tag{margin-left:auto;font-size:11px;color:var(--faint);flex:none}
+
+/* ---- v5 双栏原文侧栏（§2.1）：拖宽 320-760 / 收起恢复 / 定位高亮 / 反向角标 ---- */
+.wb-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start;position:relative}
+.wb-grid:not(.no-ctx){grid-template-columns:minmax(0,1fr) 430px}   /* :style 绑定实时宽度，此为无 JS 时的兜底 */
+.q-col{min-width:0}
+.ctx-col{position:relative}
+.ctx-resizer{position:absolute;left:-9px;top:0;bottom:0;width:7px;cursor:col-resize;border-radius:4px;
+  transition:background .15s;z-index:5}
+.ctx-resizer:hover{background:var(--blue-light)}
+.ctx-card{background:var(--canvas);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 1px 2px 0 rgba(16,24,40,.05);display:flex;flex-direction:column;
+  max-height:calc(100vh - 24px);position:sticky;top:12px}
+.ctx-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line-soft);flex:none}
+.ctx-head .ctx-ht{min-width:0;flex:1;display:flex;flex-direction:column;line-height:1.35}
+.ctx-head b{font-size:12.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctx-head .sub{font-size:11px;color:var(--faint)}
+.follow{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
+  border:1px solid var(--line);border-radius:9999px;padding:2px 9px;background:var(--canvas);cursor:pointer;flex:none}
+.follow.on{background:var(--blue-light);border-color:var(--blue-border);color:var(--primary);font-weight:600}
+.follow .dot{width:6px;height:6px;border-radius:50%;background:var(--primary)}
+.ctx-toc{padding:6px 14px 0;border-bottom:1px solid var(--line-soft)}
+.ctx-toc .toc-list{max-height:180px}
+.ctx-from{margin:8px 14px 0;background:var(--blue-light);border:1px solid var(--blue-border);color:var(--primary);
+  font-size:11.5px;border-radius:8px;padding:4px 10px;display:flex;align-items:center;gap:6px}
+.ctx-from .x{margin-left:auto;border:none;background:none;color:var(--faint);cursor:pointer;font-size:12px}
+.ctx-body{overflow:auto;padding:6px 0 16px;flex:1;scroll-behavior:smooth}
+.ctx-body .docsec{margin:0 10px}
+.ctx-body .docblk-p,.ctx-body .clause,.ctx-body .docblk-sub{font-size:12.6px}
+.ctx-body .docblk-h{font-size:13px}
+.ctx-hl{background:var(--yellow-light);border-left:2px solid var(--yellow-deep)}
+.ctx-miss{margin:10px 14px;border:1px dashed var(--line-strong);border-radius:9px;background:var(--bg-soft);
+  padding:10px 12px;font-size:12px;color:var(--charcoal);display:flex;flex-direction:column;gap:6px}
+.ctx-miss b{font-size:12px}
+.ctx-miss .row{display:flex;gap:8px}
+.ctx-miss .k{flex:none;font-size:11px;color:var(--faint);font-weight:600;width:32px;padding-top:1px}
+.ctx-empty{padding:20px 16px;font-size:12.5px;color:var(--faint)}
+.ctx-foot{border-top:1px solid var(--line-soft);padding:8px 14px;flex:none;display:flex;
+  justify-content:space-between;align-items:center}
+.ctx-foot .sub{font-size:11px;color:var(--faint)}
+.ctx-restore{position:fixed;right:0;top:130px;z-index:40;border:1px solid var(--line-strong);border-right:none;
+  border-radius:9px 0 0 9px;background:var(--canvas);box-shadow:0 4px 14px -2px rgba(16,24,40,.1);
+  padding:12px 5px;font-size:11.5px;color:var(--primary);font-weight:600;writing-mode:vertical-rl;
+  letter-spacing:2px;cursor:pointer}
+.ctx-restore:hover{background:var(--blue-light)}
+
+/* v5 §4 待澄清反向角标 pill（DocBlock 块上，复用评论角标同款整 map 下传机制） */
+.ref-pill{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:600;color:var(--primary);
+  background:var(--blue-light);border:1px solid var(--blue-border);border-radius:9999px;padding:0 7px;
+  margin-left:6px;vertical-align:1px;cursor:pointer}
+.ref-pill:hover{filter:brightness(.97)}

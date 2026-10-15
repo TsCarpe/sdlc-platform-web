@@ -3,10 +3,11 @@
 // audit 合并（D1/D14）：audit 是 clarify 的超集，差集 ∧ go✅ 条目以「已定论」只读折叠组获得宿主
 // （组名带「已定论·」前缀防与 check 组撞名联动，同状态机前缀先例）；audit 字段归宿——去向/关联
 // 用例进问题卡「影响分析」折叠，audit.md 原文折叠挪页尾。作答/处置/三态筛选/跳转等既有能力全保留。
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import EmptyState from './EmptyState.vue'
+import CtxPane from './CtxPane.vue'
 import { render } from '../render.js'
 import { firstQuote, flashEl, pidOf } from '../trace.js'
 import { isDone, isPending, dispLabel } from '../disposition.js'
@@ -20,8 +21,10 @@ const props = defineProps({
   groups: { type: Array, default: () => [] },      // 壳层需求域分组（revealGrpFor 共用）
   audit: { type: Object, default: null },          // 体检产物（已定论/影响分析/孤儿行数据源）
   concludedGroups: { type: Array, default: () => [] },  // 壳层算好的已定论分组（差集∧✅，name 带「已定论·」前缀）
+  doc: { type: Object, default: null },            // detail.doc（右栏原文侧栏数据——非产物，空态照常渲染）
+  snapshot: { type: Object, default: null },       // 侧栏「依据版本」展示
 })
-const emit = defineEmits(['locate', 'jump', 'toast', 'open-comment'])
+const emit = defineEmits(['locate', 'jump', 'toast', 'open-comment', 'open-origin'])
 
 const { openGrps, toggleGrp, expandAll, collapseAll, revealGrpFor } = useGrpCollapse()
 
@@ -61,6 +64,61 @@ const concludedByRaw = computed(() => {
 })
 const standaloneConcluded = computed(() =>
   props.concludedGroups.filter(g => !checkGroupNames.value.has(g.raw || g.name)))
+
+// ===== v5 双栏原文侧栏（§2.1）：拖宽 320-760 记忆 / 收起恢复 / 摘引联动定位 / 反向角标 =====
+const hasDoc = computed(() => !!(props.doc?.content?.blocks || []).length)
+// 反向角标数据（§4，仅 anchor 行挂载、仅待处置——全处置后角标自然消失降噪）
+const pendingByBlock = computed(() => {
+  const m = {}
+  for (const it of props.items) {
+    if (it.anchor && isPending(it)) (m[it.anchor] = m[it.anchor] || []).push(it.seq)
+  }
+  return m
+})
+const ctxRef = ref(null)
+const ctxW = ref(Math.min(760, Math.max(320, +localStorage.getItem('wb.ctxW') || 430)))
+const ctxCollapsed = ref(false)
+const gridStyle = computed(() => hasDoc.value && !ctxCollapsed.value
+  ? { gridTemplateColumns: `minmax(0,1fr) ${ctxW.value}px` } : null)
+
+let drag = null   // { x0, w0 } —— 拖宽会话（document 级 move/up）
+function startDrag(e) {
+  e.preventDefault()
+  drag = { x0: e.clientX, w0: ctxW.value }
+  document.addEventListener('mousemove', onDrag)
+  document.addEventListener('mouseup', endDrag)
+}
+function onDrag(ev) {
+  if (!drag) return
+  ctxW.value = Math.min(760, Math.max(320, Math.round(drag.w0 + (drag.x0 - ev.clientX))))
+}
+function endDrag() {
+  drag = null
+  localStorage.setItem('wb.ctxW', String(ctxW.value))
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', endDrag)
+}
+onBeforeUnmount(() => { if (drag) endDrag() })
+
+/** 摘引/出处点击（左栏问题卡与已定论卡）：优先侧栏联动（不切 tab，§2.1）；
+ *  无块结构（快照老卡）回退壳层 locate 协议（切 origin needle 定位） */
+function locateInCtx(it) {
+  if (!hasDoc.value) return emit('locate', firstQuote(it.quote) || it.ctx || it.title || it.where, it.anchor)
+  ctxCollapsed.value = false
+  nextTick(() => ctxRef.value?.locateCtx({
+    seq: it.seq || pidOf(it.id), src: it.ctx || it.where || '', anchor: it.anchor || '',
+    quote: it.quote || '', ctxText: it.ctx || it.where || ''
+  }))
+}
+/** 反向角标点击（CtxPane 上抛）：滚回左栏对应问题并 flash（§4） */
+function locateCheck(seq) {
+  revealGrpFor('check', seq)
+  nextTick(() => {
+    const el = document.querySelector(`[data-pid="${seq}"]`)
+    if (el) flashEl(el)
+    else emit('toast', `未定位到 ${seq}（可能已被过滤隐藏）`, 'err')
+  })
+}
 
 // ===== 澄清导航（三态筛选：全部/待处置/已处置）=====
 const clfFilter = ref('all')   // 'all' | 'pending' | 'done'
@@ -185,6 +243,9 @@ async function reopen(it) {
       <button class="btn small link" @click="collapseAll()">全部收起</button>
     </div>
 
+    <!-- v5 双栏（§2.1）：左问题流 + 右原文上下文侧栏（可拖宽 320-760 / 可收起；无块结构单栏降级） -->
+    <div class="wb-grid" :class="{ 'no-ctx': !hasDoc || ctxCollapsed }" :style="gridStyle">
+    <div class="q-col">
     <!-- 左栏问题流：check 组（组内顶部挂同名已定论子折叠块，D14） -->
     <div class="grp" v-for="g in visibleCheckGroups" :key="g.name" :class="{ closed: !openGrps.has(g.name) }">
       <div class="grp-t" @click="toggleGrp(g.name)">
@@ -208,9 +269,9 @@ async function reopen(it) {
               <span class="jump-link" title="体检报告已定论条目（未生成澄清题）">来自体检.{{ pidOf(a.id) }}</span>
             </div>
             <div class="q">{{ a.title }}</div>
-            <div class="ctx" v-if="a.where">出处：<a class="cite" :class="{ anchored: a.anchor }" @click="emit('locate', firstQuote(a.quote) || a.where, a.anchor)">{{ a.where }}<span v-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
+            <div class="ctx" v-if="a.where">出处：<a class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">{{ a.where }}<span v-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
             <blockquote class="quote" v-if="a.quote">
-              <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: a.anchor }" @click="emit('locate', firstQuote(a.quote), a.anchor)">在快照中定位<span v-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ a.quote }}
+              <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">在快照中定位<span v-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ a.quote }}
             </blockquote>
             <div class="ctx" v-if="(a.relatedCases || []).length" style="margin-top:6px">
               关联用例：<a class="chip linklike real" v-for="c in a.relatedCases" :key="c" @click="emit('jump', { kind: 'case', id: c })">{{ c }}</a>
@@ -233,9 +294,9 @@ async function reopen(it) {
           <span class="lvl-tag sub" v-if="it.layer" title="缺陷分层（v1.6 可选字段）">L{{ it.layer }}</span>
         </div>
         <div class="q">{{ it.question }}</div>
-        <div class="ctx" v-if="it.ctx">出处：<a class="cite" :class="{ anchored: it.anchor }" @click="emit('locate', firstQuote(it.quote) || it.ctx, it.anchor)">{{ it.ctx }}<span v-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a></div>
+        <div class="ctx" v-if="it.ctx">出处：<a class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">{{ it.ctx }}<span v-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a></div>
         <blockquote class="quote" v-if="it.quote">
-          <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: it.anchor }" @click="emit('locate', firstQuote(it.quote), it.anchor)">在快照中定位<span v-if="it.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ it.quote }}
+          <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">在快照中定位<span v-if="it.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ it.quote }}
         </blockquote>
         <!-- 影响分析折叠（audit 字段归宿 §1.2）：去向 + 关联用例，默认收起 -->
         <details class="impact" v-if="impactOf(it.seq) && (impactOf(it.seq).go || impactOf(it.seq).relatedCases.length)">
@@ -296,9 +357,9 @@ async function reopen(it) {
           <span class="jump-link" title="体检报告已定论条目（未生成澄清题）">来自体检.{{ pidOf(a.id) }}</span>
         </div>
         <div class="q">{{ a.title }}</div>
-        <div class="ctx" v-if="a.where">出处：<a class="cite" :class="{ anchored: a.anchor }" @click="emit('locate', firstQuote(a.quote) || a.where, a.anchor)">{{ a.where }}<span v-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
+        <div class="ctx" v-if="a.where">出处：<a class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">{{ a.where }}<span v-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
         <blockquote class="quote" v-if="a.quote">
-          <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: a.anchor }" @click="emit('locate', firstQuote(a.quote), a.anchor)">在快照中定位<span v-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ a.quote }}
+          <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">在快照中定位<span v-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ a.quote }}
         </blockquote>
         <div class="ctx" v-if="(a.relatedCases || []).length" style="margin-top:6px">
           关联用例：<a class="chip linklike real" v-for="c in a.relatedCases" :key="c" @click="emit('jump', { kind: 'case', id: c })">{{ c }}</a>
@@ -306,6 +367,19 @@ async function reopen(it) {
       </div>
       </div></div>
     </div>
+
+    </div><!-- /q-col -->
+
+    <!-- 右栏：原文上下文（sticky 侧栏；resizer 在 wrapper 左缘） -->
+    <div class="ctx-col" v-if="hasDoc && !ctxCollapsed">
+      <div class="ctx-resizer" title="拖动调整宽度（320-760px）" @mousedown="startDrag"></div>
+      <CtxPane ref="ctxRef" :req-id="reqId" :doc="doc" :snapshot="snapshot"
+               :pending-by-block="pendingByBlock"
+               @clarify="locateCheck" @collapse="ctxCollapsed = true"
+               @locate="(s, a) => emit('locate', s, a)" @open-origin="emit('open-origin')" />
+    </div>
+    </div><!-- /wb-grid -->
+    <button class="ctx-restore" v-if="hasDoc && ctxCollapsed" @click="ctxCollapsed = false">‹ 展开原文上下文</button>
 
     <!-- 孤儿行提示（r3 二审#1：编号权威分叉疑似行——不渲染卡，引导查原文） -->
     <div class="banner amber-t" v-if="orphanCount">

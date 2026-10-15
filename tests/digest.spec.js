@@ -54,6 +54,17 @@ describe('DigestTab：遗留假设独立卡与 AI 理解摘要（v5 §3/D9）', 
     await asm[0].find('button').trigger('click')
     expect(w.emitted('jump')[0]).toEqual([{ kind: 'asm', id: '活动与教学计划的强关联规则沿用现' }])
   })
+  it('sdlc-intent §8 假设清单表格行同样提出（真实产物形态）', async () => {
+    const w = await mountDigest({ digest: {
+      markdown: '## 8. 假设清单\n| A1 | 详述1.1 | 量表与模板按同一对象理解 | 假设 | 此处按同一对象 |\n| A<编号\\> | §8 条目 | … |\n',
+      content: { summary: '', roles: [], features: [], flows: [], states: [] },
+    } })
+    const asm = w.findAll('.asm-item')
+    expect(asm.length).toBe(1)                                  // 表头模板行（A<编号>）不误收
+    expect(asm[0].find('code').text()).toBe('需求.A1')
+    expect(asm[0].text()).toContain('详述1.1')                   // 出处并入展示
+    expect(asm[0].text()).toContain('量表与模板按同一对象理解')
+  })
   it('模块 chips：无 items[].module（v1.6 前）→ 角标整体隐藏不冒充（D18）', async () => {
     const w = await mountDigest({ frPoints: [{ id: '需求.FR-01', name: 'n', source: '', group: '', module: '教研活动', anchor: '', coveredBy: [] }],
       items: [{ seq: 'P01', status: 'pending', module: '' }] })

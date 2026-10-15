@@ -62,12 +62,16 @@ const modulePend = computed(() => {
   }
   return m
 })
-/** 遗留假设独立卡数据：从摘要 markdown 提出「需求.Axx」行（D9——折叠 md 保留，asm 跳转协议依赖） */
+/** 遗留假设独立卡数据：从摘要 markdown 提出（D9——折叠 md 保留，asm 跳转协议依赖）。
+ *  两种产物形态兼容：①sdlc-intent §8 假设清单表格行 |A1| 出处 | 内容 | 类型 | 依据|；
+ *  ②列表/段落行「需求.A01：文本」。编号统一按命名空间展示为 需求.Axx。 */
 const assumptions = computed(() => {
   const out = []
   for (const ln of String(props.digest?.markdown || '').split('\n')) {
+    const t = ln.match(/^\|\s*(?:需求\.)?A(\d+)\s*\|([^|]*)\|([^|]*)\|/)
+    if (t) { out.push({ id: '需求.A' + t[1], src: t[2].trim(), text: t[3].trim() }); continue }
     const m = ln.match(/^\s*(?:[-*•]\s*)?(需求\.A\d+)\s*[：:]\s*(.+)$/)
-    if (m) out.push({ id: m[1], text: m[2].trim() })
+    if (m) out.push({ id: m[1], src: '', text: m[2].trim() })
   }
   return out
 })
@@ -232,7 +236,7 @@ const assumptions = computed(() => {
       <h3>遗留假设 <span class="sub">合成标准文档时将写入 需求.Axx 条目</span></h3>
       <div class="asm-item" v-for="a in assumptions" :key="a.id">
         <code>{{ a.id }}</code>
-        <span class="asm-txt">{{ a.text }}</span>
+        <span class="asm-txt">{{ a.text }}<span class="sub" v-if="a.src" style="margin-left:6px">（{{ a.src }}）</span></span>
         <button class="btn small link" title="在摘要原文中定位该假设" @click="emit('jump', { kind: 'asm', id: a.text.slice(0, 16) })">原文 ↗</button>
       </div>
     </div>

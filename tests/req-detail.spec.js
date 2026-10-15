@@ -2,7 +2,7 @@
 // ReqDetail 壳级冒烟（批次7 / AUDIT D6-2 拆分前置回归网——对抗审查 M9）：
 // 全形态 fixture（clarifying 全键 + published 双形态）下断言 8 tab 渲染与关键交互存在性，
 // 为 948 行拆分（tab 组件化 + composable 抽取）提供行为基线。
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const detailFixture = () => ({
@@ -45,9 +45,12 @@ vi.mock('../src/api.js', () => ({
   }
 }))
 
+// jsdom 不实现 scrollIntoView——flashEl/定位协议依赖，测试环境 noop 补丁
+Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => {})
+
 const mountDetail = async () => {
   const { default: ReqDetail } = await import('../src/components/ReqDetail.vue')
-  const w = mount(ReqDetail, { props: { reqId: 'REQ-2026-001' } })
+  const w = mount(ReqDetail, { props: { reqId: 'REQ-2026-001' }, attachTo: document.body })   // attachTo：applyJump 走 document.querySelector 定位 flash
   await flushPromises()
   await new Promise(r => setTimeout(r, 250))  // settle（load→applyJump 链路的 80ms 节奏）
   return w
@@ -55,6 +58,9 @@ const mountDetail = async () => {
 
 let wrapper
 beforeEach(() => { vi.clearAllMocks() })
+// 卸载上一条用例的壳：组件存活会累积多份 applyJump watch——旧实例先 consumeJump 把 nonce 清零，
+// 新实例的 audit:/check: 协议断言静默失效（真实环境单实例无此竞态）
+afterEach(() => { wrapper?.unmount?.(); wrapper = null })
 
 describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
   it('头部信息与 8 个 tab 齐全（v5：audit 并入工作台 + 分阶段分组置灰）', async () => {
@@ -120,5 +126,17 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     await tabs[5].trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('用例')   // cases tab 正常进入（CaseList fixture 空列表空态）
+  })
+
+  it('audit: 跳转协议（v5 D1/D19）：audit 编号命中工作台问题卡并 flash', async () => {
+    const { pendingJump } = await import('../src/trace.js')
+    wrapper = await mountDetail()
+    await wrapper.findAll('[role="tab"]')[1].trigger('click')   // 先离开工作台（验证协议会切回）
+    await flushPromises()
+    Object.assign(pendingJump, { nonce: Date.now(), page: 'reqs', reqId: 'REQ-2026-001', kind: 'audit', id: 'P01', needle: '' })
+    await new Promise(r => setTimeout(r, 400))   // settle（80ms）+ flash 窗口内
+    const on = [...wrapper.findAll('[role="tab"]')].find(t => t.classes().includes('on'))
+    expect(on.text()).toContain('澄清工作台')     // audit tab 已并入——跳转落工作台
+    expect(wrapper.find('.q-col [data-pid="P01"].flash').exists()).toBe(true)
   })
 })

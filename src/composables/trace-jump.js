@@ -11,11 +11,12 @@ import { pendingJump, jumpTo, consumeJump, settle, flashEl, flashNeedle, needles
  *   digestMdOpen  digest 原文折叠的 ref（asm 跳入时自动展开）
  *   toast         (msg, tone) => void
  *   revealGrpFor  折叠组展开（group-collapse 协议）
+ *   expandAllGroups () => void  展开工作台全部分组（check ∪ 已定论，audit 跳转兜底）
  *   getOriginBox  () => Element|null  origin 快照容器（needle 定位，tab 组件 expose）
  *   getDigestMdBox () => Element|null digest 原文容器（假设定位，tab 组件 expose）
  */
 export function useTraceJump(deps) {
-  const { reqId, tab, digestMdOpen, toast, revealGrpFor, getOriginBox, getDigestMdBox } = deps
+  const { reqId, tab, digestMdOpen, toast, revealGrpFor, expandAllGroups, getOriginBox, getDigestMdBox } = deps
 
   /**
    * 出处 → 原文定位：v1.2 优先块锚点（anchor=飞书块 ID，按 data-blk 直达），
@@ -48,10 +49,19 @@ export function useTraceJump(deps) {
       await settle()
       if (!flashEl(document.querySelector(`[data-frid="${j.id}"]`))) miss()
     } else if (j.kind === 'audit') {
-      tab.value = 'audit'
+      // v5（D1/D19）：audit tab 已并入工作台（tab 键名仍 'checklist'）；目标可为问题卡或已定论卡
+      // ——组名 miss 时展开全部分组兜底重查（r4 二审#13，只展开 check 列表会让 audit-only 目标
+      // 卡困在折叠的已定论组里，scrollIntoView 静默失效）
+      tab.value = 'checklist'
       revealGrpFor('audit', j.id)
       await settle()
-      if (!flashEl(document.querySelector(`[data-pid="${j.id}"]`))) miss()
+      let el = document.querySelector(`[data-pid="${j.id}"]`)
+      if (!el && expandAllGroups) {
+        expandAllGroups()
+        await settle()
+        el = document.querySelector(`[data-pid="${j.id}"]`)
+      }
+      if (!flashEl(el)) miss()
     } else if (j.kind === 'check') {
       tab.value = 'checklist'
       revealGrpFor('check', j.id)

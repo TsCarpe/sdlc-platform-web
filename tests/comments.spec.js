@@ -97,13 +97,13 @@ describe('CommentsPanel：线程组装与呈现', () => {
   })
 })
 
-describe('ChecklistTab：L 系 origin 呈现与跳回', () => {
+describe('WorkbenchTab（原 ChecklistTab）：L 系 origin 呈现与跳回', () => {
   const mountCheck = async items => {
-    const { default: ChecklistTab } = await import('../src/components/ChecklistTab.vue')
+    const { default: WorkbenchTab } = await import('../src/components/WorkbenchTab.vue')
     const { GRP_KEY } = await import('../src/composables/group-collapse.js')
-    // ChecklistTab inject 分组折叠协议——孤立挂载需补 provide（壳层 ReqDetail 常规路径已提供）
+    // WorkbenchTab inject 分组折叠协议——孤立挂载需补 provide（壳层 ReqDetail 常规路径已提供）
     const grp = { openGrps: new Set(), toggleGrp: () => {}, expandAll: () => {}, collapseAll: () => {}, revealGrpFor: () => {} }
-    return mount(ChecklistTab, { props: { reqId: 'REQ-1', items, status: 'clarifying',
+    return mount(WorkbenchTab, { props: { reqId: 'REQ-1', items, status: 'clarifying',
       groups: [{ name: '组', items }] }, global: { provide: { [GRP_KEY]: grp } } })
   }
   it('L 系行显示「来自评论」并可跳回（携带 srcCommentId）', async () => {

@@ -13,9 +13,12 @@ export function provideGroupCollapse(groups) {
   function expandAll(lists) { for (const g of lists) openGrps.add(g.name) }
   function collapseAll() { openGrps.clear() }
 
-  /** 跳转目标所在组自动展开（折叠不能吞掉 flash 定位协议） */
+  /** 跳转目标所在组自动展开（折叠不能吞掉 flash 定位协议）。
+   *  v5（r4 二审#13）：audit 编号的解析域 = check 组 ∪ 已定论组——audit: 跳转目标可能是
+   *  工作台问题卡（同源编号）也可能是已定论只读卡（audit-only），两侧组集因增量质检组分叉。 */
   function revealGrpFor(kind, id) {
-    const lists = kind === 'fr' ? groups.fr.value : (kind === 'audit' ? groups.audit.value : groups.check.value)
+    const lists = kind === 'fr' ? groups.fr.value
+      : (kind === 'audit' ? [...groups.check.value, ...groups.audit.value] : groups.check.value)
     for (const g of lists) {
       const hit = kind === 'fr'
         ? g.items.some(x => x.id === id)

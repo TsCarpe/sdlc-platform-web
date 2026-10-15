@@ -12,14 +12,13 @@ import DesignTab from './DesignTab.vue'
 import GateTab from './GateTab.vue'
 import OriginTab from './OriginTab.vue'
 import DigestTab from './DigestTab.vue'
-import AuditTab from './AuditTab.vue'
-import ChecklistTab from './ChecklistTab.vue'
+import WorkbenchTab from './WorkbenchTab.vue'
 import StdTab from './StdTab.vue'
 import ChangesTab from './ChangesTab.vue'
 import CommentsPanel from './CommentsPanel.vue'
 import { fmtRel } from '../time.js'
 import { nextActionCta } from '../lifecycle.js'
-import { jumpTo, groupItems, groupByFirstAppearance } from '../trace.js'
+import { jumpTo, groupItems, groupByFirstAppearance, pidOf } from '../trace.js'
 import { isDone } from '../disposition.js'
 import { provideGroupCollapse } from '../composables/group-collapse.js'
 import { useTraceJump } from '../composables/trace-jump.js'
@@ -58,14 +57,26 @@ const answered = computed(() => (d.value?.items || []).filter(isDone).length)
 const totalQ = computed(() => (d.value?.items || []).length)
 const card = computed(() => d.value?.card || {})
 const domains = computed(() => d.value?.domains || [])
+// v5（D8）：设计/门禁置灰口径 = 未发布（变更/用例不置灰——reconcile 通道与用例读面放行）
+const postLocked = computed(() => !['published', 'changed'].includes(card.value.status))
 
-// 三个分组列表（audit/checklist/fr 同源 domains）留在壳：revealGrpFor 跳转展开依赖全量三表
-const auditGroups = computed(() => groupItems(d.value?.audit?.content?.items || [], 'group', domains.value))
+// 分组列表（checklist/fr 同源 domains）留在壳：revealGrpFor 跳转展开依赖全量表
 const checklistGroups = computed(() => groupItems(d.value?.items || [], 'theme', domains.value))
 const frGroups = computed(() => groupByFirstAppearance(d.value?.frPoints || [], 'group'))
 
-// ===== 跨 tab 协议：分组折叠（provide 给各 tab inject） =====
-const grp = provideGroupCollapse({ fr: frGroups, audit: auditGroups, check: checklistGroups })
+// v5（D14）已定论分组：audit 差集 ∧ go✅ 条目（audit-only 且已定论的只读卡宿主）。组名带
+// 「已定论·」前缀（openGrps 域防与 check 组撞名联动），raw 留原组名供工作台内挂载匹配
+const concludedGroups = computed(() => {
+  const seqs = new Set((d.value?.items || []).map(i => i.seq))
+  const rows = (d.value?.audit?.content?.items || [])
+    .filter(a => !seqs.has(pidOf(a.id)) && String(a.go || '').startsWith('✅'))
+  return groupItems(rows, 'group', domains.value)
+    .map(g => ({ ...g, name: '已定论·' + g.name, raw: g.name }))
+})
+
+// ===== 跨 tab 协议：分组折叠（provide 给各 tab inject；audit 键 = 已定论分组——revealGrpFor
+// 的 audit 跳转解析域为 check ∪ 已定论，r4 二审#13） =====
+const grp = provideGroupCollapse({ fr: frGroups, audit: concludedGroups, check: checklistGroups })
 
 // tab 组件 ref：定位/滚动协议需要 tab 内部容器与标题序列（defineExpose）
 const originTabRef = ref(null)
@@ -79,6 +90,7 @@ const { locate, applyJump } = useTraceJump({
   digestMdOpen,
   toast: (m, t) => emit('toast', m, t),
   revealGrpFor: grp.revealGrpFor,
+  expandAllGroups: () => grp.expandAll([...checklistGroups.value, ...concludedGroups.value]),
   getOriginBox: () => originTabRef.value?.box ?? null,
   getDigestMdBox: () => digestTabRef.value?.mdBox ?? null
 })
@@ -102,7 +114,8 @@ const { activeHead, showTop, goToc, toTop } = useTocScroll({
   goOrigin: id => locate('', id)
 })
 
-const TABS = ['origin', 'digest', 'audit', 'checklist', 'std', 'changes', 'cases', 'design', 'gate']
+// v5（D19）：audit 并入工作台后 TABS 删 'audit'；'checklist' 键名保留（组件/文案已更名工作台）
+const TABS = ['origin', 'digest', 'checklist', 'std', 'changes', 'cases', 'design', 'gate']
 
 async function load() {
   loading.value = true
@@ -334,22 +347,28 @@ function resolveDocPath(path) {
     <!-- v2.0 线上流水线：质检/标准文档/发布 任务与草稿两态 -->
     <TaskPanel :req-id="card.id" :detail="d" :operator="operator" @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
 
+    <!-- v5（§1.1/D8）tab 分阶段分组：⁞ 前为发布前页签；置灰仅设计/门禁（变更承载 reconcile 通道、
+         用例无守卫，均不置灰）。audit tab 已删除（并入澄清工作台） -->
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" :class="{ on: tab === 'origin' }" @click="switchTab('origin')">原始需求</button>
       <button class="tab" role="tab" :class="{ on: tab === 'digest' }" @click="switchTab('digest')">
         需求摘要<span class="n num" v-if="d.digest">{{ d.frPoints.length }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'audit' }" @click="switchTab('audit')">
-        体检报告<span class="n num" v-if="d.audit">{{ (d.audit.content?.items || []).length }}</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'checklist' }" @click="switchTab('checklist')">
-        澄清清单<span class="n num" v-if="card.status === 'clarifying' || card.status === 'changed'">{{ answered }}/{{ totalQ }}</span><span class="n" v-if="card.status === 'published'">✓</span></button>
+        澄清工作台<span class="n num warn" v-if="totalQ - answered > 0">{{ totalQ - answered }}</span><span class="n" v-else-if="totalQ">✓</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'std' }" @click="switchTab('std')">标准需求文档</button>
+      <div class="tab-phase" title="以下页签在需求发布后开启" aria-hidden="true"></div>
       <button class="tab" role="tab" :class="{ on: tab === 'changes' }" @click="switchTab('changes')">
         变更<span class="n num" v-if="chgCount">{{ chgCount }}</span></button>
       <button class="tab" role="tab" :class="{ on: tab === 'cases' }" @click="switchTab('cases')">
         用例<span class="n num" v-if="d.coverage && d.coverage.backward.total">{{ d.coverage.backward.total }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'design' }" @click="switchTab('design')">设计</button>
-      <button class="tab" role="tab" :class="{ on: tab === 'gate' }" @click="switchTab('gate')">
-        门禁<span class="n num" v-if="gv && gv.round">{{ gv.round.status === 'released' ? '✓' : gv.round.roundNo + '轮' }}</span></button>
+      <button class="tab" role="tab" :class="{ on: tab === 'design', locked: postLocked }" :disabled="postLocked"
+              :title="postLocked ? '发布后开启' : ''" @click="switchTab('design')">
+        设计<AppIcon v-if="postLocked" name="lock" :size="11" class="lock-ico" /></button>
+      <button class="tab" role="tab" :class="{ on: tab === 'gate', locked: postLocked }" :disabled="postLocked"
+              :title="postLocked ? '发布后开启' : ''" @click="switchTab('gate')">
+        门禁<AppIcon v-if="postLocked" name="lock" :size="11" class="lock-ico" />
+        <span class="n num" v-if="!postLocked && gv && gv.round">{{ gv.round.status === 'released' ? '✓' : gv.round.roundNo + '轮' }}</span></button>
+      <span class="tab-hint">体检报告已并入澄清工作台</span>
     </div>
 
     <!-- 原始需求：全文快照（D1）；v1.2 有块结构时结构化渲染（不堆叠/图片/锚点），否则 md 渲染降级；
@@ -366,13 +385,9 @@ function resolveDocPath(path) {
                v-model:digest-md-open="digestMdOpen"
                @locate="locate" @jump="onJump" />
 
-    <!-- 体检报告：需求域分组（D4） + 摘引 + 双向跳转（D5） -->
-    <AuditTab v-if="tab === 'audit'" :audit="d.audit" :groups="auditGroups"
-              @locate="locate" @jump="onJump" />
-
-    <!-- 澄清清单：与体检同序分组（D4） + 摘引 + 回跳（D5），答复交互不变；L 系行可跳回原评论 -->
-    <ChecklistTab v-if="tab === 'checklist'" :req-id="card.id" :items="d.items" :status="card.status"
-                  :groups="checklistGroups"
+    <!-- v5 澄清工作台（audit 已并入，D1）：作答/处置/已定论卡/影响分析/孤儿提示；L 系行可跳回原评论 -->
+    <WorkbenchTab v-if="tab === 'checklist'" :req-id="card.id" :items="d.items" :status="card.status"
+                  :groups="checklistGroups" :audit="d.audit" :concluded-groups="concludedGroups"
                   @locate="locate" @jump="onJump" @open-comment="id => openComments('', id)"
                   @toast="(m, t) => emit('toast', m, t)" />
 

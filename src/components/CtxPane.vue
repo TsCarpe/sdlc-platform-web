@@ -1,13 +1,15 @@
 <script setup>
-// 原文上下文侧栏（DESIGN-v5 §2.1 双栏并置）：工作台右栏常驻原文块渲染，点摘引不切 tab 直接
-// 联动定位。定位协议：anchor 块直达 → needle 回退 → 全失降级静态出处卡（不弹失败 toast，r2 C1）。
-// 跟随开关默认开；关闭后点摘引不打断自由滚动。反向角标（§4）与灯箱复用 DocBlock/ImgViewer 机制。
+// 原文上下文侧栏（DESIGN-v5 §2.1 双栏并置）：工作台右栏常驻原文——**侧栏专用简化平铺渲染**
+//（v5.1 交互修正：回归 demo 契约——纯文本平铺/列表缩进/图片占位行，弃用全宽 DocBlock 的
+// 评论按钮/条款卡/折叠等交互件与原始尺寸图片，窄栏保持干净）。
+// 定位协议：anchor 块直达 → needle 回退 → 全失降级静态出处卡（不弹失败 toast，r2 C1）。
+// 滚动只动侧栏容器自身（原生 scrollIntoView 会连动浏览器窗口）+ 二次校正。
 import { ref, computed, nextTick } from 'vue'
-import DocBlock from './DocBlock.vue'
 import AppIcon from './AppIcon.vue'
 import ImgViewer from './ImgViewer.vue'
 import { fmtRel } from '../time.js'
-import { firstQuote, flashEl, flashNeedle, needlesFor } from '../trace.js'
+import { firstQuote, needlesFor } from '../trace.js'
+import { mdPlain } from '../docview.js'
 import { useDocStructure } from '../composables/doc-structure.js'
 
 const props = defineProps({
@@ -18,18 +20,84 @@ const props = defineProps({
 })
 const emit = defineEmits(['locate', 'clarify', 'open-origin', 'collapse'])
 
-const { docData, childrenByParent, partitionedSections, commentByRef, docToc, mediaList } =
-  useDocStructure(() => props.doc, () => props.reqId)
+const { docData, docBlocks, docToc, mediaList } = useDocStructure(() => props.doc, () => props.reqId)
 
-const box = ref(null)                 // 块渲染容器（needle 定位域）
+const box = ref(null)                 // 平铺渲染容器（定位域）
 const follow = ref(true)              // 跟随定位开关（关闭后自由滚动不被打断）
 const tocOpen = ref(false)
 const fromTip = ref('')               // 顶部「📍 来自 Pxx」sticky 提示（空 = 隐藏）
 const missCard = ref(null)            // 定位全失的静态出处卡（r2 C1）：{ seq, src, quote, ctxText }
 
-// 文档标题块（侧栏头展示；无 title 块退 card.name 由宿主传？——保持自治取 title，缺省不显）
-const docTitle = computed(() =>
-  (props.doc?.content?.blocks || []).find(b => b.type === 'title')?.text || '')
+// ===== 简化平铺渲染（demo 契约）：全量块（除评论）按文档序平铺 =====
+const renderBlocks = computed(() =>
+  (props.doc?.content?.blocks || []).filter(b => b.type !== 'comment'))
+const byId = computed(() => {
+  const m = {}
+  for (const b of docBlocks.value) m[b.id] = b
+  return m
+})
+/** 列表缩进深度（父链计数，封顶 2 级——demo 口径） */
+function depthOf(b) {
+  let d = 0, p = b.parent
+  while (p && byId.value[p]) { d++; p = byId.value[p].parent }
+  return Math.min(d, 2)
+}
+function isHeading(b) { return b.type === 'title' || b.type === 'heading' }
+function isMedia(b) { return b.type === 'image' || b.type === 'whiteboard' }
+/** 列表序号（ordinal 优先，marker 兜底——两代块数据字段并存） */
+function ordinalOf(b) { return (b.ordinal || b.marker || '').replace(/\s+/g, '') }
+function imgCaption(b) {
+  return (b.caption || b.alt || (b.type === 'whiteboard' ? '画板缩略图' : '原文图片')).trim()
+}
+function rowText(b) {
+  const t = mdPlain(b.text)
+  return b.rowLabel && !t ? `§${b.rowLabel}` : (b.rowLabel ? `§${b.rowLabel} ${t}` : t)
+}
+
+const docTitle = computed(() => renderBlocks.value.find(b => b.type === 'title')?.text || '')
+
+// ===== 定位协议（v5.1 重写：手动 scrollTop 只滚侧栏 + 二次校正，不连动浏览器窗口） =====
+function clearHl() {
+  box.value?.querySelectorAll('.ctx-hl').forEach(x => x.classList.remove('ctx-hl'))
+  const m = document.getElementById('ctx-needle')
+  if (m?.parentNode) { m.parentNode.replaceChild(document.createTextNode(m.textContent), m); m.parentNode.normalize() }
+}
+function scrollIntoViewCtx(el) {
+  const body = box.value
+  if (!body || !el) return
+  body.scrollTop = Math.max(0, el.offsetTop - (body.clientHeight - el.offsetHeight) / 2)
+}
+function focusEl(el, seq) {
+  clearHl()
+  el.classList.add('ctx-hl')
+  scrollIntoViewCtx(el)
+  el.classList.remove('ctx-flash'); void el.offsetWidth; el.classList.add('ctx-flash')
+  setTimeout(() => el.classList.remove('ctx-flash'), 2000)
+  showFrom(seq, el)
+  // 二次校正：初次滚动后布局仍可能微调（字体/占位行/懒加载）——稳定后再对齐一次
+  setTimeout(() => { if (el.isConnected && el.classList.contains('ctx-hl')) scrollIntoViewCtx(el) }, 300)
+}
+/** 容器内 needle 文本定位：TreeWalker 匹配 + mark 包裹（平铺纯文本单节点，命中率高） */
+function needleEl(nd) {
+  if (!box.value || !nd) return null
+  const walker = document.createTreeWalker(box.value, NodeFilter.SHOW_TEXT)
+  let node
+  while ((node = walker.nextNode())) {
+    const idx = node.textContent.indexOf(nd)
+    if (idx >= 0) {
+      try {
+        const range = document.createRange()
+        range.setStart(node, idx)
+        range.setEnd(node, idx + nd.length)
+        const mark = document.createElement('mark')
+        mark.id = 'ctx-needle'
+        range.surroundContents(mark)
+        return mark
+      } catch { return null }
+    }
+  }
+  return null
+}
 
 /** 定位入口（宿主 WorkbenchTab 调用）：主动点击摘引/出处 → 侧栏联动；跟随关闭时忽略。
  *  anchor 直达 → needle 回退（摘引→详述出处）→ 全失转静态出处卡（不弹 toast）。 */
@@ -39,18 +107,11 @@ async function locateCtx({ seq = '', src = '', anchor = '', quote = '', ctxText 
   await nextTick()
   if (anchor) {
     const el = box.value?.querySelector(`[data-blk="${anchor}"]`)
-    if (el) {
-      box.value?.querySelectorAll('.ctx-hl').forEach(x => x.classList.remove('ctx-hl'))
-      el.classList.add('ctx-hl')
-      flashEl(el)
-      el.classList.add('ctx-hl')   // flash 动画类与常驻高亮共存（flash 2.3s 后仅剩 ctx-hl）
-      showFrom(seq, el)
-      return
-    }
+    if (el) { focusEl(el, seq); return }
   }
-  const base = firstQuote(quote) || src
-  for (const nd of needlesFor(base)) {
-    if (box.value && await flashNeedle(box.value, nd)) { showFrom(seq, null); return }
+  for (const nd of needlesFor(firstQuote(quote) || src)) {
+    const el = needleEl(nd)
+    if (el) { focusEl(el, seq); return }
   }
   missCard.value = { seq, src, quote, ctxText }
 }
@@ -60,7 +121,8 @@ function showFrom(seq, el) {
 }
 /** 侧栏内目录点击：平滑滚动（不占用壳层 locate 协议——本栏内闭合） */
 function goToc(id) {
-  box.value?.querySelector(`[data-blk="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const el = box.value?.querySelector(`[data-blk="${id}"]`)
+  if (el) scrollIntoViewCtx(el)
 }
 defineExpose({ locateCtx })
 
@@ -108,41 +170,34 @@ function onDocMedia(id) {
       </div>
 
       <template v-if="docData">
-        <template v-for="sec in partitionedSections" :key="sec.key">
-          <section v-if="sec.heading" class="docsec" :class="sec.cls">
-            <DocBlock :block="sec.heading" :children-by-parent="childrenByParent"
-                      :comment-by-ref="commentByRef" :req-id="reqId" :pending-by-block="pendingByBlock"
-                      @clarify="seq => emit('clarify', seq)" @view-media="onDocMedia" />
-            <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.block.id">
-              <table v-if="p.kind === 'table'" class="mini">
-                <thead><tr><th v-for="(h, hi) in p.head" :key="hi">{{ h }}</th></tr></thead>
-                <tbody>
-                  <tr v-for="row in p.rows" :key="row.id" :data-blk="row.id">
-                    <td v-for="(c, ci) in row.cells" :key="ci">{{ c }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <DocBlock v-else :block="p.block" :children-by-parent="childrenByParent"
-                        :comment-by-ref="commentByRef" :req-id="reqId" :pending-by-block="pendingByBlock"
-                        @clarify="seq => emit('clarify', seq)" @view-media="onDocMedia" />
-            </template>
-          </section>
-          <template v-else>
-            <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.block.id">
-              <table v-if="p.kind === 'table'" class="mini">
-                <thead><tr><th v-for="(h, hi) in p.head" :key="hi">{{ h }}</th></tr></thead>
-                <tbody>
-                  <tr v-for="row in p.rows" :key="row.id" :data-blk="row.id">
-                    <td v-for="(c, ci) in row.cells" :key="ci">{{ c }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <DocBlock v-else :block="p.block" :children-by-parent="childrenByParent"
-                        :comment-by-ref="commentByRef" :req-id="reqId" :pending-by-block="pendingByBlock"
-                        @clarify="seq => emit('clarify', seq)" @view-media="onDocMedia" />
-            </template>
+        <!-- 简化平铺（demo 契约）：标题分级 / 段落与列表纯文本（md 行内标记剥除）/
+             图片画板占位行点击灯箱 / 深度缩进。每项带 data-blk 锚点与反向角标。 -->
+        <div v-for="b in renderBlocks" :key="b.id" :data-blk="b.id"
+             class="ctx-blk" :class="{
+               'ctx-h': b.type === 'title',
+               'ctx-sec': b.type === 'heading',
+               'ctx-li': b.type === 'list-item',
+               'ctx-sub': b.type === 'paragraph' && b.subheading,
+               ['ctx-d' + depthOf(b)]: b.type === 'list-item',
+             }">
+          <template v-if="isHeading(b)">{{ mdPlain(b.text) }}</template>
+          <template v-else-if="isMedia(b)">
+            <button class="ctx-imgrow" :title="'点击灯箱查看' + (b.type === 'whiteboard' ? '画板' : '原图')" @click="onDocMedia(b.id)">
+              <AppIcon :name="b.type === 'whiteboard' ? 'layers' : 'image'" :size="13" />
+              <span class="cap">{{ imgCaption(b) }}</span>
+              <span class="hint">查看 ↗</span>
+            </button>
           </template>
-        </template>
+          <template v-else-if="b.type === 'attachment'">
+            <span class="ctx-att"><AppIcon name="paperclip" :size="12" />{{ b.name || '附件' }}<span class="sub" v-if="b.mime"> · {{ b.mime }}</span></span>
+          </template>
+          <template v-else>
+            <b v-if="ordinalOf(b)" class="ord">{{ ordinalOf(b) }}</b><span v-if="ordinalOf(b)"> </span>{{ b.type === 'table-row' ? rowText(b) : (mdPlain(b.text) || '（空块）') }}
+          </template>
+          <button v-if="(pendingByBlock[b.id] || []).length" class="ref-pill"
+                  :title="pendingByBlock[b.id].join(' / ') + ' 待澄清——点击定位左栏对应问题'"
+                  @click="emit('clarify', pendingByBlock[b.id][0])">{{ pendingByBlock[b.id].join('/') }} 待澄清</button>
+        </div>
       </template>
       <div class="ctx-empty" v-else>
         原文以快照形式存在（未导入块结构）——块级定位不可用，可「全宽阅读」查看。

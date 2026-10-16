@@ -1083,7 +1083,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .wb-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start;position:relative}
 .wb-grid:not(.no-ctx){grid-template-columns:minmax(0,1fr) 430px}   /* :style 绑定实时宽度，此为无 JS 时的兜底 */
 .q-col{min-width:0}
-.ctx-col{position:relative}
+.ctx-col{position:relative;align-self:stretch}   /* stretch：拉到 grid 行全高，sticky 才有全程粘滞余量（align-items:start 会让右列收缩成一屏高，滚出即浮窗跟走） */
 .ctx-resizer{position:absolute;left:-9px;top:0;bottom:0;width:7px;cursor:col-resize;border-radius:4px;
   transition:background .15s;z-index:5}
 .ctx-resizer:hover{background:var(--blue-light)}

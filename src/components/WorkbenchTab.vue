@@ -178,19 +178,34 @@ function autoGrow(e) {
 }
 
 // ===== v5 选择题化作答（§2.3，D16/D18）：点选即 PUT + per-seq 串行发送链（最后值胜） =====
-// picked/extra 为独立本地态（textarea v-model 永不直绑 answer，r4#12）；一期 answer 写纯文本
-// 【A】选项全文（+（补充：…））——二期结构化上线前所有下游消费的仍是合法纯文本（D18 零污染）。
+// picked/extra 为独立本地态（textarea 永不直绑 answer，r4#12）；二期结构化上线（§8「二期切换」）：
+// 点选项写 kind=option JSON（optionKey+选项全文快照+extra 全量，D-A/D5），无 options 卡与纯补充
+// 维持纯文本——下游一律消费服务端 answerText（D15 单一解构出口），本地回写 display 与之同构。
 const picked = reactive({})     // seq → optionKey（PUT 载荷内部标识——永不做回显匹配键，r4#11）
 const extra = reactive({})      // seq → 补充说明文本（「以上都不对」自由输入）
 const extraOpen = reactive({})  // seq → 补充说明 textarea 展开
 
-/** PUT 装配（r4#12 全量装配、来源装配）：任一 PUT（点选或 blur）都装配完整 answer */
-function assembleAnswer(it) {
+/** PUT 载荷装配（r4#12 全量装配、来源装配）：点选项 → 结构化 JSON；纯补充/无 options → 纯文本（D-A） */
+function assemblePayload(it) {
   const key = picked[it.seq]
   if (key) {
     const opt = (it.options || []).find(o => o.key === key)
-    const head = opt ? `【${key}】${opt.text}` : `【${key}】`
+    const payload = { kind: 'option', optionKey: key, optionText: opt ? opt.text : '' }
     const ex = (extra[it.seq] || '').trim()
+    if (ex) payload.extra = ex
+    return JSON.stringify(payload)
+  }
+  return (extra[it.seq] || '').trim()
+}
+
+/** 展示文本装配：与服务端 answer_text_of 同构（optionText[＋（补充：extra）]，无 key 前缀）——
+ *  本地回写的 answerText 必须与重拉后服务端解构值逐字一致，否则出现「回写后闪变」 */
+function assembleDisplay(it) {
+  const key = picked[it.seq]
+  if (key) {
+    const opt = (it.options || []).find(o => o.key === key)
+    const ex = (extra[it.seq] || '').trim()
+    const head = opt ? opt.text : ''
     return ex ? `${head}（补充：${ex}）` : head
   }
   return (extra[it.seq] || '').trim()
@@ -209,37 +224,47 @@ function enqueuePut(seq, makeBody) {
   return putChain[seq]
 }
 
-/** 点选即 PUT（无 debounce）：body 显式携带 {answer, status:'answered'}，不依赖服务端按非空推断 */
+/** 点选即 PUT（无 debounce）：body 显式携带 {answer, status:'answered'}，不依赖服务端按非空推断。
+ *  发送时捕获（仅此路径，r4）：enqueue 前装配 payload+display 常量，makeBody 与回调共用——
+ *  排队等待期间 extra/picked 再变，回写仍是「= 发送值」（零分歧窗口） */
 function pickOption(it, key) {
   if (disposeDlg.value) return            // 处置弹窗打开——选项点击抑制（互斥条款 ①）
   if (it.status === 'rejected' || it.status === 'deferred') return
   picked[it.seq] = key
+  const payload = assemblePayload(it)     // 捕获时点装配（结构化 JSON）
+  const display = assembleDisplay(it)     // 与服务端 answerText 同构的展示文本
   ansState.value[it.seq] = 'saving'
-  enqueuePut(it.seq, () => ({ answer: assembleAnswer(it), status: 'answered' }))
+  enqueuePut(it.seq, () => ({ answer: payload, status: 'answered' }))
     .then(() => {
-      it.answer = assembleAnswer(it)      // 已答快照本地回写（与发送值同源装配）
+      it.answer = payload                 // 已答快照本地回写（= 发送值，捕获语义）
+      it.answerText = display
       it.status = 'answered'
-      originAnswers.value[it.seq] = it.answer
+      originAnswers.value[it.seq] = payload
       ansState.value[it.seq] = 'saved'
       setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
     })
     .catch(e => { delete ansState.value[it.seq]; emit('toast', '保存失败：' + e.message, 'err') })
 }
 
-/** 「以上都不对」补充说明失焦保存：沿用 savingSeqs 在途丢弃语义、不进发送链（§2.3）；
- *  装配仍是全量（picked 存在则 【A】…（补充：…）） */
+/** 「以上都不对」补充说明失焦保存：沿用 savingSeqs 在途丢弃语义、不进发送链（§2.3——
+ *  单次装配直发无 makeBody 延迟，无捕获必要，r4）；装配仍是全量（picked 存在则结构化含 extra）。
+ *  幂等短路双基准（payload 体制）：originAnswers 存 payload 形态（pickOption 回写）、
+ *  it.answerText/answer 是已答快照——各形态对齐比较，不做跨形态比对 */
 async function saveExtra(it) {
   if (disposeDlg.value) return            // 处置弹窗打开——抑制该题 blur 保存（互斥条款 ②）
-  const val = assembleAnswer(it)
-  if (val === (originAnswers.value[it.seq] ?? '') || val === (it.answer || '')) return
+  const payload = assemblePayload(it)
+  const display = assembleDisplay(it)
+  if (payload === (originAnswers.value[it.seq] ?? '')
+      || payload === (it.answer || '') || display === (it.answerText ?? '')) return
   if (savingSeqs.has(it.seq)) return
   savingSeqs.add(it.seq)
   ansState.value[it.seq] = 'saving'
   try {
-    await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: val })
-    it.answer = val
-    it.status = val.trim() ? 'answered' : 'pending'
-    originAnswers.value[it.seq] = val
+    await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: payload })
+    it.answer = payload
+    it.answerText = display
+    it.status = payload.trim() ? 'answered' : 'pending'
+    originAnswers.value[it.seq] = payload
     ansState.value[it.seq] = 'saved'
     setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
   } catch (e) {
@@ -250,18 +275,51 @@ async function saveExtra(it) {
   }
 }
 
+// ===== 无 options 卡草稿体制（v1.6 二期）：draft/dirty + 懒播种 + items 替换失效重播种 =====
+// textarea 不再直绑 it.answer（answer 可能是 JSON 存储态，输入面必须是展示文本）；draft 播种自
+// answerText（服务端解构值，旧数据无此键回退 answer 纯文本）。dirty = 本地编辑过——外部
+// load() 整体替换 items（新对象同 seq）时，未 dirty 的 draft 跟随服务端真值重播种，dirty 的
+// 保留本地编辑（防外部刷新覆盖正在输入；防 UI 长期显示旧值——机制#7）
+const drafts = reactive({})     // seq → 草稿文本（无 options 卡作答输入）
+const dirty = reactive({})      // seq → true 本地编辑过（@input 置位；保存成功/重开清除）
+
+function seedOf(it) { return it.answerText ?? (it.answer || '') }
+function draftOf(it) {          // 懒播种访问器（模板 :value 用——函数式访问器不能 v-model）
+  if (!(it.seq in drafts)) drafts[it.seq] = seedOf(it)
+  return drafts[it.seq]
+}
+function onDraftInput(it, e) {
+  drafts[it.seq] = e.target.value
+  dirty[it.seq] = true
+}
+
+// items 整体替换（ReqDetail load() 重建数组）→ 未 dirty 的 draft+originAnswers 一并失效重播种
+watch(() => props.items, (items) => {
+  for (const it of items) {
+    if (!dirty[it.seq]) {
+      drafts[it.seq] = seedOf(it)
+      originAnswers.value[it.seq] = seedOf(it)
+    }
+  }
+})
+
 const savingSeqs = new Set()   // per-seq 在途集：失焦重入防并发同 seq 双 PUT
 async function saveAnswer(it) {
   if (disposeDlg.value) return            // 处置互斥：弹窗打开期间抑制失焦保存（§2.3）
-  if ((it.answer || '') === (originAnswers.value[it.seq] ?? '')) return
+  if (!(it.seq in originAnswers.value)) originAnswers.value[it.seq] = seedOf(it)
+  const draft = drafts[it.seq] ?? ''      // 比较与发送对象一律是 draft（非 it.answer 存储态）
+  if (draft === (originAnswers.value[it.seq] ?? '')) return
   if (savingSeqs.has(it.seq)) return
   savingSeqs.add(it.seq)
-  const sent = it.answer   // 发送时值快照——响应回来时输入已再变则不回写（乱序防旧覆新）
+  const sent = draft   // 发送时值快照——响应回来时输入已再变则不回写（乱序防旧覆新，比较对象=draft）
   ansState.value[it.seq] = 'saving'
   try {
     await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: sent })
-    if ((it.answer || '') === sent) {
+    if ((drafts[it.seq] ?? '') === sent) {
+      it.answer = sent                   // 无 options 卡 = 纯文本作答：answer 与 answerText 同值
+      it.answerText = sent
       originAnswers.value[it.seq] = sent
+      dirty[it.seq] = false
       it.status = sent.trim() ? 'answered' : 'pending'   // 后端同口径回写，本地即时反映
       ansState.value[it.seq] = 'saved'
       setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
@@ -298,15 +356,21 @@ async function confirmDispose() {
   }
 }
 
-/** 重开：驳回/挂起/已答行转回待确认（后端保留已填 answer）；选项卡清 picked/extra——
- *  「重新作答 = 清空重选，不预选」（r4#11：不做选中态恢复，optionKey 不做回显匹配键） */
+/** 重开：驳回/挂起/已答行转回待确认（后端保留已填 answer——PUT body 空串即回填语义）；选项卡清
+ *  picked/extra，草稿重置 = 赋新种子值（非删键——删键会让下次访问懒播种读旧快照）+ 本地
+ *  it.answer/answerText 清空（「重新作答 = 清空重选，不预选」，r4#11） */
 async function reopen(it) {
   try {
     await enqueuePut(it.seq, () => ({ answer: it.answer || '', status: 'pending' }))
     it.status = 'pending'
     it.note = ''
+    it.answer = ''
+    it.answerText = ''
     delete picked[it.seq]
     delete extra[it.seq]
+    drafts[it.seq] = ''
+    originAnswers.value[it.seq] = ''
+    dirty[it.seq] = false
     emit('toast', `已重开 ${it.seq}，可继续作答`)
   } catch (e) {
     emit('toast', '重开失败：' + e.message, 'err')
@@ -437,7 +501,7 @@ async function reopen(it) {
           <template v-else-if="it.status === 'deferred'">
             <span class="sub">转遗留假设{{ it.note ? '：' + it.note : '' }}</span>
           </template>
-          <template v-else>{{ it.answer || '（未处置，按原需求执行）' }}</template>
+          <template v-else>{{ (it.answerText ?? it.answer) || '（未处置，按原需求执行）' }}</template>
         </div>
         <div class="ans" v-else-if="(status === 'clarifying' || status === 'changed') && (it.status === 'rejected' || it.status === 'deferred')">
           <span class="lb">{{ dispLabel(it) }}<span v-if="it.note" class="sub">（{{ it.note }}）</span></span>
@@ -456,7 +520,7 @@ async function reopen(it) {
             <span class="saved" v-if="ansState[it.seq] === 'saved'"><AppIcon name="check-circle" :size="11" />已保存</span>
             <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
             <div class="done-ans">
-              <span class="txt">{{ it.answer }}</span>
+              <span class="txt">{{ it.answerText ?? it.answer }}</span>
               <button class="btn small link redo" @click="reopen(it)">重新作答</button>
             </div>
           </template>
@@ -487,13 +551,14 @@ async function reopen(it) {
           </template>
         </div>
         <div class="ans" v-else-if="status === 'clarifying' || status === 'changed'">
-          <span class="lb" :class="{ warn: !it.answer }">{{ it.answer ? '答复（可修改）' : '待答复' }}</span>
+          <!-- 标签判定读 draft（输入面）——it.answer 是存储态（二期可为 JSON），不反映输入现场 -->
+          <span class="lb" :class="{ warn: !draftOf(it) }">{{ draftOf(it) ? '答复（可修改）' : '待答复' }}</span>
           <span class="saved" v-if="ansState[it.seq] === 'saved'"><AppIcon name="check-circle" :size="11" />已保存</span>
           <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
           <!-- 变更确认重开的项：原答复在 note（「因变更单#N 重开，原答复：…」）——PM 需看到再重新作答 -->
           <div class="sub" v-if="it.status === 'pending' && it.note" style="width:100%;margin:2px 0">{{ it.note }}</div>
-          <textarea v-model="it.answer" :name="'clf-answer-' + it.seq" :aria-label="it.seq + ' 作答'" :placeholder="'PM 在此作答…'"
-            @blur="saveAnswer(it)" @input="autoGrow"></textarea>
+          <textarea :value="draftOf(it)" :name="'clf-answer-' + it.seq" :aria-label="it.seq + ' 作答'" :placeholder="'PM 在此作答…'"
+            @blur="saveAnswer(it)" @input="e => { onDraftInput(it, e); autoGrow(e) }"></textarea>
           <div class="ans-ops">
             <button class="btn small link" title="认定不是问题：不进标准文档定稿" @click="askDispose(it, 'rejected')">驳回（不是问题）</button>
             <button class="btn small link" title="本期不处理：合成时转遗留假设" @click="askDispose(it, 'deferred')">挂起（转遗留假设）</button>

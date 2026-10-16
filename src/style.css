@@ -996,13 +996,17 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .iv-mask{position:fixed; inset:0; z-index:220; background:rgba(10,13,22,.88);
   display:flex; flex-direction:column; animation:fade-in .14s ease-out}
 .iv-top{display:flex; align-items:center; gap:8px; padding:12px 16px}
+.iv-top .spacer{flex:1}   /* v5.2：漏定义致工具条按钮全挤左侧（关闭钮被顶栏盖住点不到的伴因） */
 .iv-count{color:rgba(255,255,255,.85); font-size:12.5px; font-variant-numeric:tabular-nums}
-.iv-stage{flex:1; min-height:0; display:flex; overflow:auto; padding:0 72px 4px}
+.iv-top .iv-close{font-weight:600}   /* 关闭主出口加重（点击图片/遮罩为辅出口） */
+.iv-stage{position:relative; flex:1; min-height:0; display:flex; overflow:auto; padding:0 72px 4px}
+.iv-loading{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:rgba(255,255,255,.65); font-size:13px; letter-spacing:.5px; pointer-events:none}
 /* margin:auto 而非 justify-content:center——1:1 大图溢出时左右/上下双向可滚（flex 居中会裁掉起点） */
 .iv-stage img{margin:auto; max-width:100%; max-height:100%; object-fit:contain; border-radius:4px;
-  box-shadow:0 8px 40px rgba(0,0,0,.5); cursor:zoom-in; transition:opacity .15s}
+  box-shadow:0 8px 40px rgba(0,0,0,.5); cursor:pointer; transition:opacity .15s}   /* 点击=关闭 */
 .iv-stage img.loading{opacity:.25}
-.iv-stage.raw img{max-width:none; max-height:none; cursor:zoom-out}
+.iv-stage.raw img{max-width:none; max-height:none}
 .iv-nav{position:absolute; top:50%; transform:translateY(-50%); width:40px; height:56px;
   display:flex; align-items:center; justify-content:center; border:0; border-radius:10px;
   background:rgba(255,255,255,.1); color:#fff; cursor:pointer}
@@ -1012,6 +1016,10 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .iv-nav.next{right:14px}
 .iv-cap{display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap;
   padding:10px 16px 14px; color:rgba(255,255,255,.88); font-size:12.5px}
+.iv-cap .iv-cap-txt{max-width:72%; text-align:center}
+/* v5.2：AI 图注动辄两三百字整条撑爆舞台——默认 2 行折叠，点击图注展开/收起 */
+.iv-cap .iv-cap-txt.clamp{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer}
+.iv-cap .iv-cap-txt{cursor:pointer}
 .iv-cap .iv-hint{color:rgba(255,255,255,.45); font-size:11.5px}
 
 /* ---- v5 澄清工作台（DESIGN-v5 §1/§2）：tab 分阶段分组 / 工作台顶条 / 已定论块 / 影响分析 ---- */
@@ -1118,14 +1126,23 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 @keyframes ctxflash{0%{background:var(--yellow)}18%{background:var(--yellow)}100%{background:var(--yellow-light)}}
 .ctx-blk.ctx-flash{animation:ctxflash 2s ease}
 .ctx-blk.ctx-hl.ctx-flash{animation:ctxflash 2s ease}
-/* 图片/画板占位行（不渲染原图——窄栏只留缩略行，点击灯箱看大图） */
-.ctx-imgrow{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--line);
-  border-radius:8px;background:var(--bg-soft);padding:7px 10px;cursor:pointer;text-align:left;
+/* 图片/画板缩略图卡（v5.2 自占位行升级：AI 长图注零区分度——左侧小缩略图直连媒体端点，
+   失败回退图标占位；点击开灯箱看大图，窄栏不渲染原图的口径不变） */
+.ctx-imgrow{display:flex;align-items:center;gap:10px;width:100%;border:1px solid var(--line);
+  border-radius:8px;background:var(--canvas);padding:6px 8px 6px 6px;cursor:pointer;text-align:left;
   color:var(--charcoal);font-size:12px;font-family:inherit}
 .ctx-imgrow:hover{border-color:var(--blue-border);background:var(--blue-light)}
-.ctx-imgrow .cap{flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  overflow:hidden;line-height:1.5}
+.ctx-imgrow .thumb{flex:none;width:88px;height:54px;border-radius:6px;background:var(--bg-soft);
+  border:1px solid var(--line-soft);display:flex;align-items:center;justify-content:center;
+  overflow:hidden;color:var(--faint)}
+.ctx-imgrow .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.ctx-imgrow .cap{flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;
+  overflow:hidden;line-height:1.5;text-align:left}
 .ctx-imgrow .hint{flex:none;font-size:10.5px;color:var(--primary)}
+/* v5.2 侧栏链接可点（richHtml 渲染的 <a>）——长 URL 换行防溢出 */
+.ctx-blk a,.ctx-rich a{color:var(--primary);text-decoration:underline;text-underline-offset:2px;
+  word-break:break-all;overflow-wrap:anywhere}
+.ctx-blk a:hover,.ctx-rich a:hover{opacity:.75}
 .ctx-att{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--slate)}
 .ctx-miss{margin:10px 14px;border:1px dashed var(--line-strong);border-radius:9px;background:var(--bg-soft);
   padding:10px 12px;font-size:12px;color:var(--charcoal);display:flex;flex-direction:column;gap:6px}

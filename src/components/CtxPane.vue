@@ -1,10 +1,13 @@
 <script setup>
 // 原文上下文侧栏（DESIGN-v5 §2.1 双栏并置）：工作台右栏常驻原文——**侧栏专用简化平铺渲染**
-//（v5.1 交互修正：回归 demo 契约——纯文本平铺/列表缩进/图片占位行，弃用全宽 DocBlock 的
-// 评论按钮/条款卡/折叠等交互件与原始尺寸图片，窄栏保持干净）。
+//（v5.1 交互修正：回归 demo 契约——纯文本平铺/列表缩进/图片行，弃用全宽 DocBlock 的
+// 评论按钮/条款卡/折叠等交互件与原始尺寸图片，窄栏保持干净；
+// v5.2：图片行升级缩略图卡（AI 长图注零区分度），文本块支持链接可点（裸 URL/ md 链接）。
 // 定位协议：anchor 块直达 → needle 回退 → 全失降级静态出处卡（不弹失败 toast，r2 C1）。
 // 滚动只动侧栏容器自身（原生 scrollIntoView 会连动浏览器窗口）+ 二次校正。
-import { ref, computed, nextTick } from 'vue'
+import { ref, reactive, computed, nextTick } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
 import ImgViewer from './ImgViewer.vue'
 import { fmtRel } from '../time.js'
@@ -44,6 +47,23 @@ function depthOf(b) {
 }
 function isHeading(b) { return b.type === 'title' || b.type === 'heading' }
 function isMedia(b) { return b.type === 'image' || b.type === 'whiteboard' }
+// ===== v5.2 图片缩略图（占位行升级：AI 长图注零区分度，23 图全是「图片展示的是…」开头） =====
+// 缩略图直接走现成媒体端点（与 mediaList 同源），加载失败回退图标占位行（无图块同）
+const imgErr = reactive(new Set())   // 加载失败的块 id
+function thumbUrl(b) {
+  return `/api/requirements/${props.reqId}/media/${b.media}`
+}
+// ===== v5.2 链接可点（正文/行块）：裸 URL 自动 linkify + md 链接语法渲染；无链接块走 mdPlain 快路径 =====
+const RICH_RE = /\[[^\]]*\]\([^)]*\)|https?:\/\//
+/** 裸 URL → md 链接：一次遍历，已是 md 链接的原样保留（防 (url) 内的 url 被二次包装）；
+ *  URL 截止于空白/括号引号/常见中文标点（原型分享链后紧跟中文句读的场景） */
+const URL_RE = /(\[[^\]]*\]\([^)]*\))|(https?:\/\/[^\s<>()"'，。；、）】」』]+)/g
+function richHtml(b) {
+  const raw = b.type === 'table-row' ? rowText(b) : (b.text || '')
+  if (!RICH_RE.test(raw)) return ''
+  const md = raw.replace(URL_RE, (m, mdLink) => mdLink || `[${m}](${m})`)
+  return DOMPurify.sanitize(marked.parseInline(md)).replace(/<a /g, '<a target="_blank" rel="noopener" ')
+}
 /** 列表序号（ordinal 优先，marker 兜底——两代块数据字段并存） */
 function ordinalOf(b) { return (b.ordinal || b.marker || '').replace(/\s+/g, '') }
 function imgCaption(b) {
@@ -183,7 +203,11 @@ function onDocMedia(id) {
           <template v-if="isHeading(b)">{{ mdPlain(b.text) }}</template>
           <template v-else-if="isMedia(b)">
             <button class="ctx-imgrow" :title="'点击灯箱查看' + (b.type === 'whiteboard' ? '画板' : '原图')" @click="onDocMedia(b.id)">
-              <AppIcon :name="b.type === 'whiteboard' ? 'layers' : 'image'" :size="13" />
+              <span class="thumb">
+                <img v-if="b.media && !imgErr.has(b.id)" :src="thumbUrl(b)" :alt="imgCaption(b)"
+                     loading="lazy" @error="imgErr.add(b.id)" />
+                <AppIcon v-else :name="b.type === 'whiteboard' ? 'layers' : 'image'" :size="16" />
+              </span>
               <span class="cap">{{ imgCaption(b) }}</span>
               <span class="hint">查看 ↗</span>
             </button>
@@ -192,7 +216,7 @@ function onDocMedia(id) {
             <span class="ctx-att"><AppIcon name="paperclip" :size="12" />{{ b.name || '附件' }}<span class="sub" v-if="b.mime"> · {{ b.mime }}</span></span>
           </template>
           <template v-else>
-            <b v-if="ordinalOf(b)" class="ord">{{ ordinalOf(b) }}</b><span v-if="ordinalOf(b)"> </span>{{ b.type === 'table-row' ? rowText(b) : (mdPlain(b.text) || '（空块）') }}
+            <b v-if="ordinalOf(b)" class="ord">{{ ordinalOf(b) }}</b><span v-if="ordinalOf(b)"> </span><span v-if="richHtml(b)" class="ctx-rich" v-html="richHtml(b)"></span><template v-else>{{ b.type === 'table-row' ? rowText(b) : (mdPlain(b.text) || '（空块）') }}</template>
           </template>
           <button v-if="(pendingByBlock[b.id] || []).length" class="ref-pill"
                   :title="pendingByBlock[b.id].join(' / ') + ' 待澄清——点击定位左栏对应问题'"

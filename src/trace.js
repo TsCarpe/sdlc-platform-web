@@ -156,5 +156,8 @@ export function flashEl(el) {
   el.scrollIntoView({ behavior: 'smooth', block })
   el.classList.add('flash')
   setTimeout(() => el.classList.remove('flash'), 2300)
+  // 二次校正（v5.2）：冷启动首次跳转时 smooth 动画会被加载期布局变化/滚动恢复截断在半途
+  // （实测反向角标 P25 停在视口外、flash 照播但不可见，二次点击才到位）——稳定后再对齐一次
+  setTimeout(() => { if (el.isConnected) el.scrollIntoView({ behavior: 'smooth', block }) }, 300)
   return true
 }

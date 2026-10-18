@@ -12,7 +12,9 @@ import { render } from '../render.js'
 import { firstQuote, flashEl, pidOf } from '../trace.js'
 import { isDone, isPending, dispLabel } from '../disposition.js'
 import { lvlLabel, lvlCls } from '../levels.js'
+import { layerShort, layerFull } from '../layers.js'
 import { useGrpCollapse } from '../composables/group-collapse.js'
+import { useModalFocus } from '../composables/modal-focus.js'
 
 const props = defineProps({
   reqId: { type: String, required: true },
@@ -77,9 +79,13 @@ const pendingByBlock = computed(() => {
 })
 const ctxRef = ref(null)
 const ctxW = ref(Math.min(760, Math.max(320, +localStorage.getItem('wb.ctxW') || 430)))
-const ctxCollapsed = ref(false)
+// P1-13：<1200px 右栏默认收起（抽屉式），宽屏保持既有默认展开
+const narrowCtx = typeof window !== 'undefined' && !!window.matchMedia
+  && window.matchMedia('(max-width: 1199px)').matches
+const ctxCollapsed = ref(narrowCtx)
+// P1-13：宽度走 CSS 变量——媒体查询可覆盖（行内 gridTemplateColumns 会压过断点）
 const gridStyle = computed(() => hasDoc.value && !ctxCollapsed.value
-  ? { gridTemplateColumns: `minmax(0,1fr) ${ctxW.value}px` } : null)
+  ? { '--ctx-w': ctxW.value + 'px' } : null)
 
 let drag = null   // { x0, w0 } —— 拖宽会话（document 级 move/up）
 function startDrag(e) {
@@ -385,6 +391,8 @@ async function saveAnswer(it) {
 
 // ===== v2.2 处置通道（DESIGN-v2.2 D21）：驳回/挂起 + 重开 =====
 const disposeDlg = ref(null)   // { seq, status, note } —— 理由弹窗状态
+const disposeEl = ref(null)    // U-11：焦点圈定 + Esc
+useModalFocus(computed(() => !!disposeDlg.value), disposeEl, () => { disposeDlg.value = null })
 
 function askDispose(it, status) {
   disposeDlg.value = { seq: it.seq, status, note: '', title: status === 'rejected' ? '驳回问题（认定不是问题，不进标准文档定稿）' : '挂起问题（转入遗留假设，本期不处理）', required: status === 'rejected' }
@@ -455,13 +463,13 @@ async function reopen(it) {
           <div class="rdy-score">
             <div class="n">{{ rdyPct }}%</div>
             <div class="l">就绪度</div>
-            <div class="go">处置完全部问题<br>即可合成标准文档</div>
           </div>
           <div class="dims">
             <button v-for="d in layerStats" :key="d.key" class="dim" :class="{ on: dimFilter === d.key }"
-                    :title="d.layer ? '第 ' + d.layer + ' 缺陷层' : '未携带分层（v1.6 前存量）'"
+                    :title="(d.layer ? layerFull(d.layer) : '未携带分层（v1.6 前存量）') + '｜点击过滤'"
                     @click="dimFilter = dimFilter === d.key ? '' : d.key">
-              <span class="dim-name">{{ d.layer ? 'L' + d.layer : '未分类' }}</span>
+              <span class="dim-name" v-if="d.layer"><span class="ln">L{{ d.layer }}</span>{{ layerShort(d.layer) }}</span>
+              <span class="dim-name" v-else>未分类</span>
               <span class="dim-bar"><span class="dim-fill" :style="{ width: (d.total ? Math.round(d.done / d.total * 100) : 0) + '%' }"></span></span>
               <span class="dim-cnt"><template v-if="d.total - d.done"><b>{{ d.total - d.done }}</b> 待澄清</template><template v-else><span class="ok">✓ 澄清完成</span></template></span>
             </button>
@@ -470,8 +478,12 @@ async function reopen(it) {
       </div>
       <div class="wb-prog" :class="{ amber: status === 'changed' }">
         <div class="row1">
-          <span class="lbl"><AppIcon name="info" :size="13" />{{ status === 'changed' ? '变更重开项重新处置' : '逐题作答（点选即保存）｜不是问题可驳回、本期不处理可挂起' }}</span>
-          <span class="n"><b>{{ answered }}</b>/{{ totalQ }}</span>
+          <span class="lbl" title="逐题作答（点选即保存）；不是问题可驳回，本期不处理可挂起">
+            <AppIcon name="info" :size="13" />
+            <b class="ttl">{{ status === 'changed' ? '变更重开项重新处置' : '澄清进度' }}</b>
+            <span class="hint">逐题作答 · 点选即保存</span>
+          </span>
+          <span class="n"><b>{{ answered }}</b><span class="tot">/{{ totalQ }}</span></span>
         </div>
         <div class="bar"><div class="bar-fill" :style="{ width: prog + '%' }"></div></div>
         <div class="btns">
@@ -689,7 +701,7 @@ async function reopen(it) {
 
     <!-- v2.2 处置理由弹窗（DESIGN-v2.2 D21）：驳回必填 / 挂起可选 -->
     <div class="modal-mask" v-if="disposeDlg" @click.self="disposeDlg = null">
-      <div class="modal" role="dialog" aria-modal="true" style="width:460px">
+      <div ref="disposeEl" class="modal" role="dialog" aria-modal="true" tabindex="-1" style="width:460px">
         <div class="modal-h">
           <b>{{ disposeDlg.title }}</b>
           <button class="x" @click="disposeDlg = null">✕</button>
@@ -705,4 +717,8 @@ async function reopen(it) {
       </div>
     </div>
   </template>
+
+  <!-- P1-13：<1200px 右栏为抽屉——点遮罩收起（桌面端 CSS 隐藏） -->
+  <button class="ctx-backdrop" v-if="hasDoc && !ctxCollapsed" @click="ctxCollapsed = true"
+          aria-label="关闭原文上下文"></button>
 </template>

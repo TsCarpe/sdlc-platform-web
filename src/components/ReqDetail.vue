@@ -2,7 +2,7 @@
 // 需求详情壳（AUDIT D6-2 拆分后）：数据装载（load/loadExt）+ 全链主按钮 CTA + tab 分发 +
 // 三个跨 tab 协议 composable（分组折叠 / 追溯跳转 / 目录滚动）。五个内容 tab 为纯展示子组件
 // （Origin/Digest/Audit/Checklist/Std，props + emit + 局部 DOM expose），cases/design/gate 已有子组件。
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import EmptyState from './EmptyState.vue'
@@ -76,7 +76,9 @@ const concludedGroups = computed(() => {
 
 // ===== 跨 tab 协议：分组折叠（provide 给各 tab inject；audit 键 = 已定论分组——revealGrpFor
 // 的 audit 跳转解析域为 check ∪ 已定论，r4 二审#13） =====
-const grp = provideGroupCollapse({ fr: frGroups, audit: concludedGroups, check: checklistGroups })
+// P1-11：reqId 用于按需求持久化用户折叠偏好（首次进入由 composable 展开含 pending 的组）
+const grp = provideGroupCollapse({ fr: frGroups, audit: concludedGroups, check: checklistGroups },
+                                 { reqId: props.reqId })
 
 // tab 组件 ref：定位/滚动协议需要 tab 内部容器与标题序列（defineExpose）
 const originTabRef = ref(null)
@@ -116,6 +118,26 @@ const { activeHead, showTop, goToc, toTop } = useTocScroll({
 
 // v5（D19）：audit 并入工作台后 TABS 删 'audit'；'checklist' 键名保留（组件/文案已更名工作台）
 const TABS = ['origin', 'digest', 'checklist', 'std', 'changes', 'cases', 'design', 'gate']
+
+// ===== U-10：页签 ARIA + roving tabindex + ←/→/Home/End =====
+const tabDisabled = key => (key === 'design' || key === 'gate') && postLocked.value
+function enabledTabKeys() { return TABS.filter(k => !tabDisabled(k)) }
+async function onTabKey(e, key) {
+  const keys = enabledTabKeys()
+  const i = keys.indexOf(key)
+  if (i < 0) return
+  let next = ''
+  if (e.key === 'ArrowRight') next = keys[(i + 1) % keys.length]
+  else if (e.key === 'ArrowLeft') next = keys[(i - 1 + keys.length) % keys.length]
+  else if (e.key === 'Home') next = keys[0]
+  else if (e.key === 'End') next = keys[keys.length - 1]
+  if (!next) return
+  e.preventDefault()
+  await switchTab(next)
+  await nextTick()
+  // 切页签被守卫取消（变更单未保存编辑）时焦点留在原页签
+  document.getElementById('tab-' + (tab.value === next ? next : tab.value))?.focus()
+}
 
 async function load() {
   loading.value = true
@@ -352,32 +374,61 @@ function resolveDocPath(path) {
       <button class="btn small" @click="switchTab('changes')">查看变更单</button>
     </div>
 
-    <!-- v2.0 线上流水线：质检/标准文档/发布 任务与草稿两态 -->
-    <TaskPanel :req-id="card.id" :detail="d" :operator="operator" @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
+    <!-- P1-12（方案2）：完整面板保留在页签之前；展开态由 CSS 限高 + 内部滚动，不把正文推离首屏 -->
+    <TaskPanel :req-id="card.id" :detail="d" :operator="operator"
+               @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
 
     <!-- v5（§1.1/D8）tab 分阶段分组：⁞ 前为发布前页签；置灰仅设计/门禁（变更承载 reconcile 通道、
          用例无守卫，均不置灰）。audit tab 已删除（并入澄清工作台） -->
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" :class="{ on: tab === 'origin' }" @click="switchTab('origin')">原始需求</button>
-      <button class="tab" role="tab" :class="{ on: tab === 'digest' }" @click="switchTab('digest')">
+    <div class="tabs" role="tablist" aria-label="需求页签">
+      <button class="tab" role="tab" id="tab-origin" :aria-selected="tab === 'origin' ? 'true' : 'false'"
+              aria-controls="tabpanel-origin" :tabindex="tab === 'origin' ? 0 : -1"
+              :class="{ on: tab === 'origin' }" @click="switchTab('origin')"
+              @keydown="onTabKey($event, 'origin')">原始需求</button>
+      <button class="tab" role="tab" id="tab-digest" :aria-selected="tab === 'digest' ? 'true' : 'false'"
+              aria-controls="tabpanel-digest" :tabindex="tab === 'digest' ? 0 : -1"
+              :class="{ on: tab === 'digest' }" @click="switchTab('digest')"
+              @keydown="onTabKey($event, 'digest')">
         需求摘要<span class="n num" v-if="d.digest">{{ d.frPoints.length }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'checklist' }" @click="switchTab('checklist')">
+      <button class="tab" role="tab" id="tab-checklist" :aria-selected="tab === 'checklist' ? 'true' : 'false'"
+              aria-controls="tabpanel-checklist" :tabindex="tab === 'checklist' ? 0 : -1"
+              :class="{ on: tab === 'checklist' }" @click="switchTab('checklist')"
+              @keydown="onTabKey($event, 'checklist')">
         澄清工作台<span class="n num warn" v-if="totalQ - answered > 0">{{ totalQ - answered }}</span><span class="n" v-else-if="totalQ">✓</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'std' }" @click="switchTab('std')">标准需求文档</button>
+      <button class="tab" role="tab" id="tab-std" :aria-selected="tab === 'std' ? 'true' : 'false'"
+              aria-controls="tabpanel-std" :tabindex="tab === 'std' ? 0 : -1"
+              :class="{ on: tab === 'std' }" @click="switchTab('std')"
+              @keydown="onTabKey($event, 'std')">标准需求文档</button>
       <div class="tab-phase" title="以下页签在需求发布后开启" aria-hidden="true"></div>
-      <button class="tab" role="tab" :class="{ on: tab === 'changes' }" @click="switchTab('changes')">
+      <button class="tab" role="tab" id="tab-changes" :aria-selected="tab === 'changes' ? 'true' : 'false'"
+              aria-controls="tabpanel-changes" :tabindex="tab === 'changes' ? 0 : -1"
+              :class="{ on: tab === 'changes' }" @click="switchTab('changes')"
+              @keydown="onTabKey($event, 'changes')">
         变更<span class="n num" v-if="chgCount">{{ chgCount }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'cases' }" @click="switchTab('cases')">
+      <button class="tab" role="tab" id="tab-cases" :aria-selected="tab === 'cases' ? 'true' : 'false'"
+              aria-controls="tabpanel-cases" :tabindex="tab === 'cases' ? 0 : -1"
+              :class="{ on: tab === 'cases' }" @click="switchTab('cases')"
+              @keydown="onTabKey($event, 'cases')">
         用例<span class="n num" v-if="d.coverage && d.coverage.backward.total">{{ d.coverage.backward.total }}</span></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'design', locked: postLocked }" :disabled="postLocked"
-              :title="postLocked ? '发布后开启' : ''" @click="switchTab('design')">
+      <button class="tab" role="tab" id="tab-design" :aria-selected="tab === 'design' ? 'true' : 'false'"
+              aria-controls="tabpanel-design" :tabindex="tab === 'design' && !postLocked ? 0 : -1"
+              :class="{ on: tab === 'design', locked: postLocked }" :disabled="postLocked"
+              :title="postLocked ? '发布后开启' : ''" @click="switchTab('design')"
+              @keydown="onTabKey($event, 'design')">
         设计<AppIcon v-if="postLocked" name="lock" :size="11" class="lock-ico" /></button>
-      <button class="tab" role="tab" :class="{ on: tab === 'gate', locked: postLocked }" :disabled="postLocked"
-              :title="postLocked ? '发布后开启' : ''" @click="switchTab('gate')">
+      <button class="tab" role="tab" id="tab-gate" :aria-selected="tab === 'gate' ? 'true' : 'false'"
+              aria-controls="tabpanel-gate" :tabindex="tab === 'gate' && !postLocked ? 0 : -1"
+              :class="{ on: tab === 'gate', locked: postLocked }" :disabled="postLocked"
+              :title="postLocked ? '发布后开启' : ''" @click="switchTab('gate')"
+              @keydown="onTabKey($event, 'gate')">
         门禁<AppIcon v-if="postLocked" name="lock" :size="11" class="lock-ico" />
         <span class="n num" v-if="!postLocked && gv && gv.round">{{ gv.round.status === 'released' ? '✓' : gv.round.roundNo + '轮' }}</span></button>
       <span class="tab-hint">体检报告已并入澄清工作台</span>
     </div>
+
+    <!-- U-10：tabpanel 容器（id/aria-labelledby 随当前页签） -->
+    <div class="tabpanel" role="tabpanel"
+         :id="'tabpanel-' + tab" :aria-labelledby="'tab-' + tab">
 
     <!-- 原始需求：全文快照（D1）；v1.2 有块结构时结构化渲染（不堆叠/图片/锚点），否则 md 渲染降级；
          v4 窗口 1 块级编辑（保存后 @reload 壳层重拉 doc.json 刷新锚点）；平台评论角标 + 面板入口；
@@ -431,6 +482,7 @@ function resolveDocPath(path) {
       <EmptyState v-else icon="shield-check" title="门禁需求发布后开启"
                   desc="发布后开闸三条件（设计定稿∨轻量跳过 / 用例全部定稿 / FR 覆盖）全绿即可开评审" />
     </template>
+    </div><!-- /tabpanel -->
 
     <!-- 回到顶部（长文阅读） -->
     <Transition name="fade">

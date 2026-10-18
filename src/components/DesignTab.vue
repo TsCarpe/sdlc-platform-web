@@ -7,6 +7,8 @@ import AppIcon from './AppIcon.vue'
 import RepoChips from './RepoChips.vue'
 import { render } from '../render.js'
 import { designPhaseLabel } from '../lifecycle.js'
+import { isTerminalReason, taskFailReason } from '../task-reasons.js'
+import { useModalFocus } from '../composables/modal-focus.js'
 
 const props = defineProps({ reqId: String, view: Object, operator: String })
 const emit = defineEmits(['toast', 'refresh'])
@@ -14,10 +16,14 @@ const emit = defineEmits(['toast', 'refresh'])
 const busy = ref(false)
 const showDoc = ref(false)
 const finalizeDlg = ref(null)   // {by}
+const finalizeEl = ref(null)    // U-11：焦点圈定 + Esc
+useModalFocus(computed(() => !!finalizeDlg.value), finalizeEl, () => { finalizeDlg.value = null })
 const docHtml = computed(() => (props.view?.finalized?.md || props.view?.draft?.md) ? render(props.view.finalized?.md || props.view.draft?.md) : '')
 const tier = computed(() => props.view?.tier || 'A')
 const phase = computed(() => props.view?.phase || 'none')
 const task = computed(() => props.view?.activeTask || null)
+// N-1：生命周期取消/作废的设计失败为终局——不再展示无效重试
+const taskTerminal = computed(() => isTerminalReason(taskFailReason(task.value)))
 
 // ===== D39 多目标仓编辑器（卡片式；全量替换语义：本地草稿 → PUT 整单保存） =====
 const reposDraft = ref((props.view?.repos || []).map(r => ({ ...r, branch: r.branch || '' })))
@@ -79,7 +85,7 @@ const confirmFinalize = () => {
     <div class="banner" v-else-if="task && task.status === 'failed'">
       <AppIcon name="alert-circle" :size="14" style="color:var(--red)" />
       <span style="flex:1">上一次设计任务失败——诊断见上方流水线面板。</span>
-      <button class="btn small" :disabled="busy" @click="retry">重试</button>
+      <button class="btn small" v-if="!taskTerminal" :disabled="busy" @click="retry">重试</button>
     </div>
 
     <!-- 风险升级提案（tier 只升不降：提案需人确认，不在设计 lane 直接改级） -->
@@ -188,7 +194,7 @@ const confirmFinalize = () => {
 
   <!-- 定稿确认弹层 -->
   <div class="modal-mask" v-if="finalizeDlg" @click.self="finalizeDlg = null">
-    <div class="modal" style="width:480px" role="dialog" aria-modal="true">
+    <div ref="finalizeEl" class="modal" style="width:480px" role="dialog" aria-modal="true" tabindex="-1">
       <div class="modal-h">设计定稿（确认点②）<button class="x" @click="finalizeDlg = null">✕</button></div>
       <div class="modal-b">
         <p class="sub" style="margin-bottom:10px">定稿后将写入正式设计文档（version 递增，承接落改修订）。<b>定稿 ≠ 放行</b>：门禁评审以「已定稿」为开闸条件①。</p>

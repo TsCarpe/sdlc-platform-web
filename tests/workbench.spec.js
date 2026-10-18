@@ -378,3 +378,33 @@ describe('WorkbenchTab：V5 review 批3（#7 过滤空组 / #8 过滤联动 / #9
     expect(w.emitted('toast').at(-1)).toEqual(['保存失败：A 失败', 'err'])       // A 的失败仍如实 toast
   })
 })
+
+describe('WorkbenchTab：批 E（P1-13 CSS 变量 / U-11 弹窗 Esc）', () => {
+  it('P1-13 右栏宽度行走 CSS 变量（--ctx-w），行内不再写 gridTemplateColumns（媒体查询可覆盖）', async () => {
+    const { default: WorkbenchTab } = await import('../src/components/WorkbenchTab.vue')
+    const { GRP_KEY } = await import('../src/composables/group-collapse.js')
+    const grp = { openGrps: new Set(), toggleGrp: () => {}, expandAll: () => {}, collapseAll: () => {}, revealGrpFor: () => {} }
+    const items = [{ ...OPT_ITEM }]
+    const w = mount(WorkbenchTab, {
+      props: { reqId: 'REQ-1', items, status: 'clarifying', groups: [{ name: '组', items }],
+        audit: null, concludedGroups: [],
+        doc: { content: { blocks: [{ id: 'blk-1', type: 'paragraph', text: '原文段落' }], media: [] } },
+        snapshot: { md: '# 原文', at: '', version: 1 } },
+      global: { provide: { [GRP_KEY]: grp } }
+    })
+    const style = w.find('.wb-grid').attributes('style') || ''
+    expect(style).toContain('--ctx-w')
+    expect(style).not.toContain('grid-template-columns')
+  })
+
+  it('U-11 处置弹窗 Esc 关闭（3/4 缺失的补全）', async () => {
+    const items = [{ ...OPT_ITEM }]
+    const w = await mountWb(items)
+    await w.findAll('.ans-ops .btn')[0].trigger('click')   // 驳回 → 弹窗
+    await flushPromises()
+    expect(w.find('.modal').exists()).toBe(true)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    expect(w.find('.modal').exists()).toBe(false)
+  })
+})

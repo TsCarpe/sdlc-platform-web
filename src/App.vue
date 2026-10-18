@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import { api } from './api.js'
+import { api, getToken, setToken } from './api.js'
 import { pendingJump } from './trace.js'
 import ReqList from './components/ReqList.vue'
 import ReqDetail from './components/ReqDetail.vue'
@@ -20,12 +20,33 @@ const toast = ref(null)          // { text, type: 'ok' | 'err' }
 let toastTimer = null
 const counts = ref({ reqs: null, cases: null, iters: null })
 
+// ===== 写令牌（P1-4）：服务端启用 SDLC_WRITE_TOKEN 时写操作需 X-Token；仅存本机浏览器 =====
+const tokenInput = ref('')
+const tokenSet = ref(!!getToken())
+function saveToken() {
+  setToken(tokenInput.value.trim())
+  tokenSet.value = !!getToken()
+  tokenInput.value = ''
+  showToast(tokenSet.value ? '写令牌已保存（仅本机浏览器）' : '写令牌已清空')
+}
+function clearToken() {
+  setToken('')
+  tokenSet.value = false
+  showToast('写令牌已清空')
+}
+
 // ===== 侧栏收缩（localStorage 持久化，默认展开） =====
 const sideCollapsed = ref(localStorage.getItem('sdlc.side') === 'collapsed')
+// P1-13 <900px：侧栏改浮层——顶栏按钮开合浮层（不再切换 230/60 宽度）
+const mobileSide = ref(false)
+function isNarrow() { return typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(max-width: 899px)').matches }
 function toggleSide() {
+  if (isNarrow()) { mobileSide.value = !mobileSide.value; return }
   sideCollapsed.value = !sideCollapsed.value
   localStorage.setItem('sdlc.side', sideCollapsed.value ? 'collapsed' : 'expanded')
 }
+// 导航切换后收起浮层（移动端点击菜单即离开）
+watch([page, currentReqId, currentIter], () => { mobileSide.value = false })
 
 // ===== hash 路由（零依赖）：#/iters · #/iters/<name> · #/reqs · #/reqs/<id> · #/cases =====
 // 状态 → hash 产生历史条目；前进/后退经 hashchange 回写状态；幂等防循环
@@ -129,7 +150,7 @@ watch(() => pendingJump.nonce, n => {
 </script>
 
 <template>
-  <aside class="side" :class="{ collapsed: sideCollapsed }">
+  <aside class="side" :class="{ collapsed: sideCollapsed, 'mobile-open': mobileSide }">
     <div class="logo">
       <span class="logo-mark"><AppIcon name="clipboard-list" :size="13" /></span>
       <span class="logo-txt">SDLC 产物平台<small>迭代 · 需求 · 用例 · 全程可追溯</small></span>
@@ -153,6 +174,16 @@ watch(() => pendingJump.nonce, n => {
     <Chat />
     <div class="side-foot">
       <details>
+        <summary><AppIcon name="lock" :size="12" />写令牌{{ tokenSet ? '（已设置）' : '' }}</summary>
+        <div class="foot-body">
+          服务端启用 <b>SDLC_WRITE_TOKEN</b> 时，建卡/排任务/采纳/上传等写操作需携带 X-Token。令牌仅保存在本机浏览器，不上传。
+          <input v-model="tokenInput" type="password" placeholder="粘贴写令牌" style="width:100%;margin:6px 0;box-sizing:border-box"
+                 @keydown.enter.prevent="saveToken">
+          <button class="btn small" :disabled="!tokenInput.trim()" @click="saveToken">保存</button>
+          <button class="btn small" v-if="tokenSet" @click="clearToken">清除</button>
+        </div>
+      </details>
+      <details>
         <summary><AppIcon name="chevron-right" :size="12" />范围约定</summary>
         <div class="foot-body">
           平台首页 = 迭代列表（迭代 × 需求 1:1）；全生命周期（提交→质检→澄清→发布→设计→用例→门禁→放行）在迭代工作台内闭环。<br>
@@ -161,6 +192,8 @@ watch(() => pendingJump.nonce, n => {
       </details>
     </div>
   </aside>
+  <!-- P1-13：移动端侧栏浮层遮罩（点击关闭；桌面端 CSS 隐藏） -->
+  <button class="side-backdrop" v-if="mobileSide" @click="mobileSide = false" aria-label="关闭侧栏"></button>
 
   <div class="main">
     <div class="topbar">

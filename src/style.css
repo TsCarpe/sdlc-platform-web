@@ -1038,29 +1038,37 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
   box-shadow:0 1px 2px 0 rgba(16,24,40,.05)}
 .readiness h3{font-size:13px;font-weight:650;display:flex;align-items:center;gap:8px}
 .readiness h3 .sub{font-weight:400;font-size:11.5px;color:var(--faint)}
-.rdy-body{display:flex;gap:22px;margin-top:8px}
-.rdy-score{flex:none;width:96px;text-align:center;border-right:1px solid var(--line-soft);padding-right:18px}
+.rdy-body{display:flex;gap:20px;margin-top:8px}
+.rdy-score{flex:none;width:96px;text-align:center;border-right:1px solid var(--line-soft);padding-right:18px;
+  display:flex;flex-direction:column;justify-content:center}
 .rdy-score .n{font-size:30px;font-weight:750;letter-spacing:-1px;color:var(--primary);line-height:1.1}
 .rdy-score .l{font-size:11px;color:var(--stone)}
-.rdy-score .go{font-size:11px;color:var(--faint);margin-top:5px;line-height:1.5}
-.dims{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:4px 26px;align-content:center}
+.dims{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;align-content:center}
 .dim{display:flex;align-items:center;gap:8px;padding:2px 6px;border-radius:7px;border:none;
   background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit}
 .dim:hover{background:var(--bg-soft)}
 .dim.on{background:var(--blue-light)}
-.dim-name{font-size:12.5px;color:var(--charcoal);width:60px;flex:none;font-weight:500}
+.dim-name{font-size:12.5px;color:var(--charcoal);width:76px;flex:none;font-weight:500;
+  display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.dim-name .ln{font-size:11px;color:var(--faint);font-weight:600}
 .dim-bar{flex:1;height:6px;border-radius:9999px;background:var(--bg-active);overflow:hidden}
 .dim-fill{height:100%;border-radius:9999px;background:var(--primary);transition:width .3s}
-.dim-cnt{font-size:11px;color:var(--stone);width:76px;text-align:right;flex:none}
+.dim-cnt{font-size:11px;color:var(--stone);flex:none;text-align:right;white-space:nowrap}
 .dim-cnt b{color:var(--red-deep);font-weight:600}
 .dim-cnt .ok{color:var(--green);font-weight:600}
 .wb-prog{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:12px 16px;
-  box-shadow:0 1px 2px 0 rgba(16,24,40,.05);display:flex;flex-direction:column;justify-content:center;gap:9px}
-.wb-prog .row1{display:flex;align-items:baseline;gap:8px}
-.wb-prog .row1 .lbl{font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0}
-.wb-prog .n{font-size:20px;font-weight:700;color:var(--ink-deep,#0f1320)}
-.wb-prog .n b{color:var(--primary)}
-.wb-prog .btns{display:flex;gap:8px;align-items:center}
+  box-shadow:0 1px 2px 0 rgba(16,24,40,.05);display:flex;flex-direction:column;justify-content:center;gap:8px}
+.wb-prog .row1{display:flex;align-items:center;gap:10px}
+.wb-prog .row1 .lbl{font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px;
+  flex:1;min-width:0;white-space:nowrap}
+.wb-prog .row1 .lbl .ttl{font-weight:650;color:var(--text);flex:none}
+.wb-prog .row1 .lbl .hint{font-size:11.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis}
+.wb-prog .n{font-size:13px;font-weight:600;color:var(--stone);flex:none;line-height:1}
+.wb-prog .n b{font-size:20px;font-weight:750;color:var(--primary);letter-spacing:-.5px}
+.wb-prog .n .tot{font-size:12px;color:var(--faint);margin-left:1px}
+.wb-prog .bar{flex:none;height:6px}
+.wb-prog .btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wb-prog .btns .btn.primary{flex:1;max-width:240px;justify-content:center}
 .wb-prog .btns .sub{display:inline-flex;align-items:center;gap:4px}
 .wb-prog.amber{border-color:#f3e3c2;background:#fffdf7}
 
@@ -1089,7 +1097,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 
 /* ---- v5 双栏原文侧栏（§2.1）：拖宽 320-760 / 收起恢复 / 定位高亮 / 反向角标 ---- */
 .wb-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start;position:relative}
-.wb-grid:not(.no-ctx){grid-template-columns:minmax(0,1fr) 430px}   /* :style 绑定实时宽度，此为无 JS 时的兜底 */
+.wb-grid:not(.no-ctx){grid-template-columns:minmax(0,1fr) var(--ctx-w,430px)}   /* :style 绑定 --ctx-w 实时宽度；回退 430px（无 JS/首帧） */
 .q-col{min-width:0}
 .ctx-col{position:relative;align-self:stretch}   /* stretch：拉到 grid 行全高，sticky 才有全程粘滞余量（align-items:start 会让右列收缩成一屏高，滚出即浮窗跟走） */
 .ctx-resizer{position:absolute;left:-9px;top:0;bottom:0;width:7px;cursor:col-resize;border-radius:4px;
@@ -1225,3 +1233,80 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .node.gap:hover{filter:brightness(.97)}
 .lane-arrow{stroke:var(--line-strong);stroke-width:1.3;fill:none}
 .lane-arrow.gapout{stroke-dasharray:4 3}
+
+/* ============================================================
+   批 E（P1-12/P1-13 + U-8/U-9）：流水线限高 / 响应式 / 可达性
+   ============================================================ */
+
+/* ---- P1-12（方案2）：面板保留在页签之前（沿用自身折叠/展开/收起）；
+        展开时限高 + 内部滚动，正文不再被推离首屏 ---- */
+.taskpanel.tp-expanded{max-height:clamp(140px,26vh,280px);overflow-y:auto;overscroll-behavior:contain}
+.tabpanel{min-width:0}
+
+/* ---- U-8：页签提示不参与收缩；<1280px 隐藏（防竖排单字撑高页签栏） ---- */
+.tab-hint{flex:none;white-space:nowrap}
+@media (max-width:1279px){ .tab-hint{display:none} }
+
+/* ---- U-9：普通按钮禁用态与可用态可辨识 ---- */
+.btn:disabled{opacity:.55;cursor:not-allowed;background:var(--bg-soft);border-color:var(--line);color:var(--muted)}
+.btn:disabled:hover{background:var(--bg-soft);border-color:var(--line)}
+.btn.link:disabled{background:none;border-color:transparent;color:var(--faint)}
+
+/* ---- P1-13 <1200px：原文右栏改覆盖式抽屉（默认收起由组件按视口初始化） ---- */
+.ctx-backdrop{display:none}
+.side-backdrop{display:none}
+@media (max-width:1199px){
+  .wb-top.duo{grid-template-columns:minmax(0,1fr)}
+  .wb-grid:not(.no-ctx){grid-template-columns:minmax(0,1fr)}
+  .ctx-col{position:fixed;top:var(--topbar-h);right:0;bottom:0;z-index:46;width:min(430px,92vw);
+    background:var(--bg);padding:8px 10px;overflow:auto;border-left:1px solid var(--line);
+    box-shadow:-12px 0 32px -12px rgba(16,24,40,.28)}
+  .ctx-col .ctx-resizer{display:none}
+  .ctx-col .ctx-card{position:static;max-height:calc(100vh - var(--topbar-h) - 16px)}
+  .ctx-backdrop{display:block;position:fixed;inset:var(--topbar-h) 0 0 0;z-index:45;border:none;
+    background:rgba(15,18,30,.35);padding:0}
+}
+
+/* ---- P1-13 <900px：侧栏改浮层（默认移出视口，顶栏按钮开合） ---- */
+@media (max-width:899px){
+  .side{position:fixed;left:0;top:0;bottom:0;z-index:80;transform:translateX(-100%);
+    transition:transform .2s ease;box-shadow:var(--shadow-pop)}
+  .side.mobile-open{transform:translateX(0)}
+  /* 浮层内始终完整展开（不受桌面端 collapsed 偏好影响） */
+  .side.collapsed{width:230px;padding:16px 12px 14px}
+  .side.collapsed .logo{justify-content:flex-start;padding-left:10px;padding-right:10px}
+  .side.collapsed .logo-txt,.side.collapsed .nav-label,.side.collapsed .cnt,.side.collapsed .side-foot{display:block}
+  .side.collapsed .nav-item{justify-content:flex-start;padding:8px 12px;gap:9px}
+  .side-backdrop{display:block;position:fixed;inset:0;z-index:70;border:none;
+    background:rgba(15,18,30,.4);padding:0}
+  .topbar{padding:0 16px}
+  .content{padding:18px 18px 48px}
+  .sync-info{display:none}
+}
+
+/* ---- P1-13 <760px：双栏纵向堆叠、页签横向滚动、边距收紧 ---- */
+@media (max-width:759px){
+  .content{padding:14px 12px 40px}
+  .topbar h1{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .detail-h h2{font-size:17px}
+  .meta{gap:6px 12px}
+  .tabs{gap:0;margin:10px 0 14px;-webkit-overflow-scrolling:touch}
+  .tab{flex:none;padding:8px 10px;font-size:13px}
+  .tab-phase{margin:0 4px}
+  .wb-top.duo{grid-template-columns:minmax(0,1fr)}
+  .rdy-body{flex-direction:column;gap:12px}
+  .rdy-score{width:auto;border-right:none;border-bottom:1px solid var(--line-soft);
+    padding:0 0 10px;display:flex;flex-direction:row;align-items:baseline;gap:10px;text-align:left}
+  .rdy-score .n{font-size:26px}
+  .dims{grid-template-columns:1fr}
+  .wb-prog .btns{flex-wrap:wrap}
+  .wb-grid{grid-template-columns:minmax(0,1fr)}
+  .modal-mask{padding:20px 10px}
+  .modal{max-height:calc(100vh - 40px)}
+}
+
+/* ---- P1-13 窄屏：原文展开按钮改右下浮动横排，避免遮挡头部 CTA ---- */
+@media (max-width:759px){
+  .ctx-restore{top:auto;bottom:16px;right:12px;writing-mode:horizontal-tb;letter-spacing:0;
+    padding:8px 14px;border:1px solid var(--line-strong);border-radius:9px;box-shadow:var(--shadow-pop)}
+}

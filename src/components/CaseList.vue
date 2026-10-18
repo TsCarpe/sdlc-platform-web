@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { api } from '../api.js'
+import { ask } from '../confirm.js'
 import { pendingJump, jumpTo, consumeJump } from '../trace.js'
 import { fmtRel } from '../time.js'
 import AppIcon from './AppIcon.vue'
@@ -159,6 +160,38 @@ async function addComment() {
 }
 
 function startEdit() { cm.value.mode = 'edit' }
+
+// P1-7：表单用例人工确认定稿（单向 draft→reviewed；后端同口径校验）
+async function reviewCase() {
+  const d = cm.value.draft
+  if (saving.value) return
+  saving.value = true
+  try {
+    cm.value.draft = await api.patch(`/api/cases/${d.reqId}/${d.id}`, {
+      status: 'reviewed', expectedVersion: d.version
+    })
+    emit('toast', '已确认定稿——GR-2 用例条件不再阻塞')
+    await load()
+  } catch (e) {
+    emit('toast', e.message, 'err')
+  } finally {
+    saving.value = false
+  }
+}
+
+// P1-7：仅表单来源可删；sdlc-test 来源后端 409（只读+评论）
+async function deleteCase() {
+  const d = cm.value.draft
+  if (!await ask(`删除用例 ${d.id}「${d.title}」？删除后不可恢复（评论一并清理）。`)) return
+  try {
+    await api.del(`/api/cases/${d.reqId}/${d.id}`)
+    cm.value = null
+    emit('toast', '用例已删除')
+    await load()
+  } catch (e) {
+    emit('toast', e.message, 'err')
+  }
+}
 
 async function saveEdit() {
   const d = cm.value.draft
@@ -351,6 +384,9 @@ async function submitForm() {
         </div>
         <div class="modal-f" v-else>
           <button class="btn" v-if="!cm.draft.readonly" @click="startEdit"><AppIcon name="pencil" :size="12" />编辑</button>
+          <button class="btn primary" v-if="!cm.draft.readonly && cm.draft.status !== 'reviewed'"
+                  :disabled="saving" @click="reviewCase"><AppIcon name="check-circle" :size="12" />确认定稿</button>
+          <button class="btn danger" v-if="!cm.draft.readonly" @click="deleteCase">删除</button>
           <button class="btn primary" @click="closeCase">关闭</button>
         </div>
       </div>

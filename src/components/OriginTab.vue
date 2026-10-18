@@ -13,6 +13,7 @@ import BlockDiff from './BlockDiff.vue'
 import ImgViewer from './ImgViewer.vue'
 import { api } from '../api.js'
 import { ask } from '../confirm.js'
+import { isTerminalReason, taskFailReason } from '../task-reasons.js'
 import { render } from '../render.js'
 import { fmtRel } from '../time.js'
 import { useDocStructure } from '../composables/doc-structure.js'
@@ -71,6 +72,9 @@ const importFail = computed(() => {
   if (!importTask.value || importTask.value.status !== 'failed') return null
   try { return JSON.parse(importTask.value.result || '{}') } catch { return {} }
 })
+// N-1：封存/生命周作废的导入失败为终局——后端 retry 会 409，不再展示重试按钮
+const importTerminal = computed(() =>
+  isTerminalReason(importFail.value?.reason || taskFailReason(importTask.value)))
 async function retryImport() {
   try {
     await api.post(`/api/tasks/${importTask.value.id}/retry`)
@@ -313,7 +317,8 @@ async function rerunCheck() {
       <p style="font-size:13px;color:var(--red-deep);margin-bottom:6px;word-break:break-all">{{ importFail?.error || '导入失败' }}</p>
       <p class="sub" style="font-size:12px;margin-bottom:12px" v-if="importFail?.hint">{{ importFail.hint }}</p>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn primary" @click="retryImport"><AppIcon name="refresh-cw" :size="13" />重试导入</button>
+        <button class="btn primary" v-if="!importTerminal" @click="retryImport"><AppIcon name="refresh-cw" :size="13" />重试导入</button>
+        <span class="sub" v-else style="font-size:12px">该失败为终局（不可重试）——原文变更请走变更单</span>
         <a v-if="card.sourceUrl" :href="card.sourceUrl" target="_blank" rel="noopener">
           <button class="btn"><AppIcon name="external-link" :size="13" />打开飞书文档</button></a>
       </div>

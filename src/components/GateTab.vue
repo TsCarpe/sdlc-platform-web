@@ -5,18 +5,23 @@ import { ref, computed } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import { gatePhaseLabel } from '../lifecycle.js'
+import { useModalFocus } from '../composables/modal-focus.js'
 
 const props = defineProps({ reqId: String, view: Object, operator: String })
 const emit = defineEmits(['toast', 'refresh', 'jump-change'])
 
 const busy = ref(false)
 const vd = ref(null)        // 裁决弹层 {issue, verdict, note, revLocation}
+const vdEl = ref(null)      // U-11：焦点圈定 + Esc
+useModalFocus(computed(() => !!vd.value), vdEl, () => { vd.value = null })
 const showDraft = ref('')   // 汇总阶段草稿 md 预览
 
 const sevLabel = { high: '高', mid: '中', low: '低' }
 const sevCls = { high: 'b-red', mid: 'b-amber', low: 'b-blue' }
 const phase = computed(() => props.view?.phase || 'blocked')
 const round = computed(() => props.view?.round || null)
+// P1-9：进程内单会话评审只能在 C 级发生；issues 头留痕经 ingest 落库，此处显式提示降级事实
+const reviewDegraded = computed(() => round.value?.reviewMode === 'degraded')
 const issues = computed(() => props.view?.issues || [])
 const units = computed(() => props.view?.units || [])
 const undecided = computed(() => units.value.filter(u => !u.verdict).length)
@@ -71,6 +76,13 @@ const reopen = () => run(() => api.post(`/api/requirements/${props.reqId}/gate/r
       <span><b>门禁评审</b> ｜ 放行唯一口径 = 门禁已放行（GR-4，平台机械校验）。
         <span class="sub">阶段徽标为平台化推导；skill 权威落库仅「待裁决｜已放行」两值</span></span>
       <span class="badge" :class="{ blocked: 'b-gray', running: 'b-blue', summary: 'b-amber', deciding: 'b-amber', released: 'b-green' }[phase] || 'b-gray'">{{ gatePhaseLabel[phase] || phase }}</span>
+    </div>
+
+    <!-- P1-9：降级评审横幅（reviewMode=degraded 落库于 ingest；仅 C 级合法） -->
+    <div class="banner amber-t" v-if="reviewDegraded">
+      <AppIcon name="alert-triangle" :size="14" />
+      <span><b>降级评审</b>：本轮由进程内单会话完成（fanout={{ round.fanout }} / {{ round.contextMode }}），
+        非 A/B 级全新上下文子代理扇出——仅 C 级允许；A/B 级请用外置 runner 重跑。</span>
     </div>
 
     <!-- GR-3 变更横幅（仅 released 窗口）：原因 + 变更单号点入 diff（reqChangeIds，v4-16） -->
@@ -179,7 +191,7 @@ const reopen = () => run(() => api.post(`/api/requirements/${props.reqId}/gate/r
 
   <!-- 裁决弹层 -->
   <div class="modal-mask" v-if="vd" @click.self="vd = null">
-    <div class="modal" style="width:500px" role="dialog" aria-modal="true">
+    <div ref="vdEl" class="modal" style="width:500px" role="dialog" aria-modal="true" tabindex="-1">
       <div class="modal-h">{{ vd.issue.code }} · {{ VERDICT_LABEL[vd.verdict] || vd.verdict }}<button class="x" @click="vd = null">✕</button></div>
       <div class="modal-b">
         <p class="sub" style="margin-bottom:10px">{{ vd.issue.scene }}</p>

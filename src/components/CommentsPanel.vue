@@ -8,6 +8,7 @@ import AppIcon from './AppIcon.vue'
 import { ask } from '../confirm.js'
 import { lvlLabel } from '../levels.js'
 import { fmtRel } from '../time.js'
+import { useModalFocus } from '../composables/modal-focus.js'
 
 const props = defineProps({
   reqId: { type: String, required: true },
@@ -22,6 +23,8 @@ const emit = defineEmits(['close', 'refresh', 'locate', 'toast'])
 const author = ref(localStorage.getItem('sdlc.op') || '')
 const replyDraft = ref({})        // '__new'=发评框；线程根 id → 回复文本
 const escDlg = ref(null)          // 升级弹层 { id, level, theme }
+const escEl = ref(null)           // U-11：升级弹层焦点圈定（Esc 由捕获阶段优先关弹窗）
+useModalFocus(computed(() => !!escDlg.value), escEl, () => { escDlg.value = null })
 const busy = ref(false)
 const composeTarget = ref(props.composeBlockId || '')
 watch(() => props.composeBlockId, v => { composeTarget.value = v || '' })
@@ -210,7 +213,7 @@ function onKey(e) {
 
     <!-- 升级弹层 -->
     <div class="modal-mask" v-if="escDlg" @click.self="escDlg = null">
-      <div class="modal" style="width:420px" role="dialog" aria-modal="true">
+      <div ref="escEl" class="modal" style="width:420px" role="dialog" aria-modal="true" tabindex="-1">
         <div class="modal-h">升级为澄清项<button class="x" @click="escDlg = null">✕</button></div>
         <div class="modal-b">
           <p class="sub" style="margin-bottom:10px">评论原文将作为澄清问题（L 系编号），块文本作为摘引、块 ID 作为锚点；升级后到澄清清单处置。</p>

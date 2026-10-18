@@ -7,6 +7,7 @@ import { render, linkifyRefs } from '../render.js'
 import { fmtRel, fmtDur } from '../time.js'
 import { ask } from '../confirm.js'
 import { isDone } from '../disposition.js'
+import { isTerminalReason, terminalTaskReasons } from '../task-reasons.js'
 
 const props = defineProps({ reqId: String, detail: Object, operator: { type: String, default: '' } })
 const emit = defineEmits(['toast', 'refresh'])
@@ -389,6 +390,9 @@ function failInfo(t) {
     }
   } catch { return { error: plain, hint: '', diag: '', reason: '' } }
 }
+// N-1：生命周期取消/作废为终局——与后端 retry 白名单同源，不再显示无效「重试」
+const terminalLabels = terminalTaskReasons
+function isTerminalFail(t) { return isTerminalReason(failInfo(t).reason) }
 function fmtResult(t) {
   try {
     const o = JSON.parse(t.result || '{}')
@@ -411,7 +415,7 @@ function elapsed(t) {
 </script>
 
 <template>
-  <div class="card taskpanel">
+  <div class="card taskpanel" :class="{ 'tp-expanded': !effectiveCollapsed }">
     <!-- 摘要态：无进行中任务且无待审草稿（点击展开管理）；主操作常驻可达（评测 P1-2/P1-9） -->
     <div class="tp-summary" v-if="effectiveCollapsed" @click="collapsed = false" role="button" tabindex="0"
          @keydown.enter="collapsed = false">
@@ -431,8 +435,6 @@ function elapsed(t) {
     <template v-else>
     <div class="tp-row">
       <div class="tp-title"><AppIcon name="layers" :size="15" />线上流水线</div>
-      <button class="btn small link tp-collapse" v-if="!activeTask && !digestDraft && !stdDraftVisible && !casesDraft"
-              @click="collapsed = true" title="无进行中任务与待审草稿，可收起为摘要"><AppIcon name="chevron-right" :size="13" style="transform:rotate(-90deg)" />收起</button>
       <div class="tp-actions">
         <button class="btn" :disabled="busy || !!activeTask || card.status === 'published'"
                 @click="createTask('quality_check', hasDigest ? '重新质检' : '需求质检')">
@@ -454,6 +456,9 @@ function elapsed(t) {
           <AppIcon name="refresh-cw" :size="13" />增量质检
         </button>
       </div>
+      <!-- 与折叠态「展开管理」同一位置：行尾右对齐；样式一致 -->
+      <button class="btn small tp-collapse" v-if="!activeTask && !digestDraft && !stdDraftVisible && !casesDraft"
+              @click="collapsed = true" title="无进行中任务与待审草稿，可收起为摘要"><AppIcon name="chevron-down" :size="13" style="transform:rotate(180deg)" />收起管理</button>
     </div>
 
     <!-- 任务状态 -->
@@ -469,7 +474,7 @@ function elapsed(t) {
       <button class="btn small link" v-if="activeTask.status === 'queued'" @click="cancelTask(activeTask)">取消</button>
     </div>
     <div class="tp-task" v-for="t in [latestByType.source_import, latestByType.quality_check, latestByType.standard_doc, latestByType.case_gen].filter(x => x && x.status !== 'queued' && x.status !== 'running')" :key="t.id">
-      <span class="badge" :class="t.status === 'done' ? 'b-green' : (failInfo(t).reason === 'superseded-by-publish' ? 'b-gray' : 'b-red')">{{ t.status === 'done' ? statusLabel.done : (failInfo(t).reason === 'superseded-by-publish' ? '已作废' : statusLabel.failed) }}</span>
+      <span class="badge" :class="t.status === 'done' ? 'b-green' : (isTerminalFail(t) ? 'b-gray' : 'b-red')">{{ t.status === 'done' ? statusLabel.done : (isTerminalFail(t) ? terminalLabels[failInfo(t).reason] : statusLabel.failed) }}</span>
       <b>{{ typeLabel[t.type] }}</b><span class="chip" v-if="autoBy(t)">自动</span>
       <span class="sub" v-if="t.status === 'done'" :title="fmtResultFull(t)">{{ fmtResult(t).startsWith('drainedBy') ? '（校验用）' : fmtResult(t) }}</span>
       <template v-else>
@@ -482,7 +487,7 @@ function elapsed(t) {
           </div>
         </details>
       </template>
-      <button class="btn small" v-if="t.status === 'failed' && failInfo(t).reason !== 'superseded-by-publish'" @click="retryTask(t)"><AppIcon name="refresh-cw" :size="11" />重试</button>
+      <button class="btn small" v-if="t.status === 'failed' && !isTerminalFail(t)" @click="retryTask(t)"><AppIcon name="refresh-cw" :size="11" />重试</button>
     </div>
 
     <!-- 质检草稿 -->

@@ -60,7 +60,7 @@ const mountDetail = async () => {
 }
 
 let wrapper
-beforeEach(() => { vi.clearAllMocks() })
+beforeEach(() => { vi.clearAllMocks(); localStorage.clear() })
 // 卸载上一条用例的壳：组件存活会累积多份 applyJump watch——旧实例先 consumeJump 把 nonce 清零，
 // 新实例的 audit:/check: 协议断言静默失效（真实环境单实例无此竞态）
 afterEach(() => { wrapper?.unmount?.(); wrapper = null })
@@ -145,8 +145,10 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
 
   it('audit: 跳转命中 audit-only 已定论卡（父组折叠态）仍可达——revealGrpFor 同步展开父组（review F1）', async () => {
     const { pendingJump } = await import('../src/trace.js')
+    // P1-11 后含 pending 的组默认展开——先持久化「手动折叠」制造折叠前提
+    localStorage.setItem('wb.grps.REQ-2026-001', JSON.stringify({ 域一: false }))
     wrapper = await mountDetail()
-    await wrapper.findAll('[role="tab"]')[2].trigger('click')   // 工作台（默认全组折叠——openGrps 空）
+    await wrapper.findAll('[role="tab"]')[2].trigger('click')   // 工作台（域一被用户折叠）
     await flushPromises()
     // 已定论卡 P02 渲染在「域一」父组的子折叠块里；跳转前父组应为 closed（夹具前提自证）
     const grpBefore = wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
@@ -158,5 +160,70 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     const grpAfter = wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
     expect(grpAfter.classes()).not.toContain('closed')          // 父组已展开（只开子块键时父组仍折 = F1 病灶）
     expect(wrapper.find('.q-col [data-pid="P02"].flash').exists()).toBe(true)
+  })
+
+  // ===== P1-11：首屏可见待答问题 + 折叠状态按 reqId 持久化 =====
+  it('P1-11 首次进入含 pending 的分组默认展开；手动折叠后按 reqId 持久化，刷新保持', async () => {
+    wrapper = await mountDetail()
+    const grp = () => wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
+    expect(grp().classes()).not.toContain('closed')             // 首屏直接可见问题卡（不再是组头）
+    expect(wrapper.find('.q-col [data-pid="P01"]').exists()).toBe(true)
+
+    await grp().find('.grp-t').trigger('click')                  // 手动折叠
+    expect(grp().classes()).toContain('closed')
+    expect(JSON.parse(localStorage.getItem('wb.grps.REQ-2026-001'))).toMatchObject({ 域一: false })
+
+    wrapper.unmount()                                            // 模拟刷新：同 reqId 重新挂载
+    wrapper = null
+    wrapper = await mountDetail()
+    const grpAfter = wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
+    expect(grpAfter.classes()).toContain('closed')               // 折叠状态保留
+  })
+
+  // ===== P1-12（方案2）：原折叠/展开面板保留在页签之前，展开时限高内部滚动 =====
+  it('P1-12 流水线完整面板保留在页签之前（不再另造摘要条），正文容器在页签之后', async () => {
+    wrapper = await mountDetail()
+    const panel = wrapper.find('.taskpanel')
+    const tabs = wrapper.find('.tabs')
+    const content = wrapper.find('.tabpanel')
+    expect(wrapper.find('.tp-mini').exists()).toBe(false)      // 原折叠/展开/收起已够用
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('线上流水线')
+    expect(panel.find('.tp-summary').exists()).toBe(true)      // 摘要态由 TaskPanel 自身提供
+
+    // DOM 顺序：完整面板 → tablist → 页签内容
+    expect(panel.element.compareDocumentPosition(tabs.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(tabs.element.compareDocumentPosition(content.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // ===== U-10：页签 ARIA + 方向键 roving tabindex =====
+  it('U-10 页签具备 tablist/tab/tabpanel ARIA，方向键切换并移动焦点（跳过禁用页签）', async () => {
+    wrapper = await mountDetail()
+    expect(wrapper.find('[role="tablist"]').attributes('aria-label')).toBeTruthy()
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs[2].attributes('aria-selected')).toBe('true')     // clarifying 默认工作台
+    expect(tabs[2].attributes('tabindex')).toBe('0')
+    expect(tabs[0].attributes('tabindex')).toBe('-1')
+    expect(tabs[2].attributes('aria-controls')).toBe('tabpanel-checklist')
+    const panel = wrapper.find('[role="tabpanel"]')
+    expect(panel.attributes('id')).toBe('tabpanel-checklist')
+    expect(panel.attributes('aria-labelledby')).toBe('tab-checklist')
+
+    tabs[2].element.focus()
+    await tabs[2].trigger('keydown', { key: 'ArrowRight' })      // 工作台 → 标准需求文档
+    await flushPromises()
+    expect(wrapper.find('[role="tab"].on').text()).toContain('标准需求文档')
+    expect(document.activeElement.id).toBe('tab-std')
+    expect(wrapper.find('[role="tabpanel"]').attributes('id')).toBe('tabpanel-std')   // 面板随页签更新
+
+    // 从 std 继续右移：发布前禁用的设计/门禁不参与 roving，前进落到变更
+    await document.getElementById('tab-std').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('[role="tab"].on').text()).toContain('变更')   // 设计/门禁禁用，前进落到变更
+    // Home 回首页签
+    await document.getElementById('tab-changes').dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('[role="tab"].on').text()).toContain('原始需求')
+    expect(document.activeElement.id).toBe('tab-origin')
   })
 })

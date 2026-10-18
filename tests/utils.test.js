@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { isDone, isPending, dispLabel } from '../src/disposition.js'
 import { fmtRel, fmtDur } from '../src/time.js'
+import { isTerminalReason, taskFailReason } from '../src/task-reasons.js'
 
 describe('disposition 处置口径（与后端 counts 同源的唯一判定）', () => {
   it('answered/rejected/deferred 均为已处置', () => {
@@ -34,5 +35,22 @@ describe('time 相对时间与时长', () => {
   })
   it('非法时间原样返回', () => {
     expect(fmtRel('not-a-time')).toBe('not-a-time')
+  })
+})
+
+describe('task-reasons 终局语义（N-1，与后端 retry 白名单同源）', () => {
+  it('生命周期取消/作废/封存为终局，执行失败可重试', () => {
+    for (const r of ['superseded-by-publish', 'req-deleted', 'change-aborted', 'cancelled', 'sealed']) {
+      expect(isTerminalReason(r)).toBe(true)
+    }
+    for (const r of ['timeout', 'no-draft', 'agent-exception', 'import-failed',
+                     'integrity-failed', 'blocks-empty', '']) {
+      expect(isTerminalReason(r)).toBe(false)
+    }
+  })
+  it('taskFailReason 解析 JSON result；纯文本/空任务归空串', () => {
+    expect(taskFailReason({ result: JSON.stringify({ error: 'x', reason: 'cancelled' }) })).toBe('cancelled')
+    expect(taskFailReason({ result: 'plain text' })).toBe('')
+    expect(taskFailReason(null)).toBe('')
   })
 })

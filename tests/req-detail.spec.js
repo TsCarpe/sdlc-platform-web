@@ -14,7 +14,10 @@ const detailFixture = () => ({
   digest: { markdown: '# digest', version: 1, pushedAt: '2026-10-01 10:00:00',
     content: { summary: '概要', roles: ['用户'], features: [], flows: [], states: [] } },
   audit: { markdown: '# audit', version: 1, pushedAt: '2026-10-01 10:00:00',
-    content: { red: 0, yellow: 1, blue: 0, items: [{ id: 'P01', level: 'yellow', title: '存疑点', where: '§1', go: '写入标准文档 §2 条款', group: '域一', quote: '', anchor: '' }] } },
+    content: { red: 0, yellow: 1, blue: 0, items: [
+      { id: 'P01', level: 'yellow', title: '存疑点', where: '§1', go: '写入标准文档 §2 条款', group: '域一', quote: '', anchor: '' },
+      // audit-only 已定论（差集 ∧ go✅，D14）：review F1 回归夹具——其宿主是 check 父组内的已定论子折叠块
+      { id: 'P02', level: 'blue', title: '已定论条目', where: '§1', go: '✅已确认：按 A 口径', group: '域一', quote: '', anchor: '' }] } },
   snapshot: { md: '# 原文快照\n\n段落文本', at: '2026-10-01 10:00:00', version: 1 },
   doc: { markdown: '', version: 1, pushedAt: '2026-10-01 10:00:00',
     content: { blocks: [{ id: 'blk-1', type: 'paragraph', text: '结构化原文块' }], media: [] } },
@@ -138,5 +141,22 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     const on = [...wrapper.findAll('[role="tab"]')].find(t => t.classes().includes('on'))
     expect(on.text()).toContain('澄清工作台')     // audit tab 已并入——跳转落工作台
     expect(wrapper.find('.q-col [data-pid="P01"].flash').exists()).toBe(true)
+  })
+
+  it('audit: 跳转命中 audit-only 已定论卡（父组折叠态）仍可达——revealGrpFor 同步展开父组（review F1）', async () => {
+    const { pendingJump } = await import('../src/trace.js')
+    wrapper = await mountDetail()
+    await wrapper.findAll('[role="tab"]')[2].trigger('click')   // 工作台（默认全组折叠——openGrps 空）
+    await flushPromises()
+    // 已定论卡 P02 渲染在「域一」父组的子折叠块里；跳转前父组应为 closed（夹具前提自证）
+    const grpBefore = wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
+    expect(grpBefore.classes()).toContain('closed')
+    await wrapper.findAll('[role="tab"]')[0].trigger('click')   // 离开工作台再跳（验证协议带切回）
+    await flushPromises()
+    Object.assign(pendingJump, { nonce: Date.now(), page: 'reqs', reqId: 'REQ-2026-001', kind: 'audit', id: 'P02', needle: '' })
+    await new Promise(r => setTimeout(r, 400))
+    const grpAfter = wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
+    expect(grpAfter.classes()).not.toContain('closed')          // 父组已展开（只开子块键时父组仍折 = F1 病灶）
+    expect(wrapper.find('.q-col [data-pid="P02"].flash').exists()).toBe(true)
   })
 })

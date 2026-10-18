@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>澄清工作台 · 方案原型</title>
+<style>
+/* ============================================================
+  方案讨论原型（非实现代码）
+  视觉对齐现有平台设计 token：靛蓝唯一强调色 / 白卡细边框 / 紧凑密度
+  演示的设计点：
+   ① Tab 分阶段分组（发布前 ⁞ 发布后置灰）
+   ② 澄清工作台：问题流 + 原文上下文侧栏（双栏并置，不横跳）
+   ③ 就绪度覆盖地图（体检报告重塑：维度缺口 + 导航过滤）
+   ④ 选择题化作答（AI 推荐选项 + 一键采纳）
+   ⑤ 摘要重定位（AI 理解卡 / 模块待澄清角标 / 🤔断点直连）
+   ⑥ 原文反向角标（块上挂待澄清数，点入工作台）
+  ============================================================ */
+:root{
+  --canvas:#ffffff; --bg:#f6f7f9; --bg-soft:#fafbfc; --bg-active:#eef0f4;
+  --line:#e4e7ec; --line-soft:#eef0f3; --line-strong:#cfd4dd;
+  --ink-deep:#0f1320; --text:#191c24; --charcoal:#344054;
+  --slate:#475467; --muted:#5d6b81; --stone:#667085; --faint:#8a94a6;
+  --primary:#4f46e5; --primary-pressed:#4338ca;
+  --blue:#4f46e5; --blue-light:#eef2ff; --blue-border:#d9ddfc;
+  --yellow:#ffd02f; --yellow-light:#fff6d1; --yellow-deep:#e2b204;
+  --green:#067647; --green-vivid:#12b76a; --green-soft:#e5f4ee;
+  --red:#d92d20; --red-deep:#b42318; --red-soft:#fdecea;
+  --amber:#d97706; --amber-deep:#b54708; --amber-soft:#fcf1df;
+  --lv-red:#f04438; --lv-yellow:#eaaa08; --lv-blue:#2e90fa;
+  --shadow-card:rgba(16,24,40,.05) 0 1px 2px 0;
+  --shadow-pop:rgba(16,24,40,.1) 0 4px 14px -2px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+button{cursor:pointer;font-family:inherit}
+a{color:inherit}
+svg{flex:none;vertical-align:-2px}
+
+/* ===== 布局骨架 ===== */
+.app{display:flex;min-height:100vh}
+.side{width:220px;background:var(--canvas);border-right:1px solid var(--line-soft);padding:16px 12px;flex:none;position:sticky;top:0;height:100vh}
+.logo{display:flex;align-items:center;gap:9px;padding:4px 10px 16px}
+.logo-mark{width:24px;height:24px;border-radius:7px;background:var(--yellow);color:#18181b;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.logo-txt{font-size:15px;font-weight:650;color:var(--ink-deep);line-height:1.25}
+.logo-txt small{display:block;font-size:11px;color:var(--stone);font-weight:400}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 12px;border:none;background:none;border-radius:8px;color:var(--muted);font-size:13.5px;font-weight:500}
+.nav-item:hover{background:var(--bg)}
+.nav-item.on{background:var(--bg-active);color:var(--text);font-weight:600}
+.nav-item .cnt{margin-left:auto;font-size:11px;color:var(--stone);background:var(--bg);border:1px solid var(--line-soft);border-radius:9999px;padding:0 7px}
+.main{flex:1;min-width:0}
+.work{max-width:1440px;margin:0 auto;padding:18px 28px 80px}
+
+/* ===== 详情头 ===== */
+.backlink{border:none;background:none;color:var(--muted);font-size:13px;padding:4px 0}
+.backlink:hover{color:var(--text)}
+.detail-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
+.detail-h h2{font-size:19px;font-weight:700;letter-spacing:-.2px}
+.chip{display:inline-block;font-size:11.5px;color:var(--slate);background:var(--canvas);border:1px solid var(--line);border-radius:9999px;padding:0 8px;line-height:1.8}
+.badge{display:inline-block;font-size:11.5px;font-weight:600;border-radius:9999px;padding:1px 9px;line-height:1.8}
+.b-amber{background:var(--amber-soft);color:var(--amber-deep)}
+.b-red{background:var(--red-soft);color:var(--red-deep)}
+.b-gray{background:var(--bg-active);color:var(--muted)}
+.stars{font-size:12px;color:var(--yellow-deep);letter-spacing:1px}
+.meta{display:flex;align-items:center;gap:16px;flex-wrap:wrap;color:var(--stone);font-size:12.5px;margin-bottom:14px}
+
+/* ===== 原型说明条 ===== */
+.proto-note{background:var(--blue-light);border:1px solid var(--blue-border);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12.5px;color:var(--charcoal);display:flex;gap:10px;align-items:flex-start}
+.proto-note b{color:var(--primary)}
+.proto-note .x{margin-left:auto;border:none;background:none;color:var(--faint);font-size:15px;line-height:1}
+.proto-note ul{margin:4px 0 0 17px}
+.proto-note li{margin:1px 0}
+
+/* ===== Tab 条（分阶段分组） ===== */
+.tabs{display:flex;align-items:center;gap:2px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap}
+.tab{border:none;background:none;padding:8px 13px;font-size:13.5px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;border-radius:6px 6px 0 0;font-weight:500}
+.tab:hover{color:var(--text);background:var(--bg-soft)}
+.tab.on{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+.tab .n{font-size:11px;color:var(--stone);background:var(--bg);border:1px solid var(--line-soft);border-radius:9999px;padding:0 7px;margin-left:5px;line-height:1.7}
+.tab.on .n{background:var(--blue-light);color:var(--primary);border-color:var(--blue-border)}
+.tab .n.warn{background:var(--amber-soft);color:var(--amber-deep);border-color:#f3e3c2}
+.tab-phase{width:1px;height:18px;background:var(--line-strong);margin:0 8px}
+.tab.locked{color:var(--faint);cursor:not-allowed}
+.tab.locked:hover{background:none;color:var(--faint)}
+.tab.locked .lock-ico{margin-left:4px;opacity:.55}
+.tab-hint{font-size:11px;color:var(--faint);margin-left:6px;align-self:center}
+
+/* ===== 就绪度地图 + 进度（工作台顶条） ===== */
+.wb-top{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;margin-bottom:14px;align-items:stretch}
+.readiness{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:12px 16px;box-shadow:var(--shadow-card)}
+.readiness h3{font-size:13px;font-weight:650;display:flex;align-items:center;gap:8px}
+.readiness h3 .sub{font-weight:400;font-size:11.5px;color:var(--faint)}
+.rdy-body{display:flex;gap:22px;margin-top:8px}
+.rdy-score{flex:none;width:96px;text-align:center;border-right:1px solid var(--line-soft);padding-right:18px}
+.rdy-score .n{font-size:30px;font-weight:750;letter-spacing:-1px;color:var(--primary);line-height:1.1}
+.rdy-score .l{font-size:11px;color:var(--stone)}
+.rdy-score .go{font-size:11px;color:var(--faint);margin-top:5px;line-height:1.5}
+.dims{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:4px 26px;align-content:center}
+.dim{display:flex;align-items:center;gap:8px;padding:2px 6px;border-radius:7px;border:none;background:none;width:100%;text-align:left}
+.dim:hover{background:var(--bg-soft)}
+.dim.on{background:var(--blue-light)}
+.dim-name{font-size:12.5px;color:var(--charcoal);width:76px;flex:none;font-weight:500}
+.dim-bar{flex:1;height:6px;border-radius:9999px;background:var(--bg-active);overflow:hidden}
+.dim-fill{height:100%;border-radius:9999px;background:var(--primary);width:0;transition:width .3s}
+.dim.crit .dim-fill{background:var(--lv-red)}
+.dim-cnt{font-size:11px;color:var(--stone);width:66px;text-align:right;flex:none}
+.dim-cnt b{color:var(--red-deep);font-weight:600}
+.dim-cnt .ok{color:var(--green);font-weight:600}
+.wb-prog{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:12px 16px;box-shadow:var(--shadow-card);display:flex;flex-direction:column;justify-content:center;gap:9px}
+.wb-prog .row1{display:flex;align-items:baseline;gap:8px}
+.wb-prog .n{font-size:20px;font-weight:700;color:var(--ink-deep)}
+.wb-prog .n b{color:var(--primary)}
+.bar{flex:1;height:6px;border-radius:9999px;background:var(--bg-active);overflow:hidden}
+.bar-fill{height:100%;background:var(--primary);border-radius:9999px;width:0;transition:width .3s}
+.wb-prog .btns{display:flex;gap:8px}
+
+/* ===== 通用按钮 ===== */
+.btn{border:1px solid var(--line-strong);background:var(--canvas);color:var(--charcoal);border-radius:8px;padding:5px 12px;font-size:12.5px;font-weight:550;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--bg-soft)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary-pressed)}
+.btn.small{padding:3px 9px;font-size:12px;border-radius:7px}
+.btn.link{border:none;background:none;color:var(--muted);padding:3px 6px}
+.btn.link:hover{color:var(--text);background:var(--bg)}
+
+/* ===== 工作台双栏（右栏可拖宽/可收起） ===== */
+.wb-grid{display:grid;grid-template-columns:minmax(0,1fr) 430px;gap:14px;align-items:start;position:relative}
+.wb-grid.no-ctx{grid-template-columns:minmax(0,1fr)}
+.ctx-col{position:sticky;top:12px;position:relative}
+.ctx-resizer{position:absolute;left:-9px;top:0;bottom:0;width:7px;cursor:col-resize;border-radius:4px;transition:background .15s;z-index:5}
+.ctx-resizer::after{content:'⇔';position:absolute;left:-3px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--faint);opacity:0;transition:opacity .15s}
+.ctx-resizer:hover,.ctx-resizer.drag{background:var(--blue-light)}
+.ctx-resizer:hover::after,.ctx-resizer.drag::after{opacity:1}
+.ctx-restore{position:fixed;right:0;top:120px;z-index:40;border:1px solid var(--line-strong);border-right:none;border-radius:9px 0 0 9px;background:var(--canvas);box-shadow:var(--shadow-pop);padding:12px 5px;font-size:11.5px;color:var(--primary);font-weight:600;writing-mode:vertical-rl;letter-spacing:2px;display:none}
+.wb-grid.no-ctx + .ctx-restore,.ctx-restore.show{display:block}
+
+/* ===== 真实数据模式（REQ-2026-001 · 160 块 · 23 图） ===== */
+.datasource{display:flex;gap:6px;align-items:center;margin-top:8px}
+.ds-btn{font-size:11.5px;border:1px solid var(--line);background:var(--canvas);border-radius:9999px;padding:2px 12px;color:var(--muted)}
+.ds-btn.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+.img-blk{padding:4px 16px 4px 19px}
+.img-blk img{max-width:100%;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;display:block}
+.img-blk .cap{font-size:10.5px;color:var(--faint);margin-top:3px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lb-mask{position:fixed;inset:0;background:rgba(15,19,32,.82);z-index:99;display:flex;align-items:center;justify-content:center;cursor:zoom-out}
+.lb-mask img{max-width:94vw;max-height:92vh;border-radius:6px}
+.lb-mask .lb-cap{position:absolute;bottom:22px;left:0;right:0;text-align:center;color:#cbd5e1;font-size:12px;padding:0 40px}
+.li-blk{padding-left:19px}
+.li-d1{padding-left:34px}
+.li-d2{padding-left:49px}
+
+/* ===== 泳道图（主流程替代表现） ===== */
+.lane-wrap{overflow-x:auto;padding:4px 0 2px}
+.lane-svg{display:block;min-width:900px}
+.lane-head{fill:var(--bg-soft);stroke:var(--line-soft)}
+.lane-band{fill:var(--canvas)}
+.lane-band.alt{fill:var(--bg-soft)}
+.lane-name{font-size:11.5px;font-weight:650;fill:var(--charcoal)}
+.node{border:1px solid var(--line-strong);background:var(--canvas);border-radius:8px;padding:5px 6px 4px;font-size:10.8px;line-height:1.45;color:var(--charcoal);height:100%;display:flex;flex-direction:column;justify-content:center;text-align:center;box-shadow:var(--shadow-card)}
+.node .no{font-size:9px;color:var(--faint);font-weight:600;margin-bottom:1px}
+.node.gap{border:1.5px dashed var(--amber);background:var(--amber-soft);cursor:pointer}
+.node.gap .no{color:var(--amber-deep)}
+.node.gap b{color:var(--amber-deep)}
+.node.gap:hover{filter:brightness(.97)}
+.node .src{font-size:9px;color:var(--primary);margin-top:1px}
+.lane-arrow{stroke:var(--line-strong);stroke-width:1.3;fill:none}
+.lane-arrow.gapout{stroke-dasharray:4 3}
+
+/* ===== 影响分析折叠（体检报告字段的归宿：问题卡背面） ===== */
+.impact-tgl{border:none;background:none;font-size:11.5px;color:var(--faint);padding:2px 0;margin-bottom:6px}
+.impact-tgl:hover{color:var(--muted)}
+.impact-tgl .chev{display:inline-block;transition:transform .15s;margin-right:3px}
+.impact-open .impact-tgl .chev{transform:rotate(90deg)}
+.impact-box{display:none;border:1px dashed var(--line);border-radius:9px;background:var(--bg-soft);padding:8px 12px;font-size:12px;color:var(--charcoal);margin-bottom:8px}
+.impact-open .impact-box{display:block}
+.impact-box .row{display:flex;gap:8px;margin:2px 0}
+.impact-box .k{flex:none;font-size:11px;color:var(--faint);font-weight:600;width:56px;padding-top:1px}
+.casechip{font-size:10.5px;color:var(--primary);background:var(--blue-light);border:1px solid var(--blue-border);border-radius:9999px;padding:0 8px;cursor:pointer;display:inline-block;margin:1px 3px 1px 0}
+
+/* --- 左栏：问题流 --- */
+.grp{background:var(--canvas);border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow-card)}
+.grp-t{display:flex;align-items:center;gap:8px;padding:10px 16px;cursor:pointer;user-select:none;background:var(--bg-soft);border-bottom:1px solid var(--line-soft)}
+.grp-t:hover{background:var(--bg)}
+.grp-chev{transition:transform .15s;color:var(--faint)}
+.grp.closed .grp-chev{transform:rotate(0deg)}
+.grp:not(.closed) .grp-chev{transform:rotate(90deg)}
+.grp-t b{font-size:13.5px;font-weight:650}
+.grp-t .cnt{font-size:11.5px;color:var(--stone);margin-left:auto}
+.grp-body{display:none}
+.grp:not(.closed) .grp-body{display:block}
+.check-item{padding:13px 16px;border-bottom:1px solid var(--line-soft);position:relative}
+.check-item:last-child{border-bottom:none}
+.check-item.dim-hidden{display:none}
+.ci-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.lvl{font-size:11px;font-weight:650;border-radius:5px;padding:1px 7px}
+.lvl.red{background:var(--red-soft);color:var(--red-deep)}
+.lvl.yellow{background:var(--amber-soft);color:var(--amber-deep)}
+.lvl.blue{background:#eaf3fd;color:#175cd3}
+.jump-link{border:none;background:none;font-size:11.5px;color:var(--primary);display:inline-flex;align-items:center;gap:3px;padding:0 2px}
+.jump-link:hover{text-decoration:underline}
+.q{font-size:13.5px;font-weight:550;color:var(--text);margin-bottom:7px;line-height:1.55}
+.ctx-line{font-size:12px;color:var(--stone);margin-bottom:6px}
+.cite{color:var(--primary);cursor:pointer;border-bottom:1px dashed var(--blue-border)}
+.cite:hover{border-bottom-style:solid}
+.anchored-mark{color:var(--primary);margin-left:3px}
+.quote{border-left:3px solid var(--blue-border);background:var(--blue-light);border-radius:0 8px 8px 0;padding:7px 12px;font-size:12.5px;color:var(--charcoal);margin-bottom:9px}
+.qlb{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--primary);margin-right:8px;font-weight:550}
+.qlb .cite{border-bottom:none}
+
+/* --- 选择题作答区 --- */
+.opts{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.opt{display:flex;align-items:flex-start;gap:9px;border:1px solid var(--line);background:var(--canvas);border-radius:9px;padding:7px 11px;cursor:pointer;text-align:left;font-size:12.8px;color:var(--charcoal);transition:all .12s}
+.opt:hover{border-color:var(--blue-border);background:var(--bg-soft)}
+.opt .radio{width:15px;height:15px;border-radius:50%;border:1.6px solid var(--line-strong);flex:none;margin-top:3px;transition:all .12s}
+.opt .body{flex:1}
+.opt .why{display:block;font-size:11.5px;color:var(--stone);margin-top:2px;line-height:1.5}
+.opt .rec-tag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:650;color:var(--primary);background:var(--blue-light);border:1px solid var(--blue-border);border-radius:9999px;padding:0 7px;margin-right:7px;vertical-align:1px}
+.opt.picked{border-color:var(--primary);background:var(--blue-light);box-shadow:0 0 0 1px var(--primary) inset}
+.opt.picked .radio{border-color:var(--primary);border-width:4.5px;background:var(--canvas)}
+.opt.rec{border-color:var(--blue-border)}
+.ans-ops{display:flex;gap:4px;align-items:center}
+.more-answer{font-size:11.5px;color:var(--faint);border:none;background:none;padding:2px 4px}
+.more-answer:hover{color:var(--muted)}
+.extra-ta{display:none;width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;resize:vertical;min-height:52px;margin-top:2px;color:var(--text)}
+.extra-open .extra-ta{display:block}
+.saved-tip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--green);margin-left:8px}
+/* 已处置态 */
+.check-item.done{background:var(--bg-soft)}
+.check-item.done .opts{display:none}
+.check-item.done .ans-ops{display:none}
+.done-ans{display:flex;align-items:flex-start;gap:8px;font-size:12.8px;margin-top:2px}
+.done-ans .lb{flex:none;font-size:11.5px;font-weight:650;color:var(--green);background:var(--green-soft);border-radius:5px;padding:1px 7px;margin-top:1px}
+.done-ans .txt{color:var(--charcoal)}
+.redo{margin-left:auto;border:none;background:none;font-size:11.5px;color:var(--muted);flex:none}
+.redo:hover{color:var(--primary)}
+
+/* --- 右栏：原文上下文 --- */
+.ctx-card{background:var(--canvas);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-card);display:flex;flex-direction:column;max-height:calc(100vh - 24px)}
+.ctx-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line-soft);flex:none}
+.ctx-head b{font-size:12.5px;font-weight:650}
+.ctx-head .sub{font-size:11px;color:var(--faint)}
+.follow{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:9999px;padding:2px 9px;background:var(--canvas)}
+.follow.on{background:var(--blue-light);border-color:var(--blue-border);color:var(--primary);font-weight:600}
+.follow .dot{width:6px;height:6px;border-radius:50%;background:var(--primary)}
+.ctx-body{overflow:auto;padding:6px 0 16px;flex:1;scroll-behavior:smooth}
+.doc-h{font-size:13px;font-weight:700;padding:10px 16px 4px;color:var(--ink-deep)}
+.doc-sec{font-size:12.5px;font-weight:650;color:var(--slate);padding:10px 16px 2px}
+.blk{padding:6px 16px 6px 19px;font-size:12.6px;color:var(--charcoal);line-height:1.65;border-left:2px solid transparent;position:relative;transition:background .25s,border-color .25s}
+.blk b{color:var(--text)}
+.blk .ref-pill{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;color:var(--primary);background:var(--blue-light);border:1px solid var(--blue-border);border-radius:9999px;padding:0 6px;margin-left:6px;vertical-align:1px;cursor:pointer}
+.blk.hl,.doc-sec.hl{background:var(--yellow-light);border-left-color:var(--yellow-deep)}
+.doc-sec.hl{border-left:2px solid var(--yellow-deep);padding-left:17px;border-radius:0 6px 6px 0}
+@keyframes flashfade{0%{background:var(--yellow)}18%{background:var(--yellow)}100%{background:var(--yellow-light)}}
+.blk.flash{animation:flashfade 1.8s ease}
+.ctx-from{position:sticky;top:0;margin:0 16px;background:var(--blue-light);border:1px solid var(--blue-border);color:var(--primary);font-size:11.5px;border-radius:8px;padding:4px 10px;display:none;margin-bottom:6px;z-index:2}
+.ctx-from.show{display:block}
+.ctx-foot{border-top:1px solid var(--line-soft);padding:8px 14px;flex:none;display:flex;justify-content:space-between;align-items:center}
+.ctx-foot .sub{font-size:11px;color:var(--faint)}
+
+/* ===== 摘要视图 ===== */
+.card{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:12px;box-shadow:var(--shadow-card)}
+.card h3{font-size:13.5px;font-weight:650;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.card h3 .sub{font-weight:400;font-size:11.5px;color:var(--faint)}
+.und-card{border-left:4px solid var(--primary)}
+.und-row{display:flex;gap:14px;align-items:flex-start}
+.und-txt{flex:1;font-size:13px;color:var(--charcoal);line-height:1.7}
+.chiprow{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;align-items:center}
+.chiprow .lb{font-size:11.5px;color:var(--faint);margin-right:2px}
+.mchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--charcoal);background:var(--bg-soft);border:1px solid var(--line);border-radius:9999px;padding:1px 11px;cursor:pointer}
+.mchip:hover{border-color:var(--blue-border);background:var(--blue-light)}
+.mchip .b{font-size:10.5px;font-weight:650;background:var(--amber-soft);color:var(--amber-deep);border-radius:9999px;padding:0 6px}
+.rolechip{font-size:12px;color:var(--slate);background:var(--bg-soft);border:1px solid var(--line);border-radius:9999px;padding:1px 11px}
+.tablewrap{overflow:auto}
+table.table{width:100%;border-collapse:collapse;font-size:12.6px}
+.table th{text-align:left;font-size:11.5px;color:var(--stone);font-weight:600;border-bottom:1px solid var(--line);padding:6px 10px;white-space:nowrap}
+.table td{border-bottom:1px solid var(--line-soft);padding:7px 10px;vertical-align:top}
+.table tr:last-child td{border-bottom:none}
+.row-gap td{background:#fffafb}
+.gapmark{font-size:11px;color:var(--amber-deep);background:var(--amber-soft);border-radius:4px;padding:0 4px;cursor:pointer}
+.gapmark:hover{filter:brightness(.96)}
+.pcnt{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--amber-deep);background:var(--amber-soft);border-radius:9999px;padding:0 8px;cursor:pointer}
+.pcnt:hover{filter:brightness(.96)}
+.asm-item{display:flex;gap:9px;padding:7px 2px;border-bottom:1px dashed var(--line-soft);font-size:12.8px;align-items:baseline}
+.asm-item:last-child{border-bottom:none}
+.asm-item code{font-size:11.5px;color:var(--primary);background:var(--blue-light);border-radius:4px;padding:0 6px;flex:none}
+
+/* ===== 原文视图（反向角标示意） ===== */
+.origin-note{background:var(--green-soft);border:1px solid #cdebdc;color:var(--green);border-radius:10px;padding:8px 14px;font-size:12.5px;margin-bottom:14px;display:flex;gap:8px;align-items:center}
+.doc-full{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:20px 26px;box-shadow:var(--shadow-card);max-width:860px}
+.doc-full .blk{padding-left:13px;border-left-width:2px}
+.doc-full .doc-h{padding:14px 0 4px;font-size:15px}
+.doc-full .doc-sec{padding:12px 0 2px;font-size:13.5px}
+
+/* flash 效果（问题卡片定位） */
+@keyframes itemflash{0%{background:var(--yellow-light)}30%{background:var(--yellow)}100%{background:transparent}}
+.check-item.flash{animation:itemflash 1.6s ease}
+
+/* 视图切换 */
+.view{display:none}
+.view.on{display:block}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 简化侧栏：保持产品感 -->
+  <aside class="side">
+    <div class="logo">
+      <div class="logo-mark">S</div>
+      <div class="logo-txt">SDLC 产物平台<small>迭代 · 需求 · 用例 · 全程可追溯</small></div>
+    </div>
+    <button class="nav-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/></svg>迭代<span class="cnt">7</span></button>
+    <button class="nav-item on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>需求<span class="cnt">200</span></button>
+    <button class="nav-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>用例<span class="cnt">327</span></button>
+    <button class="nav-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>AI 助理</button>
+  </aside>
+
+  <main class="main">
+    <div class="work">
+      <!-- 详情头（复刻现有元素） -->
+      <button class="backlink">← 返回列表</button>
+      <div class="detail-h">
+        <h2>V3.7.3 跨校区教研活动及手机端集备优化</h2>
+        <span class="chip">REQ-2026-1062</span>
+        <span class="chip">v3.7.1</span>
+        <span class="badge b-amber">待澄清</span>
+        <span class="badge b-red">A级</span>
+        <span class="stars" title="需求文档质量分">★★☆☆☆</span>
+      </div>
+      <div class="meta">
+        <span>来源：飞书文档</span><span>沈 · 10-14 11:00</span><span>同步 22 小时前</span>
+      </div>
+
+      <!-- 原型说明（可关闭） -->
+      <div class="proto-note" id="protoNote">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div>
+          <b>方案讨论原型</b>（非实现代码，数据取自 REQ-2026-1062 真实澄清清单）——本次演示 6 个设计点，请对照体验：
+          <ul>
+            <li><b>① Tab 分阶段分组</b>：前 4 个为发布前页签，「 ⁞ 」后的 4 个发布后才激活（置灰）</li>
+            <li><b>② 澄清工作台</b>：体检+澄清合并；右侧「原文上下文」常驻——点左侧摘引/出处试试，<b>不切页签</b>直接联动定位</li>
+            <li><b>③ 就绪度地图</b>：体检报告重塑为维度缺口导航，点维度过滤问题（试试「异常与边界」）</li>
+            <li><b>④ 选择题作答</b>：AI 推荐选项可一键采纳；点任一选项即作答成功（失焦自动保存语义不变）</li>
+            <li>切到「需求摘要」「原始需求」页签看 ⑤ 摘要重定位 与 ⑥ 原文反向角标</li>
+          </ul>
+          <div class="datasource">
+            <span style="font-size:11px;color:var(--faint)">数据源：</span>
+            <button class="ds-btn on" id="dsMock" onclick="useMock()">演示数据（1062）</button>
+            <button class="ds-btn" id="dsReal" onclick="useReal()">真实 REQ-2026-001（160 块 · 23 图）</button>
+          </div>
+        </div>
+        <button class="x" onclick="document.getElementById('protoNote').style.display='none'">✕</button>
+      </div>
+
+      <!-- Tab 条：分阶段分组 -->
+      <div class="tabs" role="tablist">
+        <button class="tab" data-view="origin">原始需求</button>
+        <button class="tab" data-view="digest">需求摘要<span class="n">35</span></button>
+        <button class="tab on" data-view="workbench">澄清工作台<span class="n warn">26</span></button>
+        <button class="tab" data-view="std">标准需求文档</button>
+        <div class="tab-phase" title="以下页签在需求发布后开启"></div>
+        <button class="tab locked" title="发布后开启"><span class="lock-ico"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>变更</button>
+        <button class="tab locked" title="发布后开启"><span class="lock-ico"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>用例</button>
+        <button class="tab locked" title="发布后开启"><span class="lock-ico"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>设计</button>
+        <button class="tab locked" title="发布后开启"><span class="lock-ico"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>门禁</button>
+        <span class="tab-hint">体检报告已并入澄清工作台（问题卡背面）</span>
+      </div>
+
+      <!-- ============ 视图 1：澄清工作台 ============ -->
+      <div class="view on" id="view-workbench">
+
+        <!-- 就绪度 + 进度 -->
+        <div class="wb-top">
+          <div class="readiness">
+            <h3>需求就绪度 <span class="sub">体检报告重塑 · 按缺陷维度看缺口，点维度过滤下方问题</span></h3>
+            <div class="rdy-body">
+              <div class="rdy-score">
+                <div class="n" id="rdyPct">0%</div>
+                <div class="l">就绪度</div>
+                <div class="go">处置完全部问题<br>即可合成标准文档</div>
+              </div>
+              <div class="dims" id="dims">
+                <button class="dim" data-dim="perm">
+                  <span class="dim-name">角色与权限</span><span class="dim-bar"><span class="dim-fill"></span></span>
+                  <span class="dim-cnt"><b>4</b> 待澄清</span>
+                </button>
+                <button class="dim" data-dim="flow">
+                  <span class="dim-name">业务流程</span><span class="dim-bar"><span class="dim-fill"></span></span>
+                  <span class="dim-cnt"><b>9</b> 待澄清</span>
+                </button>
+                <button class="dim" data-dim="data">
+                  <span class="dim-name">数据与口径</span><span class="dim-bar"><span class="dim-fill"></span></span>
+                  <span class="dim-cnt"><b>7</b> 待澄清</span>
+                </button>
+                <button class="dim crit" data-dim="edge">
+                  <span class="dim-name">异常与边界</span><span class="dim-bar"><span class="dim-fill"></span></span>
+                  <span class="dim-cnt"><b>5</b> 待澄清 ⚠</span>
+                </button>
+                <button class="dim" data-dim="nfr">
+                  <span class="dim-name">非功能</span><span class="dim-bar"><span class="dim-fill"></span></span>
+                  <span class="dim-cnt"><b>1</b> 待澄清</span>
+                </button>
+                <button class="dim" data-dim="" style="opacity:.75">
+                  <span class="dim-name" style="width:auto">全部分布（26 题原型仅演示 8 题）</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="wb-prog">
+            <div class="row1"><span style="font-size:12.5px;color:var(--muted)">澄清进度</span>
+              <span class="n" style="margin-left:auto"><b id="doneN">0</b>/26</span></div>
+            <div class="bar"><div class="bar-fill" id="progFill"></div></div>
+            <div class="btns">
+              <button class="btn small primary" onclick="jumpNext()">↗ 跳到下一待处置</button>
+              <button class="btn small" onclick="toggleFilter()">只看待处置</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="wb-grid">
+          <!-- 左栏：问题流（分组） -->
+          <div class="q-col" id="qCol">
+
+            <div class="grp" data-module="jyzc">
+              <div class="grp-t" onclick="this.parentElement.classList.toggle('closed')">
+                <svg class="grp-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                <b>教研活动</b><span class="cnt">12 题 · 已处置 <span class="m-done">0</span>/12 · 来自体检报告 P02–P26</span>
+              </div>
+              <div class="grp-body">
+
+                <!-- P06：选择题 + 推荐（演示主卡） -->
+                <div class="check-item" data-pid="P06" data-dim="flow" data-anchor="blk-notify" data-module="jyzc">
+                  <div class="ci-head">
+                    <span class="lvl yellow">存疑</span><span class="chip">P06</span>
+                    <button class="jump-link">来自体检.P06 ↗</button>
+                    <span style="font-size:11px;color:var(--faint);margin-left:auto">业务流程</span>
+                  </div>
+                  <div class="q">活动通知的渠道、触发时机、接收人范围（跨校区老师是否都收）？「同一个活动页面」与「活动详情页」是同一页吗？</div>
+                  <div class="ctx-line">出处：<a class="cite" data-anchor="blk-notify">详述1·活动通知与参与<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a>｜去向：通知与日历为跨校区核心体验，规则缺失无法开发</div>
+                  <blockquote class="quote">
+                    <span class="qlb">原文摘引 · <a class="cite" data-anchor="blk-notify">在原文中定位<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></span>
+                    活动创建后，不同教研组的老师都会收到通知，在日历中也会显示对应的活动，点击后能进入同一个活动页面；
+                  </blockquote>
+                  <button class="impact-tgl" onclick="this.closest('.check-item').classList.toggle('impact-open')"><span class="chev">▸</span>影响分析（原体检报告字段 · 默认收起）</button>
+                  <div class="impact-box">
+                    <div class="row"><span class="k">去向</span><span>通知与日历为跨校区核心体验，规则缺失无法开发；结论将写入标准文档 §2.2 通知规则条款</span></div>
+                    <div class="row"><span class="k">关联用例</span><span><span class="casechip">WEB-1062-03</span><span class="casechip">WEB-1062-11</span></span></div>
+                  </div>
+                  <div class="opts">
+                    <button class="opt rec" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><span class="rec-tag">✦ AI 推荐</span><b>A · 仅参与教研组全员可见可收</b>，站内信+日历双渠道，活动创建即触发；「同一个活动页面」=「活动详情页」（同一页面）
+                        <span class="why">推荐理由：与原文「不同教研组的老师都会收到通知」最小语义改动，且不引入新页面概念</span></span>
+                    </button>
+                    <button class="opt" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><b>B · 两校区全员</b>可见可收（含未参与教研组的老师）</span>
+                    </button>
+                    <button class="opt" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><b>C · 被邀请方仅组长收到</b>，组员不收通知、日历不显示
+                        <span class="why">范围最小，但与「不同教研组的老师都会收到」表述冲突，需同步修订原文</span></span>
+                    </button>
+                  </div>
+                  <div class="ans-ops">
+                    <button class="btn small link" title="认定不是问题">驳回（不是问题）</button>
+                    <button class="btn small link" title="本期不处理">挂起（转遗留假设）</button>
+                    <button class="more-answer" onclick="this.closest('.check-item').classList.toggle('extra-open')">以上都不对，我要自己写 ▾</button>
+                    <span class="saved-tip" style="display:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>已保存</span>
+                  </div>
+                  <textarea class="extra-ta" placeholder="补充说明：选「其他」时填写具体口径，将写入标准文档对应条款…"></textarea>
+                </div>
+
+                <!-- P16：权限题 -->
+                <div class="check-item" data-pid="P16" data-dim="perm" data-anchor="blk-perm" data-module="jyzc">
+                  <div class="ci-head">
+                    <span class="lvl yellow">存疑</span><span class="chip">P16</span>
+                    <button class="jump-link">来自体检.P16 ↗</button>
+                    <span style="font-size:11px;color:var(--faint);margin-left:auto">角色与权限</span>
+                  </div>
+                  <div class="q">权限等级如何判定「负责人比教研组长高级」？是否有角色等级表？不满足时创建页教研组下拉如何呈现？超管是否豁免？</div>
+                  <div class="ctx-line">出处：<a class="cite" data-anchor="blk-perm">详述1·权限<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></div>
+                  <blockquote class="quote">
+                    <span class="qlb">原文摘引 · <a class="cite" data-anchor="blk-perm">在原文中定位<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></span>
+                    **权限** 创建时的负责人比教研组长高级的权限才能看到其他校区的教研组
+                  </blockquote>
+                  <div class="opts">
+                    <button class="opt rec" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><span class="rec-tag">✦ AI 推荐</span><b>A · 沿用现有角色等级表</b>（校区管理员 &gt; 教研组长 &gt; 负责人 &gt; 普通老师），创建页不满足时下拉仅显示本校教研组并提示原因；超管豁免
+                        <span class="why">推荐理由：等级表为存量能力（角色中心已维护），无需新建模型</span></span>
+                    </button>
+                    <button class="opt" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><b>B · 本期新建「跨校区可见」独立开关</b>，与角色等级解耦，按教研组逐个授权</span>
+                    </button>
+                  </div>
+                  <div class="ans-ops">
+                    <button class="btn small link">驳回（不是问题）</button>
+                    <button class="btn small link">挂起（转遗留假设）</button>
+                    <button class="more-answer" onclick="this.closest('.check-item').classList.toggle('extra-open')">以上都不对，我要自己写 ▾</button>
+                    <span class="saved-tip" style="display:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>已保存</span>
+                  </div>
+                  <textarea class="extra-ta" placeholder="补充说明…"></textarea>
+                </div>
+
+                <!-- P25：短摘引题（演示侧栏兜底价值） -->
+                <div class="check-item" data-pid="P25" data-dim="edge" data-anchor="blk-feedback" data-module="jyzc">
+                  <div class="ci-head">
+                    <span class="lvl blue">建议</span><span class="chip">P25</span>
+                    <button class="jump-link">来自体检.P25 ↗</button>
+                    <span style="font-size:11px;color:var(--faint);margin-left:auto">异常与边界</span>
+                  </div>
+                  <div class="q">能否提供现状基线（现有活动创建流程、教学计划关联规则、校区数据模型）？「目前只能1个校区」的具体约束在哪一层？</div>
+                  <div class="ctx-line">出处：<a class="cite" data-anchor="blk-feedback">详述1·用户反馈<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></div>
+                  <blockquote class="quote">
+                    <span class="qlb">原文摘引 · <a class="cite" data-anchor="blk-feedback">在原文中定位<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></span>
+                    目前只能1个校区
+                  </blockquote>
+                  <div class="opts">
+                    <button class="opt rec" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><span class="rec-tag">✦ AI 推荐</span><b>A · 挂起，转遗留假设</b>：现状基线在数据组口径文档（不在本需求范围），约束层级确认为「教研组表 campus_id 单值」
+                        <span class="why">推荐理由：影响面评估不阻塞开发，合成时记入 需求.A03 遗留假设即可</span></span>
+                    </button>
+                    <button class="opt" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><b>B · 我来补充基线</b>（选后在补充说明里贴现状流程/数据模型）</span>
+                    </button>
+                  </div>
+                  <div class="ans-ops">
+                    <button class="btn small link">驳回（不是问题）</button>
+                    <button class="btn small link">挂起（转遗留假设）</button>
+                    <button class="more-answer" onclick="this.closest('.check-item').classList.toggle('extra-open')">以上都不对，我要自己写 ▾</button>
+                    <span class="saved-tip" style="display:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>已保存</span>
+                  </div>
+                  <textarea class="extra-ta" placeholder="补充说明…"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="grp" data-module="sjjb">
+              <div class="grp-t" onclick="this.parentElement.classList.toggle('closed')">
+                <svg class="grp-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                <b>手机端集备</b><span class="cnt">4 题 · 已处置 <span class="m-done">0</span>/4</span>
+              </div>
+              <div class="grp-body">
+                <!-- P14：阻断题 -->
+                <div class="check-item" data-pid="P14" data-dim="data" data-anchor="blk-upload" data-module="sjjb">
+                  <div class="ci-head">
+                    <span class="lvl red">阻断</span><span class="chip">P14</span>
+                    <button class="jump-link">来自体检.P14 ↗</button>
+                    <span style="font-size:11px;color:var(--faint);margin-left:auto">数据与口径</span>
+                  </div>
+                  <div class="q">上传资源支持的文件类型、大小与数量上限是什么？入口是微信聊天文件还是本地文件？上传失败如何处理？</div>
+                  <div class="ctx-line">出处：<a class="cite" data-anchor="blk-upload">详述2·上传资源改造<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></div>
+                  <blockquote class="quote">
+                    <span class="qlb">原文摘引 · <a class="cite" data-anchor="blk-upload">在原文中定位<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></span>
+                    上传资源改造：可以上传微信聊天中的文档
+                  </blockquote>
+                  <div class="opts">
+                    <button class="opt rec" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><span class="rec-tag">✦ AI 推荐</span><b>A · 微信聊天文件 + 本地文件双入口</b>；类型 doc/docx/pdf/pptx/xlsx/图片，单文件 ≤ 50MB，单次 ≤ 5 个；失败 toast 提示保留进度可重传
+                        <span class="why">推荐理由：对齐现有 PC 端资源中心上传约束，H5 复用同一套校验</span></span>
+                    </button>
+                    <button class="opt" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><b>B · 仅微信聊天文件</b>（严格按原文，本地文件下期）</span>
+                    </button>
+                  </div>
+                  <div class="ans-ops">
+                    <button class="btn small link">驳回（不是问题）</button>
+                    <button class="btn small link">挂起（转遗留假设）</button>
+                    <button class="more-answer" onclick="this.closest('.check-item').classList.toggle('extra-open')">以上都不对，我要自己写 ▾</button>
+                    <span class="saved-tip" style="display:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>已保存</span>
+                  </div>
+                  <textarea class="extra-ta" placeholder="补充说明…"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="grp" data-module="yyht">
+              <div class="grp-t" onclick="this.parentElement.classList.toggle('closed')">
+                <svg class="grp-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                <b>运营后台</b><span class="cnt">7 题 · 已处置 <span class="m-done">0</span>/7</span>
+              </div>
+              <div class="grp-body">
+                <!-- P01：范围题 -->
+                <div class="check-item" data-pid="P01" data-dim="flow" data-anchor="blk-menu" data-module="yyht">
+                  <div class="ci-head">
+                    <span class="lvl red">阻断</span><span class="chip">P01</span>
+                    <button class="jump-link">来自体检.P01 ↗</button>
+                    <span style="font-size:11px;color:var(--faint);margin-left:auto">业务流程</span>
+                  </div>
+                  <div class="q">「Banner图配置」二级菜单本期要做吗？要做的字段与规则是什么（图片规格/张数、跳转链接、生效范围、上下线时间、排序、是否带用户信息）？</div>
+                  <div class="ctx-line">出处：<a class="cite" data-anchor="blk-menu">详述3·运营活动配置<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></div>
+                  <blockquote class="quote">
+                    <span class="qlb">原文摘引 · <a class="cite" data-anchor="blk-menu">在原文中定位<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></span>
+                    新增一级菜单「运营活动配置」，包含 Banner图配置、顶部按钮配置两个二级菜单
+                  </blockquote>
+                  <div class="opts">
+                    <button class="opt rec" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><span class="rec-tag">✦ AI 推荐</span><b>A · 本期做</b>，字段沿用「顶部按钮配置」同套规则（图片 750×300 ≤ 5 张 / 链接与生效范围同 1.2/1.7 / 上下线时间 + 排序 1-100）
+                        <span class="why">推荐理由：与已详述的顶部按钮配置字段几乎同构，复用配置模型开发成本最低</span></span>
+                    </button>
+                    <button class="opt" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><b>B · 本期仅占位菜单</b>（入口可见、内页「敬请期待」，字段规则下期补）</span>
+                    </button>
+                    <button class="opt" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><b>C · 本期不做</b>，一级菜单下仅顶部按钮配置</span>
+                    </button>
+                  </div>
+                  <div class="ans-ops">
+                    <button class="btn small link">驳回（不是问题）</button>
+                    <button class="btn small link">挂起（转遗留假设）</button>
+                    <button class="more-answer" onclick="this.closest('.check-item').classList.toggle('extra-open')">以上都不对，我要自己写 ▾</button>
+                    <span class="saved-tip" style="display:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>已保存</span>
+                  </div>
+                  <textarea class="extra-ta" placeholder="补充说明…"></textarea>
+                </div>
+
+                <!-- P04：边界题（演示维度过滤「异常与边界」） -->
+                <div class="check-item" data-pid="P04" data-dim="edge" data-anchor="blk-status" data-module="yyht">
+                  <div class="ci-head">
+                    <span class="lvl yellow">存疑</span><span class="chip">P04</span>
+                    <button class="jump-link">来自体检.P04 ↗</button>
+                    <span style="font-size:11px;color:var(--faint);margin-left:auto">异常与边界</span>
+                  </div>
+                  <div class="q">状态判定边界如何取（t=上线时间算未开始还是进行中）？编辑修改时间后状态是否立即回退/推进？</div>
+                  <div class="ctx-line">出处：<a class="cite" data-anchor="blk-status">详述3·配置列表 1.10<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></div>
+                  <blockquote class="quote">
+                    <span class="qlb">原文摘引 · <a class="cite" data-anchor="blk-status">在原文中定位<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></span>
+                    当前状态：根据当前时间自动计算得到 未开始 / 进行中 / 已结束
+                  </blockquote>
+                  <div class="opts">
+                    <button class="opt rec" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><span class="rec-tag">✦ AI 推荐</span><b>A · 左闭右开 [上线, 下线)</b>：t = 上线时刻即「进行中」；编辑时间保存后立即重算（下次刷新可见）
+                        <span class="why">推荐理由：区间语义无重叠无空洞，测试可枚举全部临界用例</span></span>
+                    </button>
+                    <button class="opt" onclick="pick(this)">
+                      <span class="radio"></span>
+                      <span class="body"><b>B · 当天 00:00 起算</b>「进行中」（按自然日切换）</span>
+                    </button>
+                  </div>
+                  <div class="ans-ops">
+                    <button class="btn small link">驳回（不是问题）</button>
+                    <button class="btn small link">挂起（转遗留假设）</button>
+                    <button class="more-answer" onclick="this.closest('.check-item').classList.toggle('extra-open')">以上都不对，我要自己写 ▾</button>
+                    <span class="saved-tip" style="display:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>已保存</span>
+                  </div>
+                  <textarea class="extra-ta" placeholder="补充说明…"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- 已处置示例组：展示答复后的形态 + std 引用标注 -->
+            <div class="grp">
+              <div class="grp-t" onclick="this.parentElement.classList.toggle('closed')">
+                <svg class="grp-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                <b>其他</b><span class="cnt">3 题 · 已处置 <span class="m-done">1</span>/3</span>
+              </div>
+              <div class="grp-body">
+                <!-- P22 已处置示例 -->
+                <div class="check-item done" data-pid="P22" data-dim="nfr">
+                  <div class="ci-head">
+                    <span class="lvl yellow">存疑</span><span class="chip">P22</span>
+                    <button class="jump-link">来自体检.P22 ↗</button>
+                    <span style="font-size:11px;color:var(--faint);margin-left:auto">非功能</span>
+                  </div>
+                  <div class="q">UI与交互章节为空，能否补齐弹窗联动、字段校验提示、空态等交互稿？7张原型图分别对应哪个页面？</div>
+                  <div class="done-ans">
+                    <span class="lb">已答复</span>
+                    <span class="txt"><b>A · 补齐交互稿</b>（原型图对应关系：图1-2 活动创建 / 图3 活动检查 / 图4-5 运营配置 / 图6-7 集备上传下载）
+                      <span style="display:block;font-size:11px;color:var(--faint);margin-top:3px">→ 已写入标准文档 §2.4 交互稿索引，条款后缀将标注 <code style="color:var(--primary);background:var(--blue-light);border-radius:4px;padding:0 5px;font-size:10.5px">〔P22〕</code>（Kiro Refine 思想：答复可追溯进产物）</span></span>
+                    <button class="redo">重新作答</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /q-col -->
+
+          <!-- 右栏：原文上下文（可拖宽/可收起） -->
+          <div class="ctx-col" id="ctxCol">
+            <div class="ctx-resizer" id="ctxResizer" title="拖动调整宽度"></div>
+            <div class="ctx-card">
+              <div class="ctx-head">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                <b>原始需求 · 上下文</b><span class="sub">依据版本 10-14 11:00</span>
+                <button class="follow on" id="followBtn" onclick="toggleFollow()" title="开启时点击左侧摘引自动定位；关闭后自由滚动不被打断"><span class="dot"></span>跟随定位</button>
+                <button class="btn small link" onclick="collapseCtx()" title="收起原文面板（大需求全宽阅读时可收起）">收起 ›</button>
+              </div>
+              <div class="ctx-from" id="ctxFrom">📍 来自 P06 · 活动通知与参与（已定位并高亮，前后上下文可继续滚动）</div>
+              <div class="ctx-body" id="ctxBody">
+                <div class="doc-h">V3.7.3 跨校区教研活动及手机端集备优化</div>
+                <div class="doc-sec">一、背景与目标</div>
+                <div class="blk">为进一步提升教研活动的覆盖范围与参与度，支持跨校区教研组共同开展教研活动；同时优化手机端集备的资源上传下载体验，增加教学反思能力。</div>
+                <div class="blk">[用户反馈]鸿儒教研教研活动邀请的教研组可以邀请其它校区的，目前只能1个校区 ……<span class="ref-pill" onclick="goQ('P25')">P25 待澄清</span></div>
+                <div class="doc-sec">二、详述1 · 跨校区教研活动</div>
+                <div class="blk" id="blk-belong"><b>活动归属：</b> 是否一定要有教学计划才能创建教研活动（待定）；活动与教学计划关联后，计划内成员自动可见。<span class="ref-pill" onclick="goQ('P18')">P18 待澄清</span></div>
+                <div class="blk" id="blk-perm"><b>权限：</b> 创建时的负责人比教研组长高级的权限才能看到其他校区的教研组。<span class="ref-pill" onclick="goQ('P16')">P16 待澄清</span></div>
+                <div class="blk" id="blk-notify"><b>活动通知与参与：</b> 活动创建后，不同教研组的老师都会收到通知，在日历中也会显示对应的活动，点击后能进入同一个活动页面；参与教研组可在活动详情内提交材料、参与评议。<span class="ref-pill" onclick="goQ('P06')">P06 待澄清</span></div>
+                <div class="blk" id="blk-check"><b>活动检查：</b> 活动检查列表中，支持展示跨校区的教研活动。例如：校区A的语文教研组组织一个教研活动，邀请了校区B的语文教研组，则在校区A和校区B的教研活动检查中都能看到这个记录。<span class="ref-pill" onclick="goQ('P05')">P05 待澄清</span></div>
+                <div class="blk" id="blk-board"><b>数据看板：</b> 校区的教研活动统计。新版菜单下教研目标-参与教研组的教研活动统计：@马千里（待回收）。<span class="ref-pill" onclick="goQ('P26')">P26 待澄清</span></div>
+                <div class="doc-sec">三、详述2 · 手机端集备优化</div>
+                <div class="blk" id="blk-upload"><b>上传资源改造：</b> 可以上传微信聊天中的文档。<span class="ref-pill" onclick="goQ('P14')">P14 待澄清</span></div>
+                <div class="blk" id="blk-download"><b>下载资源改造：</b> 仿照师圈儿资料下载，支持下载到电脑。<span class="ref-pill" onclick="goQ('P15')">P15 待澄清</span></div>
+                <div class="blk" id="blk-reflect"><b>增加教学反思：</b> 查看反思，填写反思。<span class="ref-pill" onclick="goQ('P11')">P11 待澄清</span></div>
+                <div class="doc-sec">四、详述3 · 运营后台</div>
+                <div class="blk" id="blk-menu">新增一级菜单「运营活动配置」，包含 Banner图配置、顶部按钮配置两个二级菜单。<span class="ref-pill" onclick="goQ('P01')">P01 待澄清</span></div>
+                <div class="blk">顶部按钮配置：按钮 emoji+文字；活动链接必填（增加了是否带用户信息）；生效范围为学校，通过导入实现，可导出模板。<span class="ref-pill" onclick="goQ('P09')">P9/P13 待澄清</span></div>
+                <div class="blk" id="blk-status">配置列表：序号、按钮名称、当前状态（根据当前时间自动计算得到 未开始 / 进行中 / 已结束）、操作（编辑，不允许删除，改时间使其下线）。<span class="ref-pill" onclick="goQ('P04')">P04 待澄清</span></div>
+                <div class="doc-sec">五、UI与交互</div>
+                <div class="blk" style="color:var(--faint)">（章节下无正文，7 张原型图见附件）<span class="ref-pill" style="background:var(--green-soft);color:var(--green);border-color:#cdebdc" onclick="goQ('P22')">P22 已答复 ✓</span></div>
+              </div>
+              <div class="ctx-foot">
+                <span class="sub">块级锚点直达 · 前后上下文自由滚动</span>
+                <button class="btn small link" onclick="switchView('origin')">全宽阅读 ↗</button>
+              </div>
+            </div>
+          </div>
+        </div><!-- /wb-grid -->
+        <button class="ctx-restore" id="ctxRestore" onclick="expandCtx()">‹ 展开原文上下文</button>
+      </div><!-- /view-workbench -->
+
+      <!-- ============ 视图 2：需求摘要（重定位） ============ -->
+      <div class="view" id="view-digest">
+        <div class="card und-card">
+          <h3>AI 理解摘要 <span class="sub">先花 10 秒校验：AI 把你的需求理解成了什么样——偏了立刻能感知</span></h3>
+          <div class="und-row">
+            <div class="und-txt">
+              本需求包含 <b>3 个模块</b>：跨校区教研活动（活动创建/通知/检查/看板）、手机端集备优化（上传/下载/教学反思）、运营后台配置（菜单+按钮配置）。核心主线是<b>打破单校区限制</b>：邀请、可见性、统计全部跨校区化；配套后台做活动位运营配置。
+              <div class="chiprow">
+                <span class="lb">角色</span>
+                <span class="rolechip">教研组长</span><span class="rolechip">负责人</span><span class="rolechip">普通老师</span><span class="rolechip">校区管理员</span><span class="rolechip">运营人员</span>
+              </div>
+              <div class="chiprow">
+                <span class="lb">模块（点击进工作台按模块过滤）</span>
+                <button class="mchip" onclick="goModule('jyzc')">教研活动 <span class="b">12 待澄清</span></button>
+                <button class="mchip" onclick="goModule('sjjb')">手机端集备 <span class="b">4 待澄清</span></button>
+                <button class="mchip" onclick="goModule('yyht')">运营后台 <span class="b">7 待澄清</span></button>
+                <button class="mchip" onclick="goModule('')">其他 <span class="b">3 待澄清</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>功能点地图 <span class="sub">⭐ 本次关注范围 · 待澄清数与工作台联动</span></h3>
+          <div class="tablewrap">
+          <table class="table"><thead><tr>
+            <th style="width:90px">角色</th><th style="width:140px">页面/模块</th><th>功能</th>
+            <th style="width:110px">待澄清</th><th style="width:100px">出处</th>
+          </tr></thead>
+            <tbody>
+              <tr><td>教研组长</td><td>教研活动</td><td>跨校区邀请创建活动</td>
+                <td><span class="pcnt" onclick="goModule('jyzc')">4 题 ↗</span></td><td class="cite">详述1·1</td></tr>
+              <tr><td>教师</td><td>教研活动</td><td>通知接收与日历显示</td>
+                <td><span class="pcnt" onclick="goModule('jyzc')">3 题 ↗</span></td><td class="cite">详述1·活动通知</td></tr>
+              <tr><td>教研组长</td><td>活动检查</td><td>跨校区活动检查列表</td>
+                <td><span class="pcnt" onclick="goModule('jyzc')">3 题 ↗</span></td><td class="cite">详述1·活动检查</td></tr>
+              <tr><td>校区管理员</td><td>数据看板</td><td>校区维度活动统计</td>
+                <td><span class="pcnt" onclick="goModule('jyzc')">2 题 ↗</span></td><td class="cite">详述1·数据看板</td></tr>
+              <tr><td>教师</td><td>手机端集备</td><td>上传/下载资源 + 教学反思</td>
+                <td><span class="pcnt" onclick="goModule('sjjb')">3 题 ↗</span></td><td class="cite">详述2</td></tr>
+              <tr><td>运营人员</td><td>运营后台</td><td>运营活动配置（Banner+按钮）</td>
+                <td><span class="pcnt" onclick="goModule('yyht')">7 题 ↗</span></td><td class="cite">详述3</td></tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>主流程泳道图 <span class="sub">§5 步骤投影 · 🤔 虚线节点 = 原文未定义断点，点击直达对应澄清</span></h3>
+          <div class="lane-wrap">
+          <svg class="lane-svg" viewBox="0 0 960 346" width="960" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M0 0L8 4L0 8z" fill="#cfd4dd"/>
+              </marker>
+            </defs>
+            <!-- 泳道背景（隔行交替） -->
+            <rect class="lane-band" x="0" y="6" width="960" height="82"/>
+            <rect class="lane-band alt" x="0" y="88" width="960" height="82"/>
+            <rect class="lane-band" x="0" y="170" width="960" height="82"/>
+            <rect class="lane-band alt" x="0" y="252" width="960" height="82"/>
+            <!-- 行头 -->
+            <rect class="lane-head" x="0" y="6" width="86" height="82" stroke="var(--line)"/>
+            <rect class="lane-head" x="0" y="88" width="86" height="82" stroke="var(--line)"/>
+            <rect class="lane-head" x="0" y="170" width="86" height="82" stroke="var(--line)"/>
+            <rect class="lane-head" x="0" y="252" width="86" height="82" stroke="var(--line)"/>
+            <text class="lane-name" x="43" y="51" text-anchor="middle">教研组长</text>
+            <text class="lane-name" x="43" y="133" text-anchor="middle">系统</text>
+            <text class="lane-name" x="43" y="215" text-anchor="middle">教师</text>
+            <text class="lane-name" x="43" y="297" text-anchor="middle">运营人员</text>
+            <!-- 泳道分隔线 -->
+            <line x1="0" y1="88" x2="960" y2="88" stroke="#eef0f3"/>
+            <line x1="0" y1="170" x2="960" y2="170" stroke="#eef0f3"/>
+            <line x1="0" y1="252" x2="960" y2="252" stroke="#eef0f3"/>
+
+            <!-- 箭头（先画，节点盖上面） -->
+            <!-- 1→2 同道水平 -->
+            <line class="lane-arrow" x1="188" y1="47" x2="212" y2="47" marker-end="url(#ah)"/>
+            <!-- 2→3 同道水平 -->
+            <line class="lane-arrow" x1="318" y1="47" x2="342" y2="47" marker-end="url(#ah)"/>
+            <!-- 3→4 跨道（组长→系统）：折线 -->
+            <path class="lane-arrow gapout" d="M 448 47 H 478 V 129 H 502" marker-end="url(#ah)"/>
+            <!-- 4→5 跨道（系统→教师）：折线 -->
+            <path class="lane-arrow" d="M 608 129 H 638 V 211 H 662" marker-end="url(#ah)"/>
+            <!-- 5→6 同道水平 -->
+            <line class="lane-arrow gapout" x1="768" y1="211" x2="792" y2="211" marker-end="url(#ah)"/>
+
+            <!-- 节点（foreignObject：可点击可 hover） -->
+            <foreignObject x="96" y="25" width="92" height="44"><div class="node"><span class="no">1</span>创建教研活动<br>（本校教研组）<span class="src">详述1·1</span></div></foreignObject>
+            <foreignObject x="226" y="25" width="92" height="44"><div class="node"><span class="no">2</span>跨校区选择<br>教研组发出邀请<span class="src">详述1·1</span></div></foreignObject>
+            <foreignObject x="356" y="25" width="92" height="44"><div class="node gap" onclick="goQ('P21')"><span class="no">3 🤔</span><b>被邀请方<br>可否拒绝/退出？</b></div></foreignObject>
+            <foreignObject x="510" y="107" width="98" height="44"><div class="node"><span class="no">4</span>通知参与组全员<br>+ 日历显示<span class="src">详述1·通知</span></div></foreignObject>
+            <foreignObject x="670" y="189" width="98" height="44"><div class="node"><span class="no">5</span>点击进入<br>「同一个活动页面」<span class="src">详述1</span></div></foreignObject>
+            <foreignObject x="800" y="189" width="112" height="44"><div class="node gap" onclick="goQ('P08')"><span class="no">6 🤔</span><b>页面内容是否<br>按校区裁剪？</b></div></foreignObject>
+            <!-- 运营子流程（独立起点） -->
+            <foreignObject x="96" y="271" width="98" height="44"><div class="node" style="border-left:3px solid var(--primary)"><span class="no">7</span>配置运营活动按钮<br>（emoji+链接+范围）<span class="src">详述3</span></div></foreignObject>
+            <foreignObject x="226" y="271" width="98" height="44"><div class="node"><span class="no">8</span>按生效范围投放<br>自动算状态<span class="src">详述3·1.10</span></div></foreignObject>
+            <foreignObject x="356" y="271" width="112" height="44"><div class="node gap" onclick="goQ('P17')"><span class="no">9 🤔</span><b>已结束可否改回<br>进行中？重叠怎么排？</b></div></foreignObject>
+            <line class="lane-arrow" x1="194" y1="293" x2="212" y2="293" marker-end="url(#ah)"/>
+            <line class="lane-arrow" x1="324" y1="293" x2="342" y2="293" marker-end="url(#ah)"/>
+            <!-- 子流程分隔说明 -->
+            <text x="530" y="300" font-size="10.5" fill="#8a94a6">↖ 教研主线与运营线为两条独立子流程（原文 §详述1/§详述3）</text>
+          </svg>
+          </div>
+          <p class="sub" style="font-size:11.5px;color:var(--faint);margin-top:6px">同一份数据（digest §5 flows）的另一 projection：表格保留为「无图模式/复制导出」的降级形态。</p>
+        </div>
+
+        <div class="card">
+          <h3>遗留假设 <span class="sub">从摘要原文提出（原折叠 markdown 内）——合成标准文档时将写入 需求.Axx</span></h3>
+          <div class="asm-item"><code>需求.A01</code><span>活动与教学计划的强关联规则沿用现行版本（原文未提及变更即视为不变）</span></div>
+          <div class="asm-item"><code>需求.A02</code><span>数据看板 V1/V2 菜单口径以 @马千里 回收结论为准，未回收前按 V1 实现</span></div>
+          <div class="asm-item"><code>需求.A03</code><span>「目前只能1个校区」的约束层级：教研组表 campus_id 单值（P25 挂起后固化）</span></div>
+        </div>
+      </div>
+
+      <!-- ============ 视图 3：原始需求（反向角标示意） ============ -->
+      <div class="view" id="view-origin">
+        <div class="origin-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          设计点⑥：原文块上挂「待澄清」角标（复用评论角标机制）——从原文出发的人也能发现"这段有问题待答"，点击直达工作台对应问题。全宽阅读形态与现状一致。
+        </div>
+        <div class="doc-full">
+          <div class="doc-h">V3.7.3 跨校区教研活动及手机端集备优化</div>
+          <div class="doc-sec">二、详述1 · 跨校区教研活动</div>
+          <div class="blk"><b>活动归属：</b> 是否一定要有教学计划才能创建教研活动（待定）……<span class="ref-pill" onclick="goQ('P18')">P18 待澄清</span></div>
+          <div class="blk"><b>权限：</b> 创建时的负责人比教研组长高级的权限……<span class="ref-pill" onclick="goQ('P16')">P16 待澄清</span></div>
+          <div class="blk"><b>活动通知与参与：</b> 活动创建后，不同教研组的老师都会收到通知……<span class="ref-pill" onclick="goQ('P06')">P06 待澄清</span></div>
+          <div class="blk"><b>活动检查：</b> 活动检查列表中，支持展示跨校区的教研活动……<span class="ref-pill" onclick="goQ('P05')">P05 待澄清</span></div>
+          <div class="doc-sec">三、详述2 · 手机端集备优化</div>
+          <div class="blk"><b>上传资源改造：</b> 可以上传微信聊天中的文档。<span class="ref-pill" onclick="goQ('P14')">P14 待澄清</span></div>
+          <div class="blk"><b>下载资源改造：</b> 仿照师圈儿资料下载，支持下载到电脑。<span class="ref-pill" onclick="goQ('P15')">P15 待澄清</span></div>
+          <div class="doc-sec">四、详述3 · 运营后台</div>
+          <div class="blk">新增一级菜单「运营活动配置」……<span class="ref-pill" onclick="goQ('P01')">P01 待澄清</span></div>
+          <div class="blk">配置列表：……<span class="ref-pill" onclick="goQ('P04')">P04 待澄清</span></div>
+        </div>
+      </div>
+
+      <!-- ============ 视图 4：标准文档（轻示意：Pxx 引用） ============ -->
+      <div class="view" id="view-std">
+        <div class="origin-note" style="background:var(--blue-light);border-color:var(--blue-border);color:var(--primary)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          设计点⑦（Kiro Refine 思想）：合成条款后缀<b style="margin:0 3px">〔Pxx〕</b>澄清来源引用——PM 能看到"我答的每一条变成了文档里的哪句话"，点击回跳工作台该条答复快照。
+        </div>
+        <div class="doc-full">
+          <div class="doc-h">标准需求文档（草稿 · 预览示意）</div>
+          <div class="doc-sec">2.1 跨校区活动可见性</div>
+          <div class="blk">WHEN 用户创建教研活动时拥有高于教研组长的权限，THE SYSTEM SHALL 在教研组选择器中展示其他校区的教研组。<span class="ref-pill" onclick="goQ('P16')">〔P16〕</span></div>
+          <div class="doc-sec">2.4 交互稿索引</div>
+          <div class="blk">7 张原型图对应关系：图1-2 活动创建 / 图3 活动检查 / 图4-5 运营配置 / 图6-7 集备上传下载。<span class="ref-pill" style="background:var(--green-soft);color:var(--green);border-color:#cdebdc" onclick="goQ('P22')">〔P22〕✓</span></div>
+          <div class="doc-sec">3. 遗留假设</div>
+          <div class="blk">需求.A03「目前只能1个校区」的约束层级按教研组表 campus_id 单值执行。<span class="ref-pill" onclick="goQ('P25')">〔P25·挂起〕</span></div>
+        </div>
+      </div>
+
+    </div><!-- /work -->
+  </main>
+</div>
+
+<script>
+/* ===== Tab 切换 ===== */
+function switchView(v){
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'))
+  document.getElementById('view-'+v).classList.add('on')
+  document.querySelectorAll('.tab[data-view]').forEach(t=>t.classList.toggle('on', t.dataset.view===v))
+  window.scrollTo({top:0})
+}
+document.querySelectorAll('.tab[data-view]').forEach(t=>t.addEventListener('click',()=>switchView(t.dataset.view)))
+
+/* ===== 原文侧栏联动 ===== */
+let follow = true
+function toggleFollow(){ follow = !follow; document.getElementById('followBtn').classList.toggle('on', follow) }
+
+function locate(anchor, fromPid){
+  const el = document.getElementById(anchor)
+  if(!el) return
+  if(!follow && !fromPid) return
+  // 仅高亮当前
+  document.querySelectorAll('.blk.hl').forEach(b=>b.classList.remove('hl'))
+  el.classList.add('hl')
+  el.scrollIntoView({block:'center', behavior:'smooth'})
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash')
+  // 顶部来源提示
+  const tip = document.getElementById('ctxFrom')
+  tip.textContent = '📍 来自 ' + (fromPid||'') + ' · ' + (el.querySelector('b')?.textContent || '原文块').replace(/[:：]$/,'') + '（已定位并高亮，前后上下文可继续滚动）'
+  tip.classList.add('show')
+}
+document.querySelectorAll('.cite[data-anchor]').forEach(a=>a.addEventListener('click',e=>{
+  e.stopPropagation()
+  const item = a.closest('.check-item')
+  locate(a.dataset.anchor, item ? item.dataset.pid : '')
+}))
+
+/* ===== 选项作答 ===== */
+const TOTAL = 26, DONE_INIT = 1
+let done = DONE_INIT
+function refreshStats(){
+  document.getElementById('doneN').textContent = done
+  document.getElementById('progFill').style.width = (done/TOTAL*100)+'%'
+  document.getElementById('rdyPct').textContent = Math.round(done/TOTAL*100)+'%'
+  document.querySelectorAll('.grp').forEach(g=>{
+    const items=[...g.querySelectorAll('.check-item')]
+    const dn=items.filter(i=>i.classList.contains('done')).length + (g.dataset.module==='jyzc'?0:0)
+    const span=g.querySelector('.m-done'); if(span) span.textContent=dn
+  })
+  // 维度条更新（原型近似：按已答比例）
+  const dims={'perm':4,'flow':9,'data':7,'edge':5,'nfr':1}
+  document.querySelectorAll('.dim[data-dim]').forEach(d=>{
+    const key=d.dataset.dim; if(!key) return
+    const total=dims[key]||1
+    const dn=[...document.querySelectorAll(`.check-item[data-dim="${key}"].done`)].length
+    d.querySelector('.dim-fill').style.width=(dn/total*100)+'%'
+    d.querySelector('.dim-cnt').innerHTML = dn>=total ? '<span class="ok">✓ 全部澄清</span>' : `<b>${total-dn}</b> 待澄清`
+  })
+}
+function pick(btn){
+  const item = btn.closest('.check-item')
+  if(item.classList.contains('done')) return
+  item.querySelectorAll('.opt').forEach(o=>o.classList.remove('picked'))
+  btn.classList.add('picked')
+  // 模拟自动保存：500ms 后落为已处置态
+  const tip = item.querySelector('.saved-tip')
+  tip.style.display='inline-flex'
+  setTimeout(()=>{
+    tip.style.display='none'
+    if(!item.querySelector('.opt.picked')) return
+    item.classList.add('done')
+    const ans = item.querySelector('.opt.picked .body').cloneNode(true)
+    ans.querySelectorAll('.why,.rec-tag').forEach(x=>x.remove())
+    const old = item.querySelector('.done-ans')
+    if(old) old.remove()
+    const div=document.createElement('div'); div.className='done-ans'
+    div.innerHTML='<span class="lb">已答复</span><span class="txt"></span><button class="redo" onclick="unpick(this)">重新作答</button>'
+    div.querySelector('.txt').append(ans)
+    item.querySelector('.extra-ta')?.after(div)
+    done++; refreshStats()
+  },600)
+}
+function unpick(rbtn){
+  const item=rbtn.closest('.check-item')
+  item.classList.remove('done')
+  item.querySelector('.done-ans')?.remove()
+  done--; refreshStats()
+}
+refreshStats()
+
+/* ===== 维度过滤 / 模块过滤 / 待处置过滤 ===== */
+let curDim='', curModule='', pendingOnly=false
+function applyFilter(){
+  document.querySelectorAll('.check-item').forEach(it=>{
+    const okDim=!curDim||it.dataset.dim===curDim
+    const okMod=!curModule||it.dataset.module===curModule
+    const okPend=!pendingOnly||!it.classList.contains('done')
+    it.classList.toggle('dim-hidden',!(okDim&&okMod&&okPend))
+  })
+  document.querySelectorAll('.grp').forEach(g=>{
+    const vis=[...g.querySelectorAll('.check-item')].some(i=>!i.classList.contains('dim-hidden'))
+    g.style.display=vis?'':'none'
+  })
+}
+document.querySelectorAll('.dim[data-dim]').forEach(d=>d.addEventListener('click',()=>{
+  const again=d.classList.contains('on')
+  document.querySelectorAll('.dim').forEach(x=>x.classList.remove('on'))
+  curDim = again?'':d.dataset.dim
+  if(!again) d.classList.add('on')
+  applyFilter()
+}))
+function toggleFilter(){ pendingOnly=!pendingOnly; applyFilter() }
+function goModule(m){ curModule=m; applyFilter(); switchView('workbench') }
+function goQ(pid){
+  curDim='';curModule='';pendingOnly=false;applyFilter()
+  document.querySelectorAll('.dim').forEach(x=>x.classList.remove('on'))
+  switchView('workbench')
+  document.querySelectorAll('.grp').forEach(g=>g.classList.remove('closed'))
+  setTimeout(()=>{
+    const el=document.querySelector(`.check-item[data-pid="${pid}"]`)
+    if(!el) return
+    el.scrollIntoView({block:'center',behavior:'smooth'})
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash')
+    locate(el.dataset.anchor, pid)
+  },80)
+}
+
+/* ===== 初始定位：默认直接进真实数据模式（v3.7.2 迭代绑定的 REQ-2026-001） ===== */
+window.addEventListener('load',()=>{ useReal() })
+
+/* ============================================================
+   真实数据模式：fetch REQ-2026-001 → 动态渲染右栏原文（含图）+ 左栏真实题目
+   ============================================================ */
+const REQ1='REQ-2026-001'
+let mockSnapshot=null
+const realQs=[
+ {seq:'P01',level:'red',theme:'听评课',anchor:'K18gdv4luoCq0XxdMzCcSWQtnBh',
+  q:'1.1 标题为「设置固定的听评课模板」，正文操作对象是「量表」，图片里还出现听评课模板/评课模板/自评模板三类选项卡。「量表」与三类「模板」是同一个对象吗？若是两类，本次改的是哪一层？',
+  ctx:'详述1.1（正文对象为「量表」，图片描述含三类模板选项卡）｜ 术语体系未定义，影响量表层与模板层数据模型',
+  quote:'「设置固定的听评课模板」',
+  opts:[
+   {rec:1,t:'A · 同一对象两种叫法',w:'「量表」为正式命名；三类选项卡是量表的适用类型（听评课/评课/自评），本次改的是量表层（模板 = 量表实例）。推荐理由：与图3「量表默认设置」界面自洽，数据模型只建一层',bold:1},
+   {t:'B · 两层对象',w:'「模板」是「量表」的上层容器，本次只改模板配置入口，量表本体不动'},
+   {t:'C · 以图片为准',w:'正文术语统一改称「模板」'}]},
+ {seq:'P02',level:'yellow',theme:'听评课',anchor:'RC8Zdlp1Koi4mwxEnoIcrKPZnpI',
+  q:'正文写「教研组长设置统一量表后，教师发起/参与评课时默认且仅可使用该量表」；评论区定论「权限只有校级领导」；2.2 日志查看权限又是「教研组及以上」。量表默认设置权限到底归谁？',
+  ctx:'详述1.1「教研组长设置统一量表」/ 评论区#3 ｜ 权限主体三套口径并存且评论已给答案，正文未同步',
+  quote:'「教研组长设置统一量表」',
+  opts:[
+   {rec:1,t:'A · 收归校级领导',w:'量表默认设置权限归校级领导（评论区定论），教研组长只读；2.2 日志权限维持「教研组及以上」。推荐理由：评论已定论，正文按评论同步',bold:1},
+   {t:'B · 维持正文',w:'教研组长可设置，评论区口径作废'}]},
+ {seq:'P04',level:'yellow',theme:'听评课',anchor:'EuHhdsuCWoaR3RxdAt9cpS84n4t',
+  q:'授课老师归属多个教研组，只要其中一个教研组配置了固定量表，则评课强制使用该固定量表。若多个教研组同时配置了不同的固定量表，怎么处理？',
+  ctx:'评论区#1（引用条款含「异常情况：授课老师归属多个教研组」）｜ 评论引用条款与正文脱节，冲突规则悬空',
+  quote:'「异常情况：授课老师归属多个教研组」，近邻原文「仅允许使用该量表」',
+  opts:[
+   {rec:1,t:'A · 提示冲突、不允许保存',w:'多组配置不同固定量表时提示管理员冲突并阻断保存（评论区条款为准，正文补录该异常分支）。推荐理由：静默取值会导致跨组评课口径不可预期',bold:1},
+   {t:'B · 按教研组优先级取值',w:'取最高优先级教研组的量表，不阻断'}]},
+ {seq:'P05',level:'yellow',theme:'听评课',anchor:'PCYtdgpQnooQ8OxFLYbcdaHzncc',
+  q:'管理员在教师填写评课记录过程中修改了固定量表，教师提交被提醒后：已填写的评价内容是否保留？能否直接切换到指定量表？能否暂存？',
+  ctx:'详述1.1「请使用指定量表提交评价」｜ 异常分支只到提醒，缺后续路径',
+  quote:'「请使用指定量表提交评价」',
+  opts:[
+   {rec:1,t:'A · 保留已填内容并映射',w:'已填评价整体映射到新量表同序题项，缺项高亮补填后提交；支持暂存草稿。推荐理由：教师重填成本最高，映射方案对题序变化容错',bold:1},
+   {t:'B · 清空重填',w:'仅提示，不保留已填内容'}]},
+ {seq:'P11',level:'yellow',theme:'集备个备',anchor:'OdELdL8EsoTnZtxLEo4cCMqfn1c',
+  q:'正文写明导出的明细「无需浏览序号」，但需求图中明细包含「浏览序号」。以哪个为准？',
+  ctx:'评论区#16、详述2.2（图片描述含「浏览序号」）｜ 正文与需求图冲突，正文未同步',
+  quote:'「无需浏览序号」',
+  opts:[
+   {rec:1,t:'A · 以正文为准',w:'导出明细去掉「浏览序号」；需求图为旧版截图，正文已更新。推荐理由：正文是修订后的意图表达，图未同步更新',bold:1},
+   {t:'B · 以图为准',w:'保留浏览序号，修正正文'}]},
+ {seq:'P12',level:'red',theme:'集备个备',anchor:'7688602844835908795',
+  q:'个备资源更换类型时是否要校验原始文件扩展名（例如 .docx 被改为「试卷」是否放行）？不符合所选类型时的期望行为是什么？',
+  ctx:'评论区#27「个备资源更换类型」｜ 评论追问未答复，影响类型变更实现',
+  quote:'「个备资源更换类型」',
+  opts:[
+   {rec:1,t:'A · 不校验扩展名',w:'仅按所选类型归类，不做扩展名校验（移动端上传文件类型不可控，强校验会卡流程）。推荐理由：资源类型是业务归类而非文件格式断言',bold:1},
+   {t:'B · 校验扩展名白名单',w:'不符则拒绝更换并提示支持的类型'}]},
+]
+async function useReal(){
+  if(mockSnapshot===null) mockSnapshot={q:document.getElementById('qCol').innerHTML,c:document.getElementById('ctxBody').innerHTML,h:document.querySelector('.detail-h h2').textContent,chip:document.querySelectorAll('.detail-h .chip')[0].textContent}
+  document.getElementById('dsReal').classList.add('on');document.getElementById('dsMock').classList.remove('on')
+  const r=await fetch('/api/requirements/'+REQ1).then(x=>x.json())
+  // 头部信息：标题用文档标题块（卡片名叫"测试需求"易误解——内容即 v3.7.2 需求本体）
+  const docTitle=((r.doc.content.blocks||[]).find(b=>b.type==='title')||{}).text
+  document.querySelector('.detail-h h2').textContent=docTitle||r.card.name
+  document.querySelectorAll('.detail-h .chip')[0].textContent=REQ1
+  document.querySelector('.tab[data-view="workbench"] .n').textContent=r.items.length
+  // 右栏：渲染真实块
+  const blocks=(r.doc.content.blocks||[]).filter(b=>b.type!=='comment')
+  const byId={},anchorSeq={}
+  blocks.forEach(b=>byId[b.id]=b)
+  r.items.forEach(it=>{if(it.anchor)(anchorSeq[it.anchor]=anchorSeq[it.anchor]||[]).push(it.seq)})
+  const shownPids=new Set(realQs.map(q=>q.seq))
+  const depth=b=>{let d=0,p=b.parent;while(p&&byId[p]){d++;p=byId[p].parent}return d}
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  let html=''
+  for(const b of blocks){
+    const pill=(anchorSeq[b.id]||[]).filter(s=>shownPids.has(s)).map(s=>`<span class="ref-pill" onclick="goQ('${s}')">${s} 待澄清</span>`).join('')
+    if(b.type==='title'||b.type==='heading'){
+      html+=`<div class="${b.type==='title'?'doc-h':'doc-sec'}" id="${b.id}">${esc(b.text)}${pill}</div>`
+    }else if(b.type==='image'){
+      const cap=(b.caption||b.alt||'').slice(0,80)
+      html+=`<div class="blk img-blk" id="${b.id}"><img src="/api/requirements/${REQ1}/media/${b.media}" alt="${esc(b.alt||'')}" loading="lazy" onclick="lightbox(this.src,this.alt)"><div class="cap">${esc(cap)}${pill}</div></div>`
+    }else if(b.type==='list-item'){
+      const d=Math.min(2,depth(b))
+      html+=`<div class="blk li-blk ${d?'li-d'+d:''}" id="${b.id}">${b.ordinal?`<b>${esc(b.ordinal)}</b> `:''}${esc(b.text)}${pill}</div>`
+    }else{
+      html+=`<div class="blk" id="${b.id}">${esc(b.text)}${pill}</div>`
+    }
+  }
+  document.getElementById('ctxBody').innerHTML=html
+  // 左栏：真实题目（按 theme 分组）
+  const themes=[...new Set(realQs.map(q=>q.theme))]
+  const lvlName={red:'阻断',yellow:'存疑',blue:'建议'}
+  document.getElementById('qCol').innerHTML=themes.map(t=>{
+    const qs=realQs.filter(q=>q.theme===t)
+    return `<div class="grp"><div class="grp-t" onclick="this.parentElement.classList.toggle('closed')">
+      <svg class="grp-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+      <b>${t}</b><span class="cnt">${qs.length} 题 · 来自体检报告</span></div>
+      <div class="grp-body">${qs.map(item=>`
+      <div class="check-item" data-pid="${item.seq}" data-anchor="${item.anchor}">
+        <div class="ci-head">
+          <span class="lvl ${item.level}">${lvlName[item.level]}</span><span class="chip">${item.seq}</span>
+          <button class="jump-link">来自体检.${item.seq} ↗</button>
+        </div>
+        <div class="q">${esc(item.q)}</div>
+        <div class="ctx-line">出处：<a class="cite" data-anchor="${item.anchor}">${esc(item.ctx.split('｜')[0])}<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></div>
+        <blockquote class="quote"><span class="qlb">原文摘引 · <a class="cite" data-anchor="${item.anchor}">在原文中定位<svg class="anchored-mark" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></a></span>${esc(item.quote)}</blockquote>
+        <div class="opts">${item.opts.map(o=>`
+          <button class="opt ${o.rec?'rec':''}" onclick="pick(this)"><span class="radio"></span>
+          <span class="body">${o.rec?'<span class="rec-tag">✦ AI 推荐</span>':''}<b>${esc(o.t)}</b>${o.w?`<span class="why">${o.rec?'推荐理由：':''}${esc(o.w)}</span>`:''}</span>
+          </button>`).join('')}
+        </div>
+        <div class="ans-ops">
+          <button class="btn small link">驳回（不是问题）</button><button class="btn small link">挂起（转遗留假设）</button>
+          <button class="more-answer" onclick="this.closest('.check-item').classList.toggle('extra-open')">以上都不对，我要自己写 ▾</button>
+          <span class="saved-tip" style="display:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>已保存</span>
+        </div>
+        <textarea class="extra-ta" placeholder="补充说明…"></textarea>
+      </div>`).join('')}</div></div>`}).join('')
+  // 重新绑定摘引点击（动态 DOM）
+  document.querySelectorAll('.cite[data-anchor]').forEach(a=>a.addEventListener('click',e=>{
+    e.stopPropagation()
+    const item=a.closest('.check-item')
+    locate(a.dataset.anchor,item?item.dataset.pid:'')
+  }))
+  curDim='';curModule='';pendingOnly=false;applyFilter()
+  locate('K18gdv4luoCq0XxdMzCcSWQtnBh','P01')
+}
+function useMock(){
+  if(!mockSnapshot)return
+  document.getElementById('dsMock').classList.add('on');document.getElementById('dsReal').classList.remove('on')
+  document.querySelector('.detail-h h2').textContent=mockSnapshot.h
+  document.querySelectorAll('.detail-h .chip')[0].textContent=mockSnapshot.chip
+  document.querySelector('.tab[data-view="workbench"] .n').textContent='26'
+  document.getElementById('qCol').innerHTML=mockSnapshot.q
+  document.getElementById('ctxBody').innerHTML=mockSnapshot.c
+  document.querySelectorAll('.cite[data-anchor]').forEach(a=>a.addEventListener('click',e=>{
+    e.stopPropagation()
+    const item=a.closest('.check-item')
+    locate(a.dataset.anchor,item?item.dataset.pid:'')
+  }))
+  done=1;refreshStats();locate('blk-notify','P06')
+}
+function lightbox(src,alt){
+  const m=document.createElement('div');m.className='lb-mask'
+  m.innerHTML=`<img src="${src}"><div class="lb-cap">${(alt||'').slice(0,120)}</div>`
+  m.onclick=()=>m.remove();document.body.appendChild(m)
+}
+
+/* ===== 右栏拖宽 / 收起 ===== */
+const wbGrid=document.querySelector('.wb-grid'),ctxCol=document.getElementById('ctxCol'),
+      ctxRes=document.getElementById('ctxResizer'),ctxRestore=document.getElementById('ctxRestore')
+let ctxW=+(localStorage.getItem('mock.ctxw')||430)
+function setCtxW(v){ctxW=Math.min(760,Math.max(320,Math.round(v)));wbGrid.style.gridTemplateColumns=`minmax(0,1fr) ${ctxW}px`;localStorage.setItem('mock.ctxw',ctxW)}
+setCtxW(ctxW)
+ctxRes.addEventListener('mousedown',e=>{
+  e.preventDefault()
+  ctxRes.classList.add('drag')
+  const x0=e.clientX,w0=ctxW
+  const mv=ev=>setCtxW(w0+(x0-ev.clientX))
+  const up=()=>{ctxRes.classList.remove('drag');document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up)}
+  document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up)
+})
+function collapseCtx(){wbGrid.classList.add('no-ctx');ctxCol.style.display='none';ctxRestore.classList.add('show')}
+function expandCtx(){wbGrid.classList.remove('no-ctx');ctxCol.style.display='';ctxRestore.classList.remove('show');setCtxW(ctxW)}
+
+/* ===== 跳到下一待处置 ===== */
+function jumpNext(){
+  const next=[...document.querySelectorAll('.check-item:not(.done)')].find(i=>!i.classList.contains('dim-hidden'))
+    || document.querySelector('.check-item:not(.done)')
+  if(!next){ alert('原型内演示题已全部处置 ✓（真实环境还有 18 题）'); return }
+  next.scrollIntoView({block:'center',behavior:'smooth'})
+  next.classList.remove('flash'); void next.offsetWidth; next.classList.add('flash')
+  locate(next.dataset.anchor, next.dataset.pid)
+}
+</script>
+</body>
+</html>

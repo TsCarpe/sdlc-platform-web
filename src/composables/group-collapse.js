@@ -23,7 +23,13 @@ export function provideGroupCollapse(groups) {
       const hit = kind === 'fr'
         ? g.items.some(x => x.id === id)
         : g.items.some(x => pidOf(x.id) === id || x.seq === id)
-      if (hit) { openGrps.add(g.name); return }
+      // 命中已定论组（带 raw 标记）时同步展开同名 check 父组——已定论子折叠块渲染在
+      // 父组 grp-body 内，只开子块键父组仍折，目标卡 0 高度不可见（review F1 与兜底双保险）
+      if (hit) {
+        openGrps.add(g.name)
+        if (g.raw) openGrps.add(g.raw)
+        return
+      }
     }
   }
 

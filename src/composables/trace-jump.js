@@ -56,7 +56,9 @@ export function useTraceJump(deps) {
       revealGrpFor('audit', j.id)
       await settle()
       let el = document.querySelector(`[data-pid="${j.id}"]`)
-      if (!el && expandAllGroups) {
+      // 兜底扩为「el 不存在 或 折叠态不可见（0fr 高度 DOM 常驻）」——已定论卡宿主在
+      // check 父组内的子折叠块里，父组仍折时 el 命中但 flash 不可见（静默失效，review F1）
+      if ((!el || el.clientHeight === 0) && expandAllGroups) {
         expandAllGroups()
         await settle()
         el = document.querySelector(`[data-pid="${j.id}"]`)

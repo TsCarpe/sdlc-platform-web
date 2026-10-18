@@ -215,10 +215,18 @@ function assembleDisplay(it) {
 // 「在途丢弃」语义相反（点选即 PUT 沿用会静默丢答）。makeBody 延迟到实际发送时装配：排队等待
 // 期间值再变，轮到发送时取最新值（最后值胜）。处置确认与重开同链——防 set_disposition 三元组
 // 整行覆写与在途作答 PUT 后到者胜（互斥条款 ③）。
-const putChain = {}   // seq → Promise 链尾
+const putChain = {}      // seq → Promise 链尾
+const chainDepth = {}    // seq → 链上排队+在途 PUT 数（flushPendingExtra 判重：链上还有后续则最新值必被其捎带）
 function enqueuePut(seq, makeBody) {
+  chainDepth[seq] = (chainDepth[seq] || 0) + 1
   const run = async () => {
-    await api.put(`/api/requirements/${props.reqId}/answers/${seq}`, makeBody())
+    const body = makeBody()   // 发送时装配（最后值胜）——轮到发送才取值，排队期间值再变也捎带最新
+    try {
+      await api.put(`/api/requirements/${props.reqId}/answers/${seq}`, body)
+      return body             // 透传发送时值——await 方的回写对象 = 实际发送值
+    } finally {
+      chainDepth[seq]--
+    }
   }
   putChain[seq] = (putChain[seq] ?? Promise.resolve()).catch(() => {}).then(run)
   return putChain[seq]
@@ -238,18 +246,43 @@ function pickOption(it, key) {
     .then(() => {
       it.answer = payload                 // 已答快照本地回写（= 发送值，捕获语义）
       it.answerText = display
-      it.status = 'answered'
+      it.status = 'answered'              // 切 answered 视图——extra textarea 即将卸载且无 blur（#3）
       originAnswers.value[it.seq] = payload
       ansState.value[it.seq] = 'saved'
       setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
+      flushPendingExtra(it, payload)
     })
     .catch(e => { delete ansState.value[it.seq]; emit('toast', '保存失败：' + e.message, 'err') })
 }
 
-/** 「以上都不对」补充说明失焦保存：沿用 savingSeqs 在途丢弃语义、不进发送链（§2.3——
- *  单次装配直发无 makeBody 延迟，无捕获必要，r4）；装配仍是全量（picked 存在则结构化含 extra）。
- *  幂等短路双基准（payload 体制）：originAnswers 存 payload 形态（pickOption 回写）、
- *  it.answerText/answer 是已答快照——各形态对齐比较，不做跨形态比对 */
+/** #3：点选 PUT 在途回写切视图——Vue 卸载聚焦中的 textarea 不派发 blur，saveExtra 不会执行，
+ *  排队等待期间新填的 extra 滞留本地 reactive（reopen 的 delete extra 会将其彻底丢失）。
+ *  回写时发现最新装配 ≠ 捕获值，即替 textarea 补一次链内 PUT（替身 blur：textarea 已/将卸载
+ *  不再输入，makeBody 发送时值 = 最终值）。链上还有后续 PUT（连点/已 blur 入链）则不补——
+ *  后续 PUT 的 makeBody 发送时装配必然捎带最新值，补发即重复 */
+function flushPendingExtra(it, captured) {
+  if ((chainDepth[it.seq] || 0) > 0) return
+  if (assemblePayload(it) === captured) return
+  ansState.value[it.seq] = 'saving'
+  let sent = captured, sentDisplay = ''
+  enqueuePut(it.seq, () => {
+    sent = assemblePayload(it); sentDisplay = assembleDisplay(it)
+    return { answer: sent, status: 'answered' }
+  }).then(() => {
+    it.answer = sent
+    it.answerText = sentDisplay
+    originAnswers.value[it.seq] = sent
+    ansState.value[it.seq] = 'saved'
+    setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
+  }).catch(e => { delete ansState.value[it.seq]; emit('toast', '补充说明保存失败：' + e.message, 'err') })
+}
+
+/** 「以上都不对」补充说明失焦保存：入 per-seq 发送链（#5——直发与链内点选/处置 PUT 网络乱序，
+ *  后到旧值胜会静默吞 extra；入链串行 + makeBody 发送时装配 = 最后值胜贯彻到跨路径）。
+ *  savingSeqs 去重保留 §2.3 在途丢弃语义：排队/在途期间连续 blur 只挂一个 PUT——丢弃的是
+ *  重复请求而非值（排队中的 makeBody 发送时装配自然捎带最新输入）。幂等短路双基准不变
+ *  （payload 体制）：originAnswers 存 payload 形态（pickOption 回写）、it.answerText/answer
+ *  是已答快照——各形态对齐比较，不做跨形态比对 */
 async function saveExtra(it) {
   if (disposeDlg.value) return            // 处置弹窗打开——抑制该题 blur 保存（互斥条款 ②）
   const payload = assemblePayload(it)
@@ -259,12 +292,16 @@ async function saveExtra(it) {
   if (savingSeqs.has(it.seq)) return
   savingSeqs.add(it.seq)
   ansState.value[it.seq] = 'saving'
+  let sent = payload, sentDisplay = display
   try {
-    await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: payload })
-    it.answer = payload
-    it.answerText = display
-    it.status = payload.trim() ? 'answered' : 'pending'
-    originAnswers.value[it.seq] = payload
+    await enqueuePut(it.seq, () => {
+      sent = assemblePayload(it); sentDisplay = assembleDisplay(it)   // 发送时装配（最后值胜）
+      return { answer: sent }
+    })
+    it.answer = sent
+    it.answerText = sentDisplay
+    it.status = sent.trim() ? 'answered' : 'pending'
+    originAnswers.value[it.seq] = sent
     ansState.value[it.seq] = 'saved'
     setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
   } catch (e) {
@@ -273,6 +310,14 @@ async function saveExtra(it) {
   } finally {
     savingSeqs.delete(it.seq)
   }
+}
+
+/** 「以上都不对」开合（#3 同族路径）：收起 = textarea 卸载同样不派发 blur——收起即替身保存
+ *  （saveExtra 幂等短路，无变更零 PUT）；展开仅置位 */
+function toggleExtra(it) {
+  const closing = extraOpen[it.seq]
+  extraOpen[it.seq] = !closing
+  if (closing) saveExtra(it)
 }
 
 // ===== 无 options 卡草稿体制（v1.6 二期）：draft/dirty + 懒播种 + items 替换失效重播种 =====
@@ -303,7 +348,7 @@ watch(() => props.items, (items) => {
   }
 })
 
-const savingSeqs = new Set()   // per-seq 在途集：失焦重入防并发同 seq 双 PUT
+const savingSeqs = new Set()   // per-seq 在途/排队集：失焦重入去重（在途丢弃语义，§2.3）
 async function saveAnswer(it) {
   if (disposeDlg.value) return            // 处置互斥：弹窗打开期间抑制失焦保存（§2.3）
   if (!(it.seq in originAnswers.value)) originAnswers.value[it.seq] = seedOf(it)
@@ -311,10 +356,11 @@ async function saveAnswer(it) {
   if (draft === (originAnswers.value[it.seq] ?? '')) return
   if (savingSeqs.has(it.seq)) return
   savingSeqs.add(it.seq)
-  const sent = draft   // 发送时值快照——响应回来时输入已再变则不回写（乱序防旧覆新，比较对象=draft）
+  let sent = draft   // 发送时值（makeBody 装配）——响应回来时输入已再变则不回写（乱序防旧覆新）
   ansState.value[it.seq] = 'saving'
   try {
-    await api.put(`/api/requirements/${props.reqId}/answers/${it.seq}`, { answer: sent })
+    // 入 per-seq 发送链（#4——直发与处置 PUT 竞速，后到作答 PUT 整行覆写驳回/挂起并清理由）
+    await enqueuePut(it.seq, () => { sent = drafts[it.seq] ?? ''; return { answer: sent } })
     if ((drafts[it.seq] ?? '') === sent) {
       it.answer = sent                   // 无 options 卡 = 纯文本作答：answer 与 answerText 同值
       it.answerText = sent
@@ -379,8 +425,22 @@ async function reopen(it) {
 </script>
 
 <template>
-  <EmptyState v-if="!items.length && !audit" icon="inbox" title="质检产物尚未推送"
-              desc="推送后此处为澄清工作台（问题作答 + 原文上下文）" />
+  <!-- 空态（§1.2 r2 C3）：左 EmptyState + 右原文侧栏照常渲染（右栏不依赖产物数据——
+      PM 建卡后等产物期间可读原文；无块结构 doc 时随 no-ctx 单栏降级） -->
+  <div v-if="!items.length && !audit" class="wb-grid" :class="{ 'no-ctx': !hasDoc || ctxCollapsed }" :style="gridStyle">
+    <div class="q-col">
+      <EmptyState icon="inbox" title="质检产物尚未推送"
+                  desc="推送后此处为澄清工作台（问题作答 + 原文上下文）" />
+    </div>
+    <div class="ctx-col" v-if="hasDoc && !ctxCollapsed">
+      <div class="ctx-resizer" title="拖动调整宽度（320-760px）" @mousedown="startDrag"></div>
+      <CtxPane ref="ctxRef" :req-id="reqId" :doc="doc" :snapshot="snapshot"
+               :pending-by-block="pendingByBlock"
+               @clarify="locateCheck" @collapse="ctxCollapsed = true"
+               @locate="(s, a) => emit('locate', s, a)" @open-origin="emit('open-origin')" />
+    </div>
+    <button class="ctx-restore" v-if="hasDoc && ctxCollapsed" @click="ctxCollapsed = false">‹ 展开原文上下文</button>
+  </div>
   <template v-else>
     <!-- v5 工作台顶条（§2.1/§2.2）：就绪度覆盖地图（维度条，v1.6 layer 产出后点亮）+ 澄清进度 -->
     <div class="wb-top" :class="{ duo: hasLayers }" v-if="status === 'clarifying' || status === 'changed'">
@@ -540,7 +600,7 @@ async function reopen(it) {
             <div class="ans-ops">
               <button class="btn small link" title="认定不是问题：不进标准文档定稿" @click="askDispose(it, 'rejected')">驳回（不是问题）</button>
               <button class="btn small link" title="本期不处理：合成时转遗留假设" @click="askDispose(it, 'deferred')">挂起（转遗留假设）</button>
-              <button class="more-answer" @click="extraOpen[it.seq] = !extraOpen[it.seq]">{{ extraOpen[it.seq] ? '收起补充说明 ▴' : '以上都不对，我要自己写 ▾' }}</button>
+              <button class="more-answer" @click="toggleExtra(it)">{{ extraOpen[it.seq] ? '收起补充说明 ▴' : '以上都不对，我要自己写 ▾' }}</button>
               <span class="saved" v-if="ansState[it.seq] === 'saved'"><AppIcon name="check-circle" :size="11" />已保存</span>
               <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
             </div>

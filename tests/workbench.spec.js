@@ -149,23 +149,96 @@ describe('WorkbenchTab：选择题化作答（v5 §2.3）', () => {
       { answer: '改写成纯文本口径' })                 // 无 options 卡 PUT 纯文本（永不结构化）
   })
 
-  it('连点+在途补充：捕获语义回调回写 = 发送值（PUT1 回写不含回调时点新填的 extra）', async () => {
+  it('#5 乱序消灭：点选在途 + blur 补充——saveExtra 入链排队不并发，终值 = 后到 PUT 含 extra', async () => {
     const { api } = await import('../src/api.js')
-    let release
-    api.put.mockImplementationOnce(() => new Promise(r => { release = r }))
+    const rel = []
+    api.put.mockImplementation(() => new Promise(r => { rel.push(r) }))   // 两个 PUT 挂起可控
     const items = [{ ...OPT_ITEM }]
     const w = await mountWb(items)
     await w.findAll('.opt')[0].trigger('click')      // PUT1 挂起——payload 已捕获（JSON 无 extra）
     await w.find('.more-answer').trigger('click')
     await w.find('.extra-ta').setValue('补充口径')
-    await w.find('.extra-ta').trigger('blur')        // PUT2：saveExtra 直发（全量 JSON+extra）
+    await w.find('.extra-ta').trigger('blur')        // PUT2：saveExtra 入链（排队，不直发）
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(1)         // 修复前此处已并发直发 PUT2——网络乱序源
+    rel[0]()                                          // PUT1 完成——回写 = 捕获的发送值（D-B）
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(2)         // PUT1 完成后 PUT2 才发出（串行结构性消灭乱序）
+    expect(items[0].answer).toBe('{"kind":"option","optionKey":"A","optionText":"选项A全文"}')  // 中间态=捕获值
+    expect(JSON.parse(api.put.mock.calls[1][1].answer).extra).toBe('补充口径')   // 发送时装配=最新值
+    rel[1]()                                          // PUT2 完成——终值 = 后到 PUT（最后值胜）
+    await flushPromises()
+    expect(items[0].answer).toBe('{"kind":"option","optionKey":"A","optionText":"选项A全文","extra":"补充口径"}')
+    expect(items[0].answerText).toBe('选项A全文（补充：补充口径）')   // extra 不再静默丢失
+  })
+
+  it('#3 点选在途回写切视图：textarea 卸载无 blur——自动替身保存，extra 不滞留、reopen 不丢', async () => {
+    const { api } = await import('../src/api.js')
+    const rel = []
+    api.put.mockImplementation(() => new Promise(r => { rel.push(r) }))
+    const items = [{ ...OPT_ITEM }]
+    const w = await mountWb(items)
+    await w.findAll('.opt')[0].trigger('click')      // PUT1 挂起（捕获 payload 无 extra）
+    await w.find('.more-answer').trigger('click')
+    await w.find('.extra-ta').setValue('两校区都要收到')   // 输入补充——全程无 blur（Vue 卸载不派发）
+    expect(api.put).toHaveBeenCalledTimes(1)
+    rel[0]()                                          // PUT1 完成——回写切 answered 视图（textarea 卸载）
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(2)         // 替身保存自动补发（#3 修复点）
+    expect(JSON.parse(api.put.mock.calls[1][1].answer).extra).toBe('两校区都要收到')
+    expect(api.put.mock.calls[1][1].status).toBe('answered')
+    rel[1]()
+    await flushPromises()
+    expect(items[0].answerText).toBe('选项A全文（补充：两校区都要收到）')   // 终值含补充，不滞留本地
+  })
+
+  it('#4 处置与在途 blur PUT 串行：驳回 PUT 排队待作答完成，终态驳回、理由不被覆写', async () => {
+    const { api } = await import('../src/api.js')
+    const rel = []
+    api.put.mockImplementation(() => new Promise(r => { rel.push(r) }))
+    const items = [{ ...OPT_ITEM }]
+    const w = await mountWb(items)
+    await w.find('.more-answer').trigger('click')
+    await w.find('.extra-ta').setValue('补充口径')
+    await w.find('.extra-ta').trigger('blur')        // blur 先于 click——作答 PUT 已入链发出（挂起）
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(1)
+    await w.findAll('.ans-ops .btn')[0].trigger('click')   // 驳回（弹窗开）
+    await w.find('.modal textarea').setValue('原文已在其他条款明确')
+    await w.find('.modal-f .primary').trigger('click')     // 确认——处置 PUT 入链（排队）
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(1)         // 修复前处置直发竞速——现排队待 blur PUT 完成
+    rel[0]()                                          // blur 作答 PUT 完成
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(2)         // 处置 PUT 才发出（必然后到——整行覆写语义正确）
+    expect(api.put.mock.calls[1][1]).toEqual({ status: 'rejected', note: '原文已在其他条款明确' })
+    rel[1]()
+    await flushPromises()
+    expect(items[0].status).toBe('rejected')        // 终态驳回——理由保留，不被后到作答 PUT 打回 answered
+    expect(items[0].note).toBe('原文已在其他条款明确')
+  })
+
+  it('在途丢弃语义不回归（§2.3）：blur PUT 在途期间连续 blur 丢弃，完成后下次 blur 发最新值', async () => {
+    const { api } = await import('../src/api.js')
+    const rel = []
+    api.put.mockImplementation(() => new Promise(r => { rel.push(r) }))
+    // 无 options 卡：draft 体制下 answered 后 textarea 常驻，可多次 blur
+    const items = [{ seq: 'P02', level: 'yellow', theme: '域', question: 'q', answer: '', status: 'pending', note: '', origin: 'skill' }]
+    const w = await mountWb(items)
+    const ta = w.find('textarea[name="clf-answer-P02"]')
+    await ta.setValue('第一版')
+    await ta.trigger('blur')                         // PUT1 挂起
+    await ta.setValue('第二版')                       // 在途期间继续输入
+    await ta.trigger('blur')                         // 连续 blur——丢弃（§2.3 在途丢弃）
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(1)
+    rel[0]()
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(1)         // 丢弃的 blur 不补发（语义未因入链回归）
+    await ta.trigger('blur')                         // 下次 blur 发送时装配最新值
     await flushPromises()
     expect(api.put).toHaveBeenCalledTimes(2)
-    expect(JSON.parse(api.put.mock.calls[1][1].answer).extra).toBe('补充口径')
-    release()                                        // PUT1 完成——回写 = 捕获的发送值
-    await flushPromises()
-    expect(items[0].answer).toBe('{"kind":"option","optionKey":"A","optionText":"选项A全文"}')
-    expect(items[0].answerText).toBe('选项A全文')    // 回写与发送严格一致（零分歧窗口，D-B）
+    expect(api.put.mock.calls[1][1]).toEqual({ answer: '第二版' })
   })
 
   it('items 整体替换后：未编辑 draft 跟随服务端新值、编辑中不被覆盖（机制#7）', async () => {
@@ -212,6 +285,19 @@ describe('WorkbenchTab：就绪度覆盖地图（v5 §2.2，D3/D12）', () => {
     await l2.trigger('click')                          // 再点取消
     expect(w.findAll('[data-pid]').length).toBe(4)
   })
+  it('空态右栏照常渲染（§1.2 r2 C3）：items 空 ∧ audit 无 → EmptyState + ctx-col 并存（review F2）', async () => {
+    const { default: WorkbenchTab } = await import('../src/components/WorkbenchTab.vue')
+    const { GRP_KEY } = await import('../src/composables/group-collapse.js')
+    const grp = { openGrps: new Set(), toggleGrp: () => {}, expandAll: () => {}, collapseAll: () => {}, revealGrpFor: () => {} }
+    const w = mount(WorkbenchTab, { props: { reqId: 'REQ-1', items: [], status: 'submitted',
+      groups: [], audit: null, concludedGroups: [],
+      doc: { content: { blocks: [{ id: 'blk-1', type: 'paragraph', text: '原文段落' }], media: [] } },
+      snapshot: { md: '# 原文', at: '', version: 1 } },
+      global: { provide: { [GRP_KEY]: grp } } })
+    expect(w.text()).toContain('质检产物尚未推送')          // 左栏 EmptyState
+    expect(w.find('.ctx-col').exists()).toBe(true)          // 右栏照常渲染（不依赖产物数据）
+  })
+
   it('无 layer 数据降级：不渲染维度条（D12 降级不冒充——不以 theme 近似维度）', async () => {
     const items = [{ seq: 'P01', level: 'yellow', theme: '教研活动', question: 'q', answer: '', status: 'pending', note: '', origin: 'skill' }]
     const w = await mountWb(items)

@@ -179,7 +179,8 @@ function toggleComments() { openComments.value = !openComments.value }
   <!-- 图片（v4.20 点击页内灯箱放大——替代新开窗口，不再跳出应用） -->
   <figure v-else-if="block.type === 'image'" class="docblk imgcard" :data-blk="block.id">
     <!-- v2.2：渲染数据自带 width/height 固有尺寸——懒加载图片有占位，scrollIntoView 目标位置不被加载过程推移 -->
-    <img class="iv-open" :src="mediaUrl" :alt="block.alt" loading="lazy" :width="block.width" :height="block.height"
+    <!-- #22a：无 media 的死图块不渲染可点 img（与下方画板分支 v-if 同构；宿主 OriginTab findIndex 静默 guard 保留兜底） -->
+    <img v-if="mediaUrl" class="iv-open" :src="mediaUrl" :alt="block.alt" loading="lazy" :width="block.width" :height="block.height"
          role="button" tabindex="0" title="点击放大查看"
          @click="emit('view-media', block.id)" @keydown.enter="emit('view-media', block.id)">
     <!-- caption 优先（parse_doc ≥0.4 图片说明），alt 兜底 -->

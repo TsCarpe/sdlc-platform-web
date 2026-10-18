@@ -56,7 +56,7 @@ onBeforeUnmount(() => {
   document.body.style.paddingRight = savedPad
 })
 
-watch(() => props.index, () => { fit.value = true; loading.value = true })
+watch(() => props.index, () => { fit.value = true; loading.value = true; capOpen.value = false })   // #22b：翻图重置图注展开态（长图注展开后翻图残留）
 </script>
 
 <template>

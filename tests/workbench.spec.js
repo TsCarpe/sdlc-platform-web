@@ -28,6 +28,14 @@ const OPT_ITEM = {
   ]
 }
 
+// 维度分层夹具（就绪度地图与 #8 批3 用例共用）：L2 两题 / L5 一题 / 未分类一题
+const LAYER_ITEMS = [
+  { seq: 'P01', level: 'red', theme: '域', question: 'q1', answer: '', status: 'answered', note: '', origin: 'skill', layer: 2 },
+  { seq: 'P02', level: 'yellow', theme: '域', question: 'q2', answer: '', status: 'pending', note: '', origin: 'skill', layer: 2 },
+  { seq: 'P03', level: 'yellow', theme: '域', question: 'q3', answer: '', status: 'pending', note: '', origin: 'skill', layer: 5 },
+  { seq: 'P04', level: 'blue', theme: '域', question: 'q4', answer: '', status: 'pending', note: '', origin: 'skill' },  // 无 layer → 未分类桶
+]
+
 beforeEach(() => vi.clearAllMocks())
 
 describe('WorkbenchTab：选择题化作答（v5 §2.3）', () => {
@@ -266,12 +274,6 @@ describe('WorkbenchTab：选择题化作答（v5 §2.3）', () => {
 })
 
 describe('WorkbenchTab：就绪度覆盖地图（v5 §2.2，D3/D12）', () => {
-  const LAYER_ITEMS = [
-    { seq: 'P01', level: 'red', theme: '域', question: 'q1', answer: '', status: 'answered', note: '', origin: 'skill', layer: 2 },
-    { seq: 'P02', level: 'yellow', theme: '域', question: 'q2', answer: '', status: 'pending', note: '', origin: 'skill', layer: 2 },
-    { seq: 'P03', level: 'yellow', theme: '域', question: 'q3', answer: '', status: 'pending', note: '', origin: 'skill', layer: 5 },
-    { seq: 'P04', level: 'blue', theme: '域', question: 'q4', answer: '', status: 'pending', note: '', origin: 'skill' },  // 无 layer → 未分类桶
-  ]
   it('维度条渲染：layer 桶 + 未分类桶（空 layer 计分母）；点击维度过滤左栏（与三态叠加）', async () => {
     const w = await mountWb(LAYER_ITEMS)
     expect(w.findAll('.dim').length).toBe(3)          // L2 / L5 / 未分类
@@ -303,5 +305,76 @@ describe('WorkbenchTab：就绪度覆盖地图（v5 §2.2，D3/D12）', () => {
     const w = await mountWb(items)
     expect(w.find('.readiness').exists()).toBe(false)
     expect(w.find('.wb-prog').exists()).toBe(true)    // 进度卡保留
+  })
+})
+
+describe('WorkbenchTab：V5 review 批3（#7 过滤空组 / #8 过滤联动 / #9 失败清 picked）', () => {
+  it('#7 clf=pending 过滤下空组保留：concluded-blk 不消失，组头计「0 题 · 已定论 1 条」', async () => {
+    const items = [{ ...OPT_ITEM, status: 'answered', answer: '{"kind":"option","optionKey":"A","optionText":"选项A全文"}', answerText: '选项A全文' }]
+    const w = await mountWb(items)
+    await w.setProps({ concludedGroups: [
+      { name: '已定论·组', raw: '组', items: [{ id: '体检.P01', level: 'yellow', title: '已定论条目', go: '✅ 已明确', where: '', quote: '', anchor: '' }] }] })
+    await w.findAll('button').find(b => b.text() === '只看待处置').trigger('click')   // clfFilter: all → pending
+    expect(w.find('.concluded-blk').exists()).toBe(true)          // 已定论块是只读参照，不随过滤消失
+    expect(w.find('.grp-t').text()).toContain('0 题 · 已定论 1 条')
+  })
+
+  it('#8a hasLayers 翻转为 false 清 dimFilter：维度条卸载后唯一取消入口消失——防全栏空死锁', async () => {
+    const w = await mountWb(LAYER_ITEMS)
+    const l2 = w.findAll('.dim').find(d => d.text().includes('L2'))
+    await l2.trigger('click')                                       // dimFilter='2'——左栏只剩 L2 两题
+    expect(w.findAll('[data-pid]').map(el => el.attributes('data-pid')).sort()).toEqual(['P01', 'P02'])
+    const plain = [
+      { seq: 'Q01', level: 'yellow', theme: '域', question: 'a', answer: '', status: 'pending', note: '', origin: 'skill' },
+      { seq: 'Q02', level: 'yellow', theme: '域', question: 'b', answer: '', status: 'pending', note: '', origin: 'skill' },
+    ]
+    await w.setProps({ items: plain, groups: [{ name: '组', items: plain }] })   // items 重拉后无 layer
+    await flushPromises()
+    expect(w.find('.readiness').exists()).toBe(false)              // 维度条卸载（取消入口随之消失）
+    expect(w.findAll('[data-pid]').map(el => el.attributes('data-pid')).sort()).toEqual(['Q01', 'Q02'])   // dimFilter 已清、全部回显
+  })
+
+  it('#8b dimFilter 单独变（clf 仍 all）也 expandAll——修复前 watch 只看 clf 首参漏展开', async () => {
+    const { default: WorkbenchTab } = await import('../src/components/WorkbenchTab.vue')
+    const { GRP_KEY } = await import('../src/composables/group-collapse.js')
+    const grp = { openGrps: new Set(), toggleGrp: () => {}, expandAll: vi.fn(), collapseAll: () => {}, revealGrpFor: () => {} }
+    const groups = [{ name: '组', items: LAYER_ITEMS }]
+    const w = mount(WorkbenchTab, { props: { reqId: 'REQ-1', items: LAYER_ITEMS, status: 'clarifying',
+      groups, audit: null, concludedGroups: [], doc: null, snapshot: null },
+      global: { provide: { [GRP_KEY]: grp } } })
+    const l2 = w.findAll('.dim').find(d => d.text().includes('L2'))
+    await l2.trigger('click')                                       // 只动 dimFilter，clfFilter 仍 'all'
+    await flushPromises()
+    expect(grp.expandAll).toHaveBeenCalledWith(groups)              // 过滤视图下组展开（旧版被 c!=='all' 短路）
+  })
+
+  it('#9 点选 PUT 失败清乐观选中：toast 保存失败、无 picked 态、status 仍 pending', async () => {
+    const { api } = await import('../src/api.js')
+    api.put.mockRejectedValueOnce(new Error('网络中断'))
+    const items = [{ ...OPT_ITEM }]
+    const w = await mountWb(items)
+    await w.findAll('.opt')[0].trigger('click')
+    await flushPromises()
+    expect(w.emitted('toast').at(-1)).toEqual(['保存失败：网络中断', 'err'])
+    expect(w.findAll('.opt.picked').length).toBe(0)                 // 乐观选中清——失败不冒充已选
+    expect(items[0].status).toBe('pending')                         // 未被切 answered
+  })
+
+  it('#9 失败 settle 时排队新点击不被误清：A 挂起→B 排队→A 拒——B 载荷完整、终值 B（条件清理）', async () => {
+    const { api } = await import('../src/api.js')
+    let rejectA
+    api.put.mockImplementationOnce(() => new Promise((_, rej) => { rejectA = rej }))   // deferred rejection 真正挂起 A
+    api.put.mockResolvedValueOnce({})   // B 立即成功（默认实现已被前序用例 mockImplementation 覆盖，不可依赖回落）
+    const items = [{ ...OPT_ITEM }]
+    const w = await mountWb(items)
+    await w.findAll('.opt')[0].trigger('click')                     // A 在途（picked='A'）
+    await w.findAll('.opt')[1].trigger('click')                     // B 排队（picked='B' 先于 A 的 catch 写入）
+    expect(api.put).toHaveBeenCalledTimes(1)                        // B 排队未并发
+    rejectA(new Error('A 失败'))                                    // A 拒——catch 运行时 picked 已是 'B'
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledTimes(2)                        // 链不断：B 照发
+    expect(JSON.parse(api.put.mock.calls[1][1].answer).optionKey).toBe('B')   // 无条件删会把 B 载荷打成空 answer
+    expect(items[0].answerText).toBe('选项B全文')                    // 终值 B（后到者胜）
+    expect(w.emitted('toast').at(-1)).toEqual(['保存失败：A 失败', 'err'])       // A 的失败仍如实 toast
   })
 })

@@ -50,6 +50,10 @@ function isMedia(b) { return b.type === 'image' || b.type === 'whiteboard' }
 // ===== v5.2 图片缩略图（占位行升级：AI 长图注零区分度，23 图全是「图片展示的是…」开头） =====
 // 缩略图直接走现成媒体端点（与 mediaList 同源），加载失败回退图标占位行（无图块同）
 const imgErr = reactive(new Set())   // 加载失败的块 id
+// #22a：媒体可用集合（与 mediaList 同源的 media id 集）——无 media 的图片/画板块点击灯箱必扑空，
+// disabled + title 双分支把「点了没反应」升级为「明确不可点」（D18 降级不冒充可交互）
+const mediaIds = computed(() => new Set(docBlocks.value
+  .filter(b => (b.type === 'image' || b.type === 'whiteboard') && b.media).map(b => b.media)))
 function thumbUrl(b) {
   return `/api/requirements/${props.reqId}/media/${b.media}`
 }
@@ -202,14 +206,16 @@ function onDocMedia(id) {
              }">
           <template v-if="isHeading(b)">{{ mdPlain(b.text) }}</template>
           <template v-else-if="isMedia(b)">
-            <button class="ctx-imgrow" :title="'点击灯箱查看' + (b.type === 'whiteboard' ? '画板' : '原图')" @click="onDocMedia(b.id)">
+            <button class="ctx-imgrow" :disabled="!mediaIds.has(b.media)"
+                    :title="mediaIds.has(b.media) ? '点击灯箱查看' + (b.type === 'whiteboard' ? '画板' : '原图') : '媒体文件缺失，不可查看'"
+                    @click="onDocMedia(b.id)">
               <span class="thumb">
                 <img v-if="b.media && !imgErr.has(b.id)" :src="thumbUrl(b)" :alt="imgCaption(b)"
                      loading="lazy" @error="imgErr.add(b.id)" />
                 <AppIcon v-else :name="b.type === 'whiteboard' ? 'layers' : 'image'" :size="16" />
               </span>
               <span class="cap">{{ imgCaption(b) }}</span>
-              <span class="hint">查看 ↗</span>
+              <span class="hint" v-if="mediaIds.has(b.media)">查看 ↗</span>
             </button>
           </template>
           <template v-else-if="b.type === 'attachment'">

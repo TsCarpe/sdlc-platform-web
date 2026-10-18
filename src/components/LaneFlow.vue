@@ -45,6 +45,7 @@ const svgH = computed(() => TOP_PAD + lanes.value.length * LANE_H + 4)
 function onNode(f) {
   if (!f.gap) return
   if ((f.pids || []).length) return emit('jump', { kind: 'check', id: f.pids[0] })   // v1.6 断点直达
+  if (!f.src && !f.anchor) return   // #22c：双空断点无处可定位——不 emit（宿主会弹错误 toast，违背 D18 静默降级）
   emit('locate', f.src, f.anchor)   // 降级：跳原文定位（不做无数据直达，D18）
 }
 </script>
@@ -70,6 +71,7 @@ function onNode(f) {
           <span class="no">{{ n.i + 1 }}<template v-if="n.f.gap"> 🤔</template></span>
           <b>{{ n.f.step }}</b>
           <span class="src" v-if="n.f.src">{{ n.f.src }}</span>
+          <span class="src na" v-else>原文未定义</span>
         </div>
       </foreignObject>
     </svg>

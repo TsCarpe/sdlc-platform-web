@@ -143,18 +143,23 @@ const clfFilter = ref('all')   // 'all' | 'pending' | 'done'
 const visibleCheckGroups = computed(() => {
   let groups = props.groups
   if (dimFilter.value) {
+    // #7：过滤后空组保留当且仅当组内有已定论块——已定论卡是只读参照，不随过滤消失
     groups = groups
       .map(g => ({ name: g.name, items: g.items.filter(it => (it.layer ? String(it.layer) : 'na') === dimFilter.value) }))
-      .filter(g => g.items.length)
+      .filter(g => g.items.length || concludedByRaw.value[g.name])
   }
   if (clfFilter.value === 'all') return groups
   const pred = clfFilter.value === 'pending' ? isPending : isDone
+  // #7：三态过滤同口径——done/pending 过滤下已定论块常驻（过滤语义只作用于澄清题）
   return groups
     .map(g => ({ name: g.name, items: g.items.filter(pred) }))
-    .filter(g => g.items.length)
+    .filter(g => g.items.length || concludedByRaw.value[g.name])
 })
 const nextUnanswered = computed(() => props.items.find(isPending) || null)
-watch([clfFilter, dimFilter], ([on]) => { if (on !== 'all') expandAll(props.groups) })   // 过滤视图下组不再折叠，待处置项直接可见
+// #8：过滤视图下组不再折叠，待处置项直接可见——dimFilter 单独变且 clf='all' 时也要展开（旧版漏）
+watch([clfFilter, dimFilter], ([c, d]) => { if (c !== 'all' || d) expandAll(props.groups) })
+// #8：hasLayers 翻转为 false（items 重拉无 layer）→ 维度条卸载、唯一取消入口消失——清残留防全栏空死锁
+watch(hasLayers, v => { if (!v) dimFilter.value = '' })
 function jumpNextUnanswered() {
   const it = nextUnanswered.value
   if (!it) return
@@ -252,7 +257,7 @@ function pickOption(it, key) {
       setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
       flushPendingExtra(it, payload)
     })
-    .catch(e => { delete ansState.value[it.seq]; emit('toast', '保存失败：' + e.message, 'err') })
+    .catch(e => { delete ansState.value[it.seq]; if (picked[it.seq] === key) delete picked[it.seq]; emit('toast', '保存失败：' + e.message, 'err') })   // #9：失败清乐观选中——条件化（无条件删会误清串行链上排队后续点击的新乐观态）
 }
 
 /** #3：点选 PUT 在途回写切视图——Vue 卸载聚焦中的 textarea 不派发 blur，saveExtra 不会执行，
@@ -496,7 +501,9 @@ async function reopen(it) {
     <div class="grp" v-for="g in visibleCheckGroups" :key="g.name" :class="{ closed: !openGrps.has(g.name) }">
       <div class="grp-t" @click="toggleGrp(g.name)">
         <AppIcon name="chevron-right" :size="13" class="grp-chev" />{{ g.name }}
-        <span class="cnt">{{ clfFilter !== 'all'
+        <span class="cnt">{{ !g.items.length
+          ? `0 题 · 已定论 ${concludedByRaw[g.name].items.length} 条`   // #7：空组存活当且仅当有已定论块——直取安全
+          : clfFilter !== 'all'
           ? `${g.items.length} 题（${clfFilter === 'pending' ? '待处置' : '已处置'}）`
           : `${g.items.length} 题 · 已处置 ${answeredIn(g.items)}/${g.items.length}` }}</span>
       </div>

@@ -35,7 +35,7 @@ const tocOpen = ref(false)
 const snapshotHtml = computed(() => render(props.snapshot?.md))
 
 // ===== v1.2 原文块结构（doc）：结构化渲染 + 锚点直达（v5 抽 useDocStructure，与工作台侧栏共享同源计算） =====
-const { docData, docBlocks, childrenByParent, partitionedSections, commentByRef, docToc, mediaList } =
+const { docData, docBlocks, childrenByParent, partitionedSections, docToc, mediaList } =
   useDocStructure(() => props.doc, () => props.card.id)
 
 /** 当前目录标题元素序列（壳层 onScroll 高亮计算用） */
@@ -240,7 +240,7 @@ async function rerunCheck() {
         <template v-for="sec in partitionedSections" :key="sec.key">
           <section v-if="sec.heading" class="docsec" :class="sec.cls">
             <DocBlock :block="sec.heading" :children-by-parent="childrenByParent"
-                      :comment-by-ref="commentByRef" :req-id="card.id" :pending-by-block="pendingByBlock"
+                      :req-id="card.id" :pending-by-block="pendingByBlock"
                       @clarify="seq => emit('clarify', seq)" />
             <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.block.id">
               <table v-if="p.kind === 'table'" class="mini">
@@ -252,7 +252,7 @@ async function rerunCheck() {
                 </tbody>
               </table>
               <DocBlock v-else :block="p.block"
-                        :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
+                        :children-by-parent="childrenByParent"
                         :req-id="card.id"
                         :platform-by-block="platformByBlock" :pending-by-block="pendingByBlock"
                         @comments="id => emit('open-comments', id)" @view-media="onDocMedia"
@@ -270,7 +270,7 @@ async function rerunCheck() {
                 </tbody>
               </table>
               <DocBlock v-else :block="p.block"
-                        :children-by-parent="childrenByParent" :comment-by-ref="commentByRef"
+                        :children-by-parent="childrenByParent"
                         :req-id="card.id"
                         :platform-by-block="platformByBlock" :pending-by-block="pendingByBlock"
                         @comments="id => emit('open-comments', id)" @view-media="onDocMedia"

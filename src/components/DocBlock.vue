@@ -2,7 +2,9 @@
 // v1.2 原文块结构渲染（递归组件）：格式无关通用块模型 → 结构化视图
 // 解决：①巨表堆叠（table-row=行卡片，嵌套 ol=条款树） ②图片（媒体端点） ③锚点（data-blk 直达）
 // v1.3 UI 改版：长段落折叠（ClampText，DOM 常驻不影响 needle 定位）、emoji → SVG 图标
-import { ref, computed } from 'vue'
+// v5.x 评论入口合并：移除飞书源评论角标与内联 .cthread 展开（v1.2 残留），全部评论走右侧
+// 面板——角标点击 emit comments（壳层开面板并联动定位，见 src/comments.js 口径单点）
+import { computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
@@ -12,26 +14,20 @@ import { splitRowScalars, groupRowChildren } from '../docview.js'
 const props = defineProps({
   block: { type: Object, required: true },
   childrenByParent: { type: Object, default: () => ({}) },
-  commentByRef: { type: Object, default: () => ({}) },
   reqId: { type: String, default: '' },
-  platformByBlock: { type: Object, default: () => ({}) },   // v4 平台评论数 map（blockId → 数量，整 map 下传——子块递归也能查到自己的计数）
+  platformByBlock: { type: Object, default: () => ({}) },   // v4 评论数 map（blockId → 数量，含飞书导入行——GET /comments 不分 origin；整 map 下传，子块递归也能查到自己的计数）
   pendingByBlock: { type: Object, default: () => ({}) }     // v5 待澄清反向角标 map（blockId → seq[]，§4——复用评论角标整 map 下传机制）
 })
-// comments：平台评论角标点击（携块 id 逐层上抛，壳层开评论面板）；
+// comments：评论角标点击（携块 id 逐层上抛，壳层开评论面板并定位该块讨论）；
 // view-media：图片/画板缩略图点击（携块 id 逐层上抛，宿主开页内灯箱——v4.20 替代新开窗口）；
 // clarify：待澄清角标点击（携首个 seq 逐层上抛，宿主定位工作台对应问题——v5 §4）
 const emit = defineEmits(['comments', 'view-media', 'clarify'])
 
-const openComments = ref(false)
-
 const children = computed(() => props.childrenByParent[props.block.id] || [])
-/** 本块平台评论数（map 直查；任意深度子块同源） */
+/** 本块评论数（map 直查；任意深度子块同源） */
 const platCount = computed(() => props.platformByBlock[props.block.id] || 0)
 /** 本块待澄清编号（反向角标；子块递归同源直查） */
 const pendingSeqs = computed(() => props.pendingByBlock[props.block.id] || [])
-const commentRefs = computed(() => String(props.block.comments || '').split(/\s+/).filter(Boolean))
-const commentThreads = computed(() =>
-  commentRefs.value.map(r => props.commentByRef[r]).filter(Boolean))
 
 const inlineHtml = computed(() => {
   const t = props.block.text || ''
@@ -64,8 +60,6 @@ function chipCls(v) {
 
 /** 图廊竖图判定（figure.tall 高版封面）：宽高属性齐全且高>宽（H5 长截图） */
 function isPortrait(b) { return !!b.width && !!b.height && b.height > b.width }
-
-function toggleComments() { openComments.value = !openComments.value }
 </script>
 
 <template>
@@ -80,7 +74,7 @@ function toggleComments() { openComments.value = !openComments.value }
   <!-- 段落小标题（parse_doc ≥0.5 内容格粗体独占段，subheading）：▍左竖条，短标题不折叠 -->
   <div v-else-if="block.type === 'paragraph' && block.subheading" class="docblk-sub" :data-blk="block.id">
     <span v-html="inlineHtml"></span>
-    <button class="cmbadge" :class="{ ghost: !platCount }" :title="platCount ? platCount + ' 条平台评论' : '评论此块'"
+    <button class="cmbadge" :class="{ ghost: !platCount }" :title="platCount ? platCount + ' 条评论' : '评论此块'"
             @click="emit('comments', block.id)"><AppIcon name="message-square" :size="11" />{{ platCount || '评论' }}</button>
     <button v-if="pendingSeqs.length" class="ref-pill" :title="pendingSeqs.join(' / ') + ' 待澄清——点击定位工作台对应问题'"
             @click="emit('clarify', pendingSeqs[0])">{{ pendingSeqs.join('/') }} 待澄清</button>
@@ -89,7 +83,7 @@ function toggleComments() { openComments.value = !openComments.value }
   <!-- 段落：长文本默认折叠（CSS line-clamp，DOM 常驻），可展开 -->
   <p v-else-if="block.type === 'paragraph'" class="docblk-p" :data-blk="block.id">
     <ClampText :html="inlineHtml" :lines="4" :threshold="170" />
-    <button class="cmbadge" :class="{ ghost: !platCount }" :title="platCount ? platCount + ' 条平台评论' : '评论此块'"
+    <button class="cmbadge" :class="{ ghost: !platCount }" :title="platCount ? platCount + ' 条评论' : '评论此块'"
             @click="emit('comments', block.id)"><AppIcon name="message-square" :size="11" />{{ platCount || '评论' }}</button>
     <button v-if="pendingSeqs.length" class="ref-pill" :title="pendingSeqs.join(' / ') + ' 待澄清——点击定位工作台对应问题'"
             @click="emit('clarify', pendingSeqs[0])">{{ pendingSeqs.join('/') }} 待澄清</button>
@@ -100,20 +94,13 @@ function toggleComments() { openComments.value = !openComments.value }
     <div class="clause-line">
       <span class="ordinal" v-if="block.marker">{{ block.marker.replace(/\s+/g, '') }}</span>
       <span class="clause-text" v-html="inlineHtml"></span>
-      <button class="cmbadge" :class="{ ghost: !platCount }" :title="platCount ? platCount + ' 条平台评论' : '评论此块'"
+      <button class="cmbadge" :class="{ ghost: !platCount }" :title="platCount ? platCount + ' 条评论' : '评论此块'"
               @click="emit('comments', block.id)"><AppIcon name="message-square" :size="11" />{{ platCount || '评论' }}</button>
-      <button class="cmbadge" v-if="commentThreads.length" @click="toggleComments"
-          :title="'评论区：' + commentThreads[0]?.quote">
-        <AppIcon name="message-square" :size="10" />{{ commentThreads.length }}</button>
       <button v-if="pendingSeqs.length" class="ref-pill" :title="pendingSeqs.join(' / ') + ' 待澄清——点击定位工作台对应问题'"
               @click="emit('clarify', pendingSeqs[0])">{{ pendingSeqs.join('/') }} 待澄清</button>
     </div>
-    <div class="cthread" v-for="t in (openComments ? commentThreads : [])" :key="t.id">
-      <div class="ct-q" v-if="t.quote">「{{ t.quote }}」</div>
-      <div class="ct-msg" v-for="(m, i) in t.thread" :key="i"><b>{{ m.user }}</b>：{{ m.text }}</div>
-    </div>
     <DocBlock v-for="c in children" :key="c.id" :block="c" :children-by-parent="childrenByParent"
-              :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
+              :req-id="reqId" :platform-by-block="platformByBlock"
               :pending-by-block="pendingByBlock"
               class="docblk-child" @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)"
               @clarify="seq => emit('clarify', seq)" />
@@ -124,15 +111,10 @@ function toggleComments() { openComments.value = !openComments.value }
     <div class="rowcard-h">
       <span class="chip">{{ block.rowLabel }}</span>
       <span v-for="(v, vi) in scalars.headerVals" :key="vi" class="rc-chip" :class="chipCls(v)">{{ v }}</span>
-      <button class="cmbadge" :class="{ ghost: !platCount }" :title="platCount ? platCount + ' 条平台评论' : '评论此块'"
+      <button class="cmbadge" :class="{ ghost: !platCount }" :title="platCount ? platCount + ' 条评论' : '评论此块'"
               @click="emit('comments', block.id)"><AppIcon name="message-square" :size="11" />{{ platCount || '评论' }}</button>
-      <button class="cmbadge" v-if="commentThreads.length" @click="toggleComments">
-        <AppIcon name="message-square" :size="10" />{{ commentThreads.length }}</button>
       <button v-if="pendingSeqs.length" class="ref-pill" :title="pendingSeqs.join(' / ') + ' 待澄清——点击定位工作台对应问题'"
               @click="emit('clarify', pendingSeqs[0])">{{ pendingSeqs.join('/') }} 待澄清</button>
-      <div class="cthread" v-for="t in (openComments ? commentThreads : [])" :key="t.id">
-        <div class="ct-msg" v-for="(m, i) in t.thread" :key="i"><b>{{ m.user }}</b>：{{ m.text }}</div>
-      </div>
     </div>
     <div class="rowmeta" v-if="scalars.metaPairs.length">
       <span v-for="p in scalars.metaPairs" :key="p.idx" class="cellpair">
@@ -147,18 +129,18 @@ function toggleComments() { openComments.value = !openComments.value }
           <!-- lead：连续列表 run 视觉挂靠最近非 subheading 前导段（数据层 parent 仍 = 行块） -->
           <div v-if="item.kind === 'lead'" class="leadgrp">
             <DocBlock :block="item.block" :children-by-parent="childrenByParent"
-                      :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
+                      :req-id="reqId" :platform-by-block="platformByBlock"
                       :pending-by-block="pendingByBlock"
                       @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)"
                       @clarify="seq => emit('clarify', seq)" />
             <DocBlock v-for="li in item.listChildren" :key="li.id" :block="li" :children-by-parent="childrenByParent"
-                      :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
+                      :req-id="reqId" :platform-by-block="platformByBlock"
                       :pending-by-block="pendingByBlock"
                       class="docblk-child" @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)"
                       @clarify="seq => emit('clarify', seq)" />
           </div>
           <DocBlock v-else :block="item.block" :children-by-parent="childrenByParent"
-                    :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
+                    :req-id="reqId" :platform-by-block="platformByBlock"
                     :pending-by-block="pendingByBlock"
                     class="docblk-child" @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)"
                     @clarify="seq => emit('clarify', seq)" />
@@ -166,7 +148,7 @@ function toggleComments() { openComments.value = !openComments.value }
         <!-- 尾部媒体块图廊（image 自带 caption；竖图 tall 高版封面） -->
         <div class="gal" v-if="g.gallery.length">
           <DocBlock v-for="m in g.gallery" :key="m.id" :block="m" :children-by-parent="childrenByParent"
-                    :comment-by-ref="commentByRef" :req-id="reqId" :platform-by-block="platformByBlock"
+                    :req-id="reqId" :platform-by-block="platformByBlock"
                     :pending-by-block="pendingByBlock"
                     @comments="id => emit('comments', id)" @view-media="id => emit('view-media', id)"
                     @clarify="seq => emit('clarify', seq)"

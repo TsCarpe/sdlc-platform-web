@@ -23,6 +23,7 @@ import { isDone, isPending } from '../disposition.js'
 import { provideGroupCollapse } from '../composables/group-collapse.js'
 import { useTraceJump } from '../composables/trace-jump.js'
 import { useTocScroll } from '../composables/toc-scroll.js'
+import { threadRoots, buildCommentAnchorMap } from '../comments.js'
 import { ask } from '../confirm.js'
 import { mdPlain } from '../docview.js'
 
@@ -168,8 +169,9 @@ watch(operator, v => localStorage.setItem('sdlc.op', v || ''))
 // ===== v4 评论域（DESIGN-v4 §4）：面板常驻壳层（跨 tab）；platformByBlock 供 OriginTab 角标 =====
 const cm = ref(null)              // GET /comments → {comments, unresolvedCount}
 const cmtsOpen = ref(false)
-const cmtsFocus = ref(null)       // 定位高亮的评论 id（L 系跳回协议）
+const cmtsFocus = ref(null)       // 定位高亮的评论 id（L 系跳回协议 + v5.x 角标联动）
 const cmtsComposeBlock = ref('')  // 发评目标块（块角标进入预选）
+const cmtsPanelRef = ref(null)    // 面板 ref：同值重复点击直调 refocus（watch 同值不触发）
 
 async function loadComments() {
   try {
@@ -178,17 +180,37 @@ async function loadComments() {
   } catch { cm.value = null }   // 评论面失败不连累主流程（面板内动作会再次尝试）
 }
 function openComments(blockId = '', focusId = null) {
+  // v5.x 角标联动：块有评论时定位该块首个未解决线程根（全解决取首根；无评论不传——开面板即发评）
+  if (blockId && focusId == null) {
+    const roots = threadRoots(cm.value?.comments || []).filter(r => r.blockId === blockId)
+    const target = roots.find(r => !r.resolved) || roots[0]
+    if (target) focusId = target.id
+  }
+  // 同值快照必须取在赋值前（赋值后判定恒真 + watch/refocus 双重执行）；cmtsOpen 亦须置真前读
+  const same = cmtsOpen.value && focusId != null && cmtsFocus.value === focusId
   cmtsComposeBlock.value = blockId || ''
   cmtsFocus.value = focusId
   // 面板已开时再点角标只是换目标——无提示会被当成"点击没反应"，明确反馈一句
+  // （null 族专用：focusId 非空族的反馈是 watch/refocus 的滚动+闪烁）
   if (cmtsOpen.value && !focusId) emit('toast', blockId ? '评论目标已切到选中块' : '已切回卡片级评论')
   cmtsOpen.value = true
+  if (same) cmtsPanelRef.value?.refocus(focusId)
 }
 const cmByBlock = computed(() => {
   const m = {}
   for (const c of cm.value?.comments || []) if (c.blockId) m[c.blockId] = (m[c.blockId] || 0) + 1
   return m
 })
+/** v5.x 评论锚 → 面板定位目标（buildCommentAnchorMap 口径单点）：工作台/摘要页「出处=评论区」
+ *  点击分流开面板；块锚/无锚 miss 走原 locate，目录块 id 不在键域不受影响 */
+const commentAnchorMap = computed(() => buildCommentAnchorMap(docBlocks.value, cm.value?.comments || []))
+/** locate 统一入口（v5.x）：直连 locate 的三处 @locate 改经此分流——评论锚开评论面板（不切
+ *  tab），否则原 needle/块锚定位。CommentsPanel 的单参 inline locate 绑定不经此（签名不同） */
+function onLocate(needle, anchor) {
+  const cid = commentAnchorMap.value[anchor]
+  if (cid != null) return openComments('', cid)
+  locate(needle, anchor)
+}
 const cmUnresolved = computed(() => cm.value?.unresolvedCount || 0)
 const cmBlockText = computed(() => {
   const m = {}
@@ -436,22 +458,22 @@ function resolveDocPath(path) {
     <OriginTab v-if="tab === 'origin'" ref="originTabRef"
                :card="card" :snapshot="d.snapshot" :doc="d.doc" :active-head="activeHead"
                :doc-stale="!!d.docStale" :platform-by-block="cmByBlock" :pending-by-block="pendingByBlock"
-               @locate="locate" @go-toc="goToc" @open-comments="id => openComments(id)"
+               @locate="onLocate" @go-toc="goToc" @open-comments="id => openComments(id)"
                @clarify="seq => onJump({ kind: 'check', id: seq })"
                @toast="(m, t) => emit('toast', m, t)" @reload="load" />
 
     <!-- 结构化 Digest（v5 §3 重定位：AI 理解卡 + 泳道主流程 + 遗留假设独立卡） -->
     <DigestTab v-if="tab === 'digest'" ref="digestTabRef"
                :digest="d.digest" :fr-points="d.frPoints" :coverage="d.coverage" :fr-groups="frGroups"
-               :items="d.items"
+               :items="d.items" :comment-anchor-map="commentAnchorMap"
                v-model:digest-md-open="digestMdOpen"
-               @locate="locate" @jump="onJump" />
+               @locate="onLocate" @jump="onJump" />
 
     <!-- v5 澄清工作台（audit 已并入，D1）：作答/处置/已定论卡/影响分析/孤儿提示 + 原文侧栏；L 系行可跳回原评论 -->
     <WorkbenchTab v-if="tab === 'checklist'" :req-id="card.id" :items="d.items" :status="card.status"
                   :groups="checklistGroups" :audit="d.audit" :concluded-groups="concludedGroups"
-                  :doc="d.doc" :snapshot="d.snapshot"
-                  @locate="locate" @jump="onJump" @open-comment="id => openComments('', id)"
+                  :doc="d.doc" :snapshot="d.snapshot" :comment-anchor-map="commentAnchorMap"
+                  @locate="onLocate" @jump="onJump" @open-comment="id => openComments('', id)"
                   @open-origin="switchTab('origin')"
                   @toast="(m, t) => emit('toast', m, t)" />
 
@@ -492,7 +514,7 @@ function resolveDocPath(path) {
     </Transition>
 
     <!-- v4 评论面板（右侧抽屉，跨 tab 常驻）：locate 事件转发壳层定位协议（切到 origin 并锚块） -->
-    <CommentsPanel v-if="cmtsOpen" :req-id="card.id" :comments="cm?.comments || []"
+    <CommentsPanel v-if="cmtsOpen" ref="cmtsPanelRef" :req-id="card.id" :comments="cm?.comments || []"
                    :block-text="cmBlockText" :escalated-ids="escalatedIds"
                    :focus-id="cmtsFocus" :compose-block-id="cmtsComposeBlock"
                    @close="cmtsOpen = false" @refresh="onCmtsRefresh"

@@ -2,6 +2,8 @@
 // v4 评论面板（DESIGN-v4 §4）：右侧抽屉——卡片级「整体疑问」+ 块锚定线程；线程级解决/重开、
 // 单条删除、升级澄清项（L 系，重复升级 409 → escalatedIds 预禁用）。评论任何状态可发（无守卫）。
 // 数据面由壳层持有（comments prop），本组件只做动作 + emit refresh 由壳层重拉。
+// v5.x 入口合并：飞书源评论（origin=feishu）混排统一呈现，根消息带「来自源文档」标签；
+// feishu 行（根+回复）不提供删除——后端重导按 external_id 幂等复活，平台无权物理删外部数据。
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
@@ -9,6 +11,7 @@ import { ask } from '../confirm.js'
 import { lvlLabel } from '../levels.js'
 import { fmtRel } from '../time.js'
 import { useModalFocus } from '../composables/modal-focus.js'
+import { threadRoots } from '../comments.js'
 
 const props = defineProps({
   reqId: { type: String, required: true },
@@ -29,15 +32,14 @@ const busy = ref(false)
 const composeTarget = ref(props.composeBlockId || '')
 watch(() => props.composeBlockId, v => { composeTarget.value = v || '' })
 
-// ===== 线程组装：根（无 replyTo 或父已删）+ 回复链 =====
+// ===== 线程组装：根（threadRoots 口径单点）+ 回复链 =====
 const threads = computed(() => {
   const byId = new Map(props.comments.map(c => [c.id, c]))
   const children = {}
   for (const c of props.comments) {
     if (c.replyTo != null && byId.has(c.replyTo)) (children[c.replyTo] = children[c.replyTo] || []).push(c)
   }
-  const roots = props.comments.filter(c => c.replyTo == null || !byId.has(c.replyTo))
-  return roots.map(r => ({
+  return threadRoots(props.comments).map(r => ({
     root: r,
     replies: (function walk(id, acc = [], seen = new Set()) {
       for (const ch of children[id] || []) {
@@ -120,8 +122,9 @@ async function confirmEscalate() {
   } finally { busy.value = false }
 }
 
-// ===== 定位高亮（跳回协议：澄清清单 L 系 → 原评论）——immediate：携带 focusId 挂载即定位 =====
-watch(() => props.focusId, async id => {
+// ===== 定位高亮（跳回协议：澄清清单 L 系 → 原评论；v5.x 壳层角标联动/同值重复点击共用）。
+// 回调体抽 refocus 供 watch 与 defineExpose 共用——watch 同值不触发，壳层直调绕开 =====
+async function refocus(id) {
   if (id == null) return
   await nextTick()
   await new Promise(r => setTimeout(r, 60))   // 线程 DOM 随 comments prop 渲染后再锚
@@ -130,7 +133,9 @@ watch(() => props.focusId, async id => {
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   el.classList.add('cmt-flash')
   setTimeout(() => el.classList.remove('cmt-flash'), 1600)
-}, { immediate: true })
+}
+watch(() => props.focusId, refocus, { immediate: true })
+defineExpose({ refocus })
 
 // ===== 键盘：Esc 关升级弹层 → 关抽屉；挂载焦点落发评框 =====
 const composerInp = ref(null)
@@ -185,12 +190,15 @@ function onKey(e) {
             <div class="ct-msg" :data-cid="t.root.id">
               <b>{{ t.root.author || '匿名' }}</b><span class="sub" :title="t.root.createdAt"> · {{ fmtRel(t.root.createdAt) }}</span>
               <span class="chip" v-if="escalated.has(t.root.id)" title="已升级为澄清项">已升级</span>
+              <span class="src-chip" v-if="t.root.origin === 'feishu'"
+                    title="飞书文档导入的历史评论，不支持删除；可回复 / 解决 / 升级澄清">来自源文档</span>
               <div class="ct-text">{{ t.root.text }}</div>
             </div>
             <div class="ct-msg reply" v-for="r in t.replies" :key="r.id" :data-cid="r.id">
               <b>{{ r.author || '匿名' }}</b><span class="sub" :title="r.createdAt"> · {{ fmtRel(r.createdAt) }}</span>
               <div class="ct-text">{{ r.text }}</div>
-              <button class="btn small link cdel" title="删除本条" @click="delComment(r)"><AppIcon name="trash" :size="11" /></button>
+              <button class="btn small link cdel" v-if="r.origin !== 'feishu'" title="删除本条"
+                      @click="delComment(r)"><AppIcon name="trash" :size="11" /></button>
             </div>
           </div>
           <div class="ct-ops">
@@ -203,7 +211,8 @@ function onKey(e) {
                     :title="escalated.has(t.root.id) ? '每条评论只可升级一次' : '升级为澄清项（进入澄清清单处置）'"
                     @click="askEscalate(t.root)">
               <AppIcon name="arrow-up-right" :size="11" />升级澄清</button>
-            <button class="btn small link cdel" title="删除根评论" @click="delComment(t.root)"><AppIcon name="trash" :size="11" /></button>
+            <button class="btn small link cdel" v-if="t.root.origin !== 'feishu'" title="删除根评论"
+                    @click="delComment(t.root)"><AppIcon name="trash" :size="11" /></button>
           </div>
         </div>
       </template>

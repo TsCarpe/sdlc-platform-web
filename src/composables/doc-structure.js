@@ -1,5 +1,5 @@
 // v5 原文块结构 composable（DESIGN-v5 §2.1，自 OriginTab 抽出）：doc.content.blocks →
-// 渲染所需全套结构（父子索引/章节分组/标量小表切分/评论引用/目录/媒体清单）。
+// 渲染所需全套结构（父子索引/章节分组/标量小表切分/目录/媒体清单）。
 // OriginTab（全宽阅读）与 CtxPane（工作台侧栏）共享——两处渲染一致性由同源计算保证。
 import { computed } from 'vue'
 import { partitionRows } from '../docview.js'
@@ -53,11 +53,6 @@ export function useDocStructure(getDoc, getReqId) {
   })
   const partitionedSections = computed(() =>
     docSections.value.map(sec => ({ ...sec, parts: partitionRows(sec.blocks, childCountBy.value) })))
-  const commentByRef = computed(() => {
-    const m = {}
-    for (const b of docBlocks.value) if (b.type === 'comment') m[b.ref] = b
-    return m
-  })
   // v2.2 目录纳入 table-row 行卡片（巨表文档主体在行级，heading 导航不到）；排除版本号形态 rowLabel
   const docToc = computed(() => docBlocks.value
     .filter(b => b.type === 'heading' || b.type === 'title'
@@ -76,5 +71,5 @@ export function useDocStructure(getDoc, getReqId) {
       caption: b.caption || b.alt || (b.type === 'whiteboard' ? '画板缩略图' : '')
     })))
   return { docData, docBlocks, childrenByParent, rootBlocks, docSections, partitionedSections,
-           commentByRef, docToc, mediaList }
+           docToc, mediaList }
 }

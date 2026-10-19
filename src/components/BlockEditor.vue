@@ -344,7 +344,7 @@ const TYPE_LABEL = { paragraph: '段落', heading: '标题', 'list-item': '列�
 
           <!-- 渲染态：DocBlock 单块渲染（childrenByParent 置空防递归——树序与缩进由编辑器管理） -->
           <template v-else>
-            <DocBlock :block="b" :children-by-parent="{}" :comment-by-ref="{}" :req-id="reqId"
+            <DocBlock :block="b" :children-by-parent="{}" :req-id="reqId"
                       @view-media="id => emit('view-media', id)" />
             <div class="sub" style="padding:0 0 4px 2px"
                  v-if="!b.text && !['image', 'table-row', 'whiteboard'].includes(b.type)">（空块，点击填写）</div>

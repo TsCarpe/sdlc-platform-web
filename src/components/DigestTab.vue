@@ -20,9 +20,14 @@ const props = defineProps({
   coverage: { type: Object, default: null },
   frGroups: { type: Array, default: () => [] },        // 壳层按出处分组（revealGrpFor 共用）
   digestMdOpen: { type: Boolean, default: false },     // 摘要原文折叠（asm 跳入时壳层自动展开）
-  items: { type: Array, default: () => [] }            // v5 澄清 items（模块待澄清角标——v1.6 module 产出前降级隐藏）
+  items: { type: Array, default: () => [] },           // v5 澄清 items（模块待澄清角标——v1.6 module 产出前降级隐藏）
+  commentAnchorMap: { type: Object, default: () => ({}) }  // v5.x 评论锚 → 面板定位目标（图标语义分流；点击分流在壳层 onLocate）
 })
 const emit = defineEmits(['locate', 'jump', 'update:digestMdOpen'])
+
+/** v5.x 评论锚判定：fr/features/flows/states 出处可为评论区（resolve_anchors 产评论锚）——
+ *  cite 图标换 message-square，点击经壳层 onLocate 分流开评论面板 */
+const isCmtAnchor = anchor => props.commentAnchorMap[anchor] != null
 
 const { openGrps, toggleGrp, expandAll, collapseAll } = useGrpCollapse()
 
@@ -109,7 +114,7 @@ const assumptions = computed(() => {
           <td class="sub">{{ f.cov || '—' }}
             <a class="cite" style="margin-left:4px" v-if="covP(f.cov)" @click="emit('jump', { kind: 'audit', id: covP(f.cov) })">体检.{{ covP(f.cov) }} ↗</a>
           </td>
-          <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.src" @click="emit('locate', f.src, f.anchor)">{{ f.src }}<span v-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
+          <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.src" @click="emit('locate', f.src, f.anchor)">{{ f.src }}<span v-if="isCmtAnchor(f.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
           <td>
             <span class="sub" v-if="!frByModule(f.m).length">—</span>
             <ChipList v-else :items="frByModule(f.m).map(f2 => f2.id)" :max="2">
@@ -138,7 +143,7 @@ const assumptions = computed(() => {
           <tbody><tr v-for="(f, i) in digestFlows" :key="i" :class="{ 'row-gap': f.gap }" style="cursor:default">
             <td>{{ f.role }}</td><td>{{ f.step }}</td>
             <td>{{ f.next }}<span v-if="f.gap" class="gapmark" title="原文未定义去向（🤔）"> 🤔</span></td>
-            <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.src" @click="emit('locate', f.src, f.anchor)">{{ f.src }}<span v-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
+            <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.src" @click="emit('locate', f.src, f.anchor)">{{ f.src }}<span v-if="isCmtAnchor(f.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
           </tr></tbody>
         </table>
         </div>
@@ -159,7 +164,7 @@ const assumptions = computed(() => {
           <tbody><tr v-for="(s, i) in g.items" :key="i" :class="{ 'row-gap': s.gap }" style="cursor:default">
             <td>{{ s.from }}</td><td>{{ s.on }}</td>
             <td>{{ s.to }}<span v-if="s.gap" class="gapmark" title="原文未定义去向（🤔）"> 🤔</span></td>
-            <td class="sub"><a class="cite" :class="{ anchored: s.anchor }" v-if="s.src" @click="emit('locate', s.src, s.anchor)">{{ s.src }}<span v-if="s.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
+            <td class="sub"><a class="cite" :class="{ anchored: s.anchor }" v-if="s.src" @click="emit('locate', s.src, s.anchor)">{{ s.src }}<span v-if="isCmtAnchor(s.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="s.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
           </tr></tbody>
         </table>
         </div></div>
@@ -212,7 +217,7 @@ const assumptions = computed(() => {
         </tr></thead>
           <tbody><tr v-for="f in g.items" :key="f.id" style="cursor:default" :data-frid="f.id">
             <td><code>{{ f.id }}</code></td><td>{{ f.name }}</td>
-            <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.source" @click="emit('locate', f.source, f.anchor)">{{ f.source }}<span v-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
+            <td class="sub"><a class="cite" :class="{ anchored: f.anchor }" v-if="f.source" @click="emit('locate', f.source, f.anchor)">{{ f.source }}<span v-if="isCmtAnchor(f.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="f.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><span v-else>—</span></td>
             <td class="sub">{{ f.module || '—' }}</td>
             <td>
               <span class="sub" v-if="!(f.coveredBy || []).length">—</span>

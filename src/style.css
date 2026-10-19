@@ -463,9 +463,6 @@ a.chip.linklike:hover{background:var(--blue-light); border-color:transparent; co
   color:var(--yellow-dark); background:var(--yellow-light); border:1px solid #f5e3a0; border-radius:6px;
   padding:0 7px; line-height:1.8; cursor:pointer; align-self:center}
 .docstruct .cmbadge:hover{background:#ffefad}
-.docstruct .cthread{margin:6px 0 2px; background:var(--bg-soft); border:1px solid var(--line-soft); border-radius:8px; padding:7px 10px; font-size:12px}
-.docstruct .ct-q{color:var(--stone); margin-bottom:3px}
-.docstruct .ct-msg{margin:2px 0; color:var(--slate)}
 .docstruct .rowcard{border:1px solid var(--line-soft); border-radius:12px; padding:13px 16px; margin:0 0 12px; background:var(--canvas); box-shadow:var(--shadow-card)}
 .docstruct .rowcard-h{display:flex; gap:8px; align-items:center; margin-bottom:8px; font-weight:600; font-size:13.5px}
 .docstruct .rowmeta{display:flex; flex-wrap:wrap; gap:4px 16px; font-size:12px; color:var(--muted); margin-bottom:10px;
@@ -944,6 +941,9 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .ct-msg{font-size:12.5px; line-height:1.55; border-radius:6px; padding:2px 4px; scroll-margin:60px}
 .ct-msg.reply{border-left:2px solid var(--line); padding-left:9px; margin-left:6px}
 .ct-msg b{font-size:12px; color:var(--charcoal)}
+/* v5.x 源文档评论标签（飞书导入线程根）：轻虚线 chip 区分来源 */
+.ct-msg .src-chip{font-size:10.5px; font-weight:600; color:var(--faint); background:var(--bg-soft);
+  border:1px dashed var(--line); border-radius:5px; padding:0 5px; margin-left:5px; vertical-align:1px}
 .ct-text{word-break:break-word; white-space:pre-wrap}
 .ct-msg .cdel{opacity:0; float:right; margin-left:6px}
 .ct-msg:hover .cdel{opacity:1}

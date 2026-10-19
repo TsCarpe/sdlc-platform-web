@@ -95,6 +95,31 @@ describe('CommentsPanel：线程组装与呈现', () => {
     expect(api.post).toHaveBeenCalledWith('/api/requirements/REQ-1/comments/1/escalate',
       expect.objectContaining({ level: 'red' }))
   })
+
+  it('v5.x feishu 源评论：「来自源文档」标签 + 根与回复均无删除按钮（重导复活防线）', async () => {
+    const mixed = [
+      { id: 1, blockId: '', origin: 'platform', externalId: '', author: '张三', text: '平台根',
+        replyTo: null, resolved: false, createdAt: '2026-10-14 10:00:00' },
+      { id: 2, blockId: '', origin: 'platform', externalId: '', author: '李四', text: '平台回复',
+        replyTo: 1, resolved: false, createdAt: '2026-10-14 10:01:00' },
+      { id: 3, blockId: 'v4-p1', origin: 'feishu', externalId: '7011111111111111111', author: '王五', text: '飞书根',
+        replyTo: null, resolved: false, createdAt: '2026-10-14 09:00:00' },
+      { id: 4, blockId: 'v4-p1', origin: 'feishu', externalId: '7011111111111111111', author: '赵六', text: '飞书回复',
+        replyTo: 3, resolved: false, createdAt: '2026-10-14 09:01:00' }
+    ]
+    const w = await mountPanel({ comments: mixed, escalatedIds: [] })
+    const plat = w.findAll('.cthread-card')[0]   // 根 id=1（id 升序）
+    const fs = w.findAll('.cthread-card')[1]     // 根 id=3
+    expect(fs.find('.src-chip').text()).toBe('来自源文档')
+    expect(plat.find('.src-chip').exists()).toBe(false)
+    expect(fs.find('.ct-ops .cdel').exists()).toBe(false)                    // feishu 根不可删
+    expect(plat.find('.ct-ops .cdel').exists()).toBe(true)                   // platform 根可删
+    expect(fs.findAll('.ct-msg.reply .cdel').length).toBe(0)                 // feishu 回复不可删
+    expect(plat.findAll('.ct-msg.reply .cdel').length).toBe(1)               // platform 回复可删
+    // 解决/升级仍可用（feishu 行只禁删除）
+    expect(fs.find('.ct-ops').text()).toContain('解决')
+    expect(fs.find('.ct-ops').text()).toContain('升级澄清')
+  })
 })
 
 describe('WorkbenchTab（原 ChecklistTab）：L 系 origin 呈现与跳回', () => {

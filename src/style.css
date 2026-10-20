@@ -713,15 +713,18 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .iter-side .sub{font-size:11.5px}
 .badge.blocker{cursor:default}
 .iter-chev{color:var(--faint);flex:none}
-/* 空迭代删除钮：右上角悬浮位（chevron 正上方，避开 NodeStrip），行 hover 浮现 → 悬停转红 */
+/* 空迭代删除角标（包角做法）：骑跨卡片右上角，外缘圆角与卡片同心（12px），
+   只画内侧两边线融入卡片边框；常驻可见（仅空迭代行渲染），悬停转红 */
 .iter-row{position:relative}
-.iter-del{position:absolute; top:5px; right:16px; z-index:2;
+.iter-del{position:absolute; top:-1px; right:-1px; z-index:2;
   display:inline-flex; align-items:center; justify-content:center;
-  width:22px; height:22px; border:none; background:none; border-radius:6px;
-  color:var(--faint); opacity:0; cursor:pointer;
-  transition:opacity .13s ease, color .13s ease, background .13s ease}
-.iter-row:hover .iter-del, .iter-del:focus-visible{opacity:.6}
-.iter-del:hover{opacity:1; color:var(--red); background:var(--red-soft)}
+  width:30px; height:28px; font-family:inherit;
+  background:var(--bg-soft); color:var(--muted); cursor:pointer;
+  border:1px solid var(--line-soft); border-top:none; border-right:none;
+  border-radius:0 12px 0 9px;
+  transition:color .13s ease, background .13s ease}
+.iter-del:hover{color:var(--red); background:var(--red-soft); border-color:var(--red-border)}
+.iter-del:focus-visible{color:var(--red)}
 
 /* 七节点生命周期条 */
 .node-strip{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}

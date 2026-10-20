@@ -120,7 +120,7 @@ async function delIter(r) {
              @click="openRow(r)" @keydown.enter.self.prevent="openRow(r)">
           <button class="iter-del" v-if="!r.reqId" title="删除空迭代" aria-label="删除空迭代"
                   @click.stop="delIter(r)" @keydown.enter.stop.prevent="delIter(r)">
-            <AppIcon name="trash" :size="12" />
+            <AppIcon name="trash" :size="14" />
           </button>
           <div class="iter-main">
             <div class="iter-name">

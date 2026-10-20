@@ -211,7 +211,7 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
 .filters .spacer{flex:1}
 .search{position:relative}
 .search>.appicon{position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--faint); pointer-events:none}
-.search input{padding-left:30px; padding-right:28px; width:220px}
+.search input{padding-left:30px; padding-right:28px; width:240px}
 .search .clear{position:absolute; right:5px; top:50%; transform:translateY(-50%); border:none; background:none;
   color:var(--faint); padding:3px; border-radius:6px; display:flex}
 .search .clear:hover{color:var(--slate); background:var(--bg)}

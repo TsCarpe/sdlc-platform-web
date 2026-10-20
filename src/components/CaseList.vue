@@ -53,18 +53,24 @@ const sorted = computed(() => {
     return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * dir
   })
 })
+const ariaSort = k => sortKey.value === k ? (sortDir.value === 'asc' ? 'ascending' : 'descending') : 'none'
 
+// 请求序号守卫：Enter 立即查与 pending 防抖并发时，慢响应不覆盖新结果
+let seq = 0
 async function load() {
+  clearTimeout(qTimer)
+  const my = ++seq
   loading.value = true
   error.value = ''
   try {
     const q = new URLSearchParams()
     Object.entries(cq.value).forEach(([k, v]) => { if (v) q.set(k === 'req' ? 'reqId' : k, v) })
-    rows.value = await api.get('/api/cases?' + q.toString())
+    const data = await api.get('/api/cases?' + q.toString())
+    if (my === seq) rows.value = data
   } catch (e) {
-    error.value = e.message
+    if (my === seq) error.value = e.message
   } finally {
-    loading.value = false
+    if (my === seq) loading.value = false
   }
 }
 
@@ -78,7 +84,7 @@ async function loadReqs() {
 let qTimer = null
 watch(() => cq.value.q, () => {
   clearTimeout(qTimer)
-  qTimer = setTimeout(load, 350)
+  qTimer = setTimeout(load, 400)
 })
 function clearSearch() {
   cq.value.q = ''
@@ -283,13 +289,13 @@ async function submitForm() {
 
     <table class="table table-fixed" v-else>
       <thead><tr>
-        <th style="width:96px" class="sortable" :class="{ on: sortKey === 'id', asc: sortDir === 'asc' }" @click="sortBy('id')">编号</th>
-        <th style="width:32%" class="sortable" :class="{ on: sortKey === 'title', asc: sortDir === 'asc' }" @click="sortBy('title')">标题</th>
+        <th style="width:96px" class="sortable" :class="{ on: sortKey === 'id', asc: sortDir === 'asc' }" :aria-sort="ariaSort('id')" @click="sortBy('id')">编号</th>
+        <th style="width:32%" class="sortable" :class="{ on: sortKey === 'title', asc: sortDir === 'asc' }" :aria-sort="ariaSort('title')" @click="sortBy('title')">标题</th>
         <th style="width:220px">关联需求点</th>
-        <th style="width:70px" class="sortable" :class="{ on: sortKey === 'priority', asc: sortDir === 'asc' }" @click="sortBy('priority')">优先级</th>
-        <th style="width:90px" class="sortable" :class="{ on: sortKey === 'status', asc: sortDir === 'asc' }" @click="sortBy('status')">审核状态</th>
+        <th style="width:70px" class="sortable" :class="{ on: sortKey === 'priority', asc: sortDir === 'asc' }" :aria-sort="ariaSort('priority')" @click="sortBy('priority')">优先级</th>
+        <th style="width:90px" class="sortable" :class="{ on: sortKey === 'status', asc: sortDir === 'asc' }" :aria-sort="ariaSort('status')" @click="sortBy('status')">审核状态</th>
         <th style="width:80px">来源人</th>
-        <th style="width:110px" class="sortable" :class="{ on: sortKey === 'tool', asc: sortDir === 'asc' }" @click="sortBy('tool')">来源工具</th>
+        <th style="width:110px" class="sortable" :class="{ on: sortKey === 'tool', asc: sortDir === 'asc' }" :aria-sort="ariaSort('tool')" @click="sortBy('tool')">来源工具</th>
         <th style="width:110px">需求</th><th class="row-arrow"></th>
       </tr></thead>
       <tbody>

@@ -48,6 +48,7 @@ const sorted = computed(() => {
   })
 })
 const countBy = s => reqs.value.filter(r => r.status === s).length
+const ariaSort = k => sortKey.value === k ? (sortDir.value === 'asc' ? 'ascending' : 'descending') : 'none'
 
 async function load() {
   loading.value = true
@@ -183,13 +184,13 @@ async function saveNewReq() {
 
       <table class="table table-fixed">
         <thead><tr>
-          <th style="width:32%" class="sortable" :class="{ on: sortKey === 'id', asc: sortDir === 'asc' }" @click="sortBy('id')">需求</th>
-          <th style="width:106px" class="sortable" :class="{ on: sortKey === 'iter', asc: sortDir === 'asc' }" @click="sortBy('iter')">迭代</th>
-          <th style="width:96px" class="sortable" :class="{ on: sortKey === 'sourceType', asc: sortDir === 'asc' }" @click="sortBy('sourceType')">来源</th>
-          <th style="width:96px" class="sortable" :class="{ on: sortKey === 'status', asc: sortDir === 'asc' }" @click="sortBy('status')">状态</th>
+          <th style="width:32%" class="sortable" :class="{ on: sortKey === 'id', asc: sortDir === 'asc' }" :aria-sort="ariaSort('id')" @click="sortBy('id')">需求</th>
+          <th style="width:106px" class="sortable" :class="{ on: sortKey === 'iter', asc: sortDir === 'asc' }" :aria-sort="ariaSort('iter')" @click="sortBy('iter')">迭代</th>
+          <th style="width:96px" class="sortable" :class="{ on: sortKey === 'sourceType', asc: sortDir === 'asc' }" :aria-sort="ariaSort('sourceType')" @click="sortBy('sourceType')">来源</th>
+          <th style="width:96px" class="sortable" :class="{ on: sortKey === 'status', asc: sortDir === 'asc' }" :aria-sort="ariaSort('status')" @click="sortBy('status')">状态</th>
           <th style="width:150px">澄清进度</th>
-          <th style="width:64px" class="num sortable" :class="{ on: sortKey === 'caseCount', asc: sortDir === 'asc' }" @click="sortBy('caseCount')">用例</th>
-          <th style="width:100px" class="sortable" :class="{ on: sortKey === 'syncedAt', asc: sortDir === 'asc' }" @click="sortBy('syncedAt')">最近同步</th>
+          <th style="width:64px" class="num sortable" :class="{ on: sortKey === 'caseCount', asc: sortDir === 'asc' }" :aria-sort="ariaSort('caseCount')" @click="sortBy('caseCount')">用例</th>
+          <th style="width:100px" class="sortable" :class="{ on: sortKey === 'syncedAt', asc: sortDir === 'asc' }" :aria-sort="ariaSort('syncedAt')" @click="sortBy('syncedAt')">最近同步</th>
           <th class="row-arrow w-del"></th>
         </tr></thead>
         <tbody>

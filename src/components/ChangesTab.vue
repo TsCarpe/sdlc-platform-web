@@ -43,6 +43,25 @@ const latestConfirmedId = computed(() => {
   return c ? c.id : null
 })
 
+// ===== 列排序（照抄 ReqList P2-7 模式）：默认服务端 id 倒序，点击表头切换 =====
+const sortKey = ref('')
+const sortDir = ref('desc')
+function sortBy(k) {
+  if (sortKey.value === k) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  else { sortKey.value = k; sortDir.value = 'desc' }
+}
+const timeOf = c => c.confirmedAt || c.abortedAt || c.createdAt
+const sorted = computed(() => {
+  if (!sortKey.value) return list.value
+  const k = sortKey.value, dir = sortDir.value === 'asc' ? 1 : -1
+  return [...list.value].sort((a, b) => {
+    const x = k === 'time' ? timeOf(a) : (a[k] ?? '')
+    const y = k === 'time' ? timeOf(b) : (b[k] ?? '')
+    return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * dir
+  })
+})
+const ariaSort = k => sortKey.value === k ? (sortDir.value === 'asc' ? 'ascending' : 'descending') : 'none'
+
 async function loadList() {
   loading.value = true
   try { list.value = await api.get(`/api/requirements/${props.reqId}/changes`) }
@@ -289,10 +308,13 @@ function fmtCounts(c) {
       <EmptyState v-else-if="!list.length" icon="inbox" title="暂无变更单"
                   desc="已发布后如需修改原文，提变更单 → 确认 → 增量质检合并 → 重新发布" />
       <table class="table" v-else>
-        <thead><tr><th style="width:70px">单号</th><th style="width:96px">类型</th><th>标题</th>
-          <th style="width:92px">状态</th><th style="width:170px">提单 / 确认</th><th style="width:170px">时间</th></tr></thead>
+        <thead><tr><th style="width:70px" class="sortable" :class="{ on: sortKey === 'id', asc: sortDir === 'asc' }" :aria-sort="ariaSort('id')" @click="sortBy('id')">单号</th>
+          <th style="width:96px" class="sortable" :class="{ on: sortKey === 'kind', asc: sortDir === 'asc' }" :aria-sort="ariaSort('kind')" @click="sortBy('kind')">类型</th><th>标题</th>
+          <th style="width:92px" class="sortable" :class="{ on: sortKey === 'status', asc: sortDir === 'asc' }" :aria-sort="ariaSort('status')" @click="sortBy('status')">状态</th>
+          <th style="width:170px">提单 / 确认</th>
+          <th style="width:170px" class="sortable" :class="{ on: sortKey === 'time', asc: sortDir === 'asc' }" :aria-sort="ariaSort('time')" @click="sortBy('time')">时间</th></tr></thead>
         <tbody>
-          <tr v-for="c in list" :key="c.id" tabindex="0" @click="openDetail(c.id)" @keydown.enter.self.prevent="openDetail(c.id)">
+          <tr v-for="c in sorted" :key="c.id" tabindex="0" @click="openDetail(c.id)" @keydown.enter.self.prevent="openDetail(c.id)">
             <td><code>#{{ c.id }}</code></td>
             <td><span class="badge" :class="KIND_CLS[c.kind]">{{ KIND_LABEL[c.kind] || c.kind }}</span></td>
             <td><div class="cell-ell">{{ c.title || '（无标题）' }}</div></td>

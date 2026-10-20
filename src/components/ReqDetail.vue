@@ -172,6 +172,7 @@ const cmtsOpen = ref(false)
 const cmtsFocus = ref(null)       // 定位高亮的评论 id（L 系跳回协议 + v5.x 角标联动）
 const cmtsComposeBlock = ref('')  // 发评目标块（块角标进入预选）
 const cmtsPanelRef = ref(null)    // 面板 ref：同值重复点击直调 refocus（watch 同值不触发）
+const cmtsReadonly = ref(false)   // 出处=评论的只读查看态（正常评论入口恒 false）
 
 async function loadComments() {
   try {
@@ -179,7 +180,7 @@ async function loadComments() {
     cm.value = Array.isArray(r?.comments) ? r : null   // 形状防御（非评论面响应不进渲染）
   } catch { cm.value = null }   // 评论面失败不连累主流程（面板内动作会再次尝试）
 }
-function openComments(blockId = '', focusId = null) {
+function openComments(blockId = '', focusId = null, readonly = false) {
   // v5.x 角标联动：块有评论时定位该块首个未解决线程根（全解决取首根；无评论不传——开面板即发评）
   if (blockId && focusId == null) {
     const roots = threadRoots(cm.value?.comments || []).filter(r => r.blockId === blockId)
@@ -188,6 +189,9 @@ function openComments(blockId = '', focusId = null) {
   }
   // 同值快照必须取在赋值前（赋值后判定恒真 + watch/refocus 双重执行）；cmtsOpen 亦须置真前读
   const same = cmtsOpen.value && focusId != null && cmtsFocus.value === focusId
+  // 只读标记无条件赋值（true/false 都写）：出处查看与正常发评入口可互相切换——若只在 true 时
+  // 置位，「先只读查看、关闭、再点整体疑问」将永远打不回可写面板
+  cmtsReadonly.value = readonly
   cmtsComposeBlock.value = blockId || ''
   cmtsFocus.value = focusId
   // 面板已开时再点角标只是换目标——无提示会被当成"点击没反应"，明确反馈一句
@@ -204,11 +208,14 @@ const cmByBlock = computed(() => {
 /** v5.x 评论锚 → 面板定位目标（buildCommentAnchorMap 口径单点）：工作台/摘要页「出处=评论区」
  *  点击分流开面板；块锚/无锚 miss 走原 locate，目录块 id 不在键域不受影响 */
 const commentAnchorMap = computed(() => buildCommentAnchorMap(docBlocks.value, cm.value?.comments || []))
-/** locate 统一入口（v5.x）：直连 locate 的三处 @locate 改经此分流——评论锚开评论面板（不切
- *  tab），否则原 needle/块锚定位。CommentsPanel 的单参 inline locate 绑定不经此（签名不同） */
+/** locate 统一入口（v5.x）：直连 locate 的三处 @locate 改经此分流——评论锚开**只读**评论面板
+ *  （不切 tab），否则原 needle/块锚定位。CommentsPanel 的单参 inline locate 绑定不经此（签名不同）。
+ *  只读影响面 = DigestTab 的出处=评论点击（摘要页无右栏，无处插评论出处卡）；OriginTab 的 locate
+ *  仅来自 TOC（heading/title/table-row，comment 合成块永不入选）、WorkbenchTab 已在组件内拦截
+ *  评论锚——都不会走到只读分支。后人若给 OriginTab 加评论锚 locate，此处会静默变只读，慎改。 */
 function onLocate(needle, anchor) {
   const cid = commentAnchorMap.value[anchor]
-  if (cid != null) return openComments('', cid)
+  if (cid != null) return openComments('', cid, true)
   locate(needle, anchor)
 }
 const cmUnresolved = computed(() => cm.value?.unresolvedCount || 0)
@@ -469,11 +476,15 @@ function resolveDocPath(path) {
                v-model:digest-md-open="digestMdOpen"
                @locate="onLocate" @jump="onJump" />
 
-    <!-- v5 澄清工作台（audit 已并入，D1）：作答/处置/已定论卡/影响分析/孤儿提示 + 原文侧栏；L 系行可跳回原评论 -->
+    <!-- v5 澄清工作台（audit 已并入，D1）：作答/处置/已定论卡/影响分析/孤儿提示 + 原文侧栏；出处=评论
+         → 右栏评论出处卡（组件内分流）；open-comment=打开完整面板（卡上「打开评论区」）；
+         view-comment=只读回退（无右栏/悬空评论） -->
     <WorkbenchTab v-if="tab === 'checklist'" :req-id="card.id" :items="d.items" :status="card.status"
                   :groups="checklistGroups" :audit="d.audit" :concluded-groups="concludedGroups"
                   :doc="d.doc" :snapshot="d.snapshot" :comment-anchor-map="commentAnchorMap"
+                  :comments="cm?.comments || []" :block-text="cmBlockText"
                   @locate="onLocate" @jump="onJump" @open-comment="id => openComments('', id)"
+                  @view-comment="id => openComments('', id, true)"
                   @open-origin="switchTab('origin')"
                   @toast="(m, t) => emit('toast', m, t)" />
 
@@ -513,11 +524,12 @@ function resolveDocPath(path) {
       </button>
     </Transition>
 
-    <!-- v4 评论面板（右侧抽屉，跨 tab 常驻）：locate 事件转发壳层定位协议（切到 origin 并锚块） -->
+    <!-- v4 评论面板（右侧抽屉，跨 tab 常驻）：locate 事件转发壳层定位协议（切到 origin 并锚块）；
+         readonly=出处查看态（DigestTab 评论锚/工作台只读回退入口置位，「管理评论」可切回） -->
     <CommentsPanel v-if="cmtsOpen" ref="cmtsPanelRef" :req-id="card.id" :comments="cm?.comments || []"
                    :block-text="cmBlockText" :escalated-ids="escalatedIds"
-                   :focus-id="cmtsFocus" :compose-block-id="cmtsComposeBlock"
-                   @close="cmtsOpen = false" @refresh="onCmtsRefresh"
+                   :focus-id="cmtsFocus" :compose-block-id="cmtsComposeBlock" :readonly="cmtsReadonly"
+                   @close="cmtsOpen = false" @refresh="onCmtsRefresh" @edit="cmtsReadonly = false"
                    @locate="id => { locate('', id) }"
                    @toast="(m, t) => emit('toast', m, t)" />
   </div>

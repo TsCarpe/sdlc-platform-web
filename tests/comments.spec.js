@@ -123,22 +123,22 @@ describe('CommentsPanel：线程组装与呈现', () => {
 })
 
 describe('WorkbenchTab（原 ChecklistTab）：L 系 origin 呈现与跳回', () => {
-  const mountCheck = async items => {
+  const mountCheck = async (items, over = {}) => {
     const { default: WorkbenchTab } = await import('../src/components/WorkbenchTab.vue')
     const { GRP_KEY } = await import('../src/composables/group-collapse.js')
     // WorkbenchTab inject 分组折叠协议——孤立挂载需补 provide（壳层 ReqDetail 常规路径已提供）
     const grp = { openGrps: new Set(), toggleGrp: () => {}, expandAll: () => {}, collapseAll: () => {}, revealGrpFor: () => {} }
     return mount(WorkbenchTab, { props: { reqId: 'REQ-1', items, status: 'clarifying',
-      groups: [{ name: '组', items }] }, global: { provide: { [GRP_KEY]: grp } } })
+      groups: [{ name: '组', items }], ...over }, global: { provide: { [GRP_KEY]: grp } } })
   }
-  it('L 系行显示「来自评论」并可跳回（携带 srcCommentId）', async () => {
+  it('L 系行显示「来自评论」并可跳回（携带 srcCommentId；无 doc → 只读回退 view-comment）', async () => {
     const items = [{ seq: 'L01', level: 'yellow', theme: '评论升级', question: 'q', answer: '', status: 'pending', origin: 'local', srcCommentId: 7 }]
     const w = await mountCheck(items)
     const link = w.findAll('.jump-link').find(b => b.text().includes('来自评论'))
     expect(link).toBeTruthy()
     expect(w.text()).not.toContain('来自体检.L01')
     await link.trigger('click')
-    expect(w.emitted('open-comment')[0]).toEqual([7])
+    expect(w.emitted('view-comment')[0]).toEqual([7])   // 无块结构（无右栏）→ 只读抽屉回退
   })
   it('P 系行保持「来自体检」；incremental 行显示「来自增量质检」', async () => {
     const items = [{ seq: 'P01', level: 'yellow', theme: '域', question: 'q', answer: '', status: 'pending', origin: 'skill' },
@@ -147,6 +147,58 @@ describe('WorkbenchTab（原 ChecklistTab）：L 系 origin 呈现与跳回', ()
     expect(w.text()).toContain('来自体检.P01')
     expect(w.text()).toContain('来自增量质检')
     expect(w.text()).not.toContain('来自评论')
+  })
+
+  // ===== 出处=评论 → 右栏评论出处卡（只读查看态） =====
+  const docOf = () => ({ content: { blocks: [{ id: 'blk-1', type: 'paragraph', text: '正文段落' }] } })
+  const cmtRows = () => [
+    { id: 7, blockId: 'blk-1', origin: 'platform', externalId: '', author: '张三', text: '这条口径有歧义',
+      replyTo: null, resolved: false, createdAt: '2026-10-14 10:00:00' },
+    { id: 8, blockId: 'blk-1', origin: 'platform', externalId: '', author: '李四', text: '回复补充',
+      replyTo: 7, resolved: false, createdAt: '2026-10-14 10:05:00' }
+  ]
+  const l01 = srcCommentId => ({ seq: 'L01', level: 'yellow', theme: '评论升级', question: 'q',
+    answer: '', status: 'pending', origin: 'local', srcCommentId })
+
+  it('有 doc：来自评论 → 右栏只读评论出处卡（线程+回复链、无任何输入框），不弹抽屉；「打开评论区」转发完整面板', async () => {
+    const w = await mountCheck([l01(7)], { doc: docOf(), comments: cmtRows(), blockText: { 'blk-1': '正文段落' } })
+    await w.findAll('.jump-link').find(b => b.text().includes('来自评论')).trigger('click')
+    await flushPromises()
+    const card = w.find('.ctx-cmt')
+    expect(card.exists()).toBe(true)
+    expect(card.text()).toContain('评论出处 L01')
+    expect(card.text()).toContain('张三')
+    expect(card.text()).toContain('这条口径有歧义')
+    expect(card.text()).toContain('回复补充')                       // 回复链同卡
+    expect(card.findAll('input, textarea').length).toBe(0)         // 只读——无回复框/发评框
+    expect(w.emitted('open-comment')).toBeUndefined()              // 不经抽屉
+    await card.find('.ctx-cmt-f button').trigger('click')
+    expect(w.emitted('open-comment')[0]).toEqual([7])              // 打开评论区 → 完整面板（携带根 id）
+  })
+
+  it('悬空 srcCommentId（评论已删）→ 回退 view-comment，不渲染空壳卡', async () => {
+    const w = await mountCheck([l01(999)], { doc: docOf(), comments: cmtRows() })
+    await w.findAll('.jump-link').find(b => b.text().includes('来自评论')).trigger('click')
+    await flushPromises()
+    expect(w.find('.ctx-cmt').exists()).toBe(false)
+    expect(w.emitted('view-comment')[0]).toEqual([999])
+  })
+
+  it('卡显示中目标线程被删（comments 变化）→ 卡自动消失；右栏收起态点出处 → 自动展开出卡', async () => {
+    const w = await mountCheck([l01(7)], { doc: docOf(), comments: cmtRows(), blockText: { 'blk-1': '正文段落' } })
+    // 收起右栏（点 CtxPane「收起」）→ 卡随 v-if 卸载消失
+    const collapseBtn = w.findAll('button').find(b => b.text().includes('收起'))
+    expect(collapseBtn).toBeTruthy()
+    await collapseBtn.trigger('click')
+    expect(w.find('.ctx-cmt').exists()).toBe(false)                // 尚未开卡时本来就无卡
+    // 收起态点出处 → 自动展开右栏 + 出卡（openCommentInCtx 先置 ctxCollapsed=false）
+    await w.findAll('.jump-link').find(b => b.text().includes('来自评论')).trigger('click')
+    await flushPromises()
+    expect(w.find('.ctx-cmt').exists()).toBe(true)
+    expect(w.find('.ctx-cmt').text()).toContain('张三')
+    // 目标线程整体被删（comments 清空）→ cmtThread miss → 卡自动消失不留空壳
+    await w.setProps({ comments: [] })
+    expect(w.find('.ctx-cmt').exists()).toBe(false)
   })
 })
 
@@ -205,5 +257,63 @@ describe('OriginTab：飞书冻结提示（v4 §11.5）', () => {
       card: { id: 'REQ-T', status: 'published', sourceType: 'text', sourceUrl: '', sourceText: 'x' },
       snapshot: null, doc } })
     expect(w2.text()).not.toContain('原文已迁入平台')
+  })
+})
+
+describe('CommentsPanel：只读查看态（出处=评论经 view-comment / onLocate 进入）', () => {
+  it('readonly：藏发评区与全部操作行/删除钮，头部「只读」chip + 「管理评论」emit edit', async () => {
+    const w = await mountPanel({ readonly: true })
+    expect(w.find('.cmts-compose').exists()).toBe(false)          // 发评区
+    expect(w.findAll('.ct-ops').length).toBe(0)                   // 回复/解决/升级/删除操作行
+    expect(w.findAll('.ct-msg .cdel').length).toBe(0)             // 回复行删除钮
+    expect(w.find('.cmts-h').text()).toContain('只读')
+    const btn = w.findAll('button').find(b => b.text() === '管理评论')
+    expect(btn).toBeTruthy()
+    await btn.trigger('click')
+    expect(w.emitted('edit').length).toBe(1)
+  })
+  it('默认（非 readonly）照常可写：发评区 + 每线程一条操作行', async () => {
+    const w = await mountPanel()
+    expect(w.find('.cmts-compose').exists()).toBe(true)
+    expect(w.findAll('.ct-ops').length).toBe(2)                   // 2 线程各一
+    expect(w.find('.cmts-h').text()).not.toContain('只读')
+  })
+  it('refocus 限定抽屉自身域：文档序更前的同 data-cid 元素（模拟 CtxPane 评论出处卡）不被波及', async () => {
+    // jsdom 无 scrollIntoView——stub 后还原
+    const si = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = () => {}
+    try {
+      const outer = document.createElement('div')                 // 面板外同 id 元素（文档序在前）
+      outer.setAttribute('data-cid', '3')
+      document.body.insertBefore(outer, document.body.firstChild)
+      const w = await mountPanel()
+      await w.vm.refocus(3)                                       // 直调 expose（绕开 watch 同值不触发）
+      await new Promise(r => setTimeout(r, 120))                  // refocus 内 60ms 渲染等待
+      expect(outer.classList.contains('cmt-flash')).toBe(false)   // 面板外未被高亮
+      const inner = w.find('[data-cid="3"]')
+      expect(inner.classes()).toContain('cmt-flash')              // 面板内目标高亮
+      outer.remove()
+    } finally { Element.prototype.scrollIntoView = si }
+  })
+})
+
+describe('comments.js：buildThreads / threadOf（面板与评论出处卡共用口径）', () => {
+  it('根+回复链组装（悬空回复升根）；threadOf 根/回复 id 皆命中、miss 返 null', async () => {
+    const { buildThreads, threadOf } = await import('../src/comments.js')
+    const rows = [
+      { id: 1, blockId: '', replyTo: null, resolved: false, author: 'a', text: '根', createdAt: '2026-10-14 10:00:00' },
+      { id: 2, blockId: '', replyTo: 1, resolved: false, author: 'b', text: '回复', createdAt: '2026-10-14 10:01:00' },
+      { id: 3, blockId: '', replyTo: 2, resolved: false, author: 'c', text: '二级回复', createdAt: '2026-10-14 10:02:00' },
+      { id: 9, blockId: '', replyTo: 40, resolved: true, author: 'd', text: '悬空回复', createdAt: '2026-10-14 10:03:00' }   // 父不在 → 升根
+    ]
+    const ts = buildThreads(rows)
+    expect(ts.map(t => t.root.id)).toEqual([1, 9])
+    expect(ts[0].replies.map(r => r.id)).toEqual([2, 3])          // 深度遍历回复链
+    expect(ts[1].replies).toEqual([])
+    expect(ts[1].resolved).toBe(true)                             // resolved 看根
+    expect(threadOf(ts, 1).root.id).toBe(1)
+    expect(threadOf(ts, 3).root.id).toBe(1)                       // 回复 id 兜底到所属线程
+    expect(threadOf(ts, 40)).toBe(null)                           // miss
+    expect(threadOf(buildThreads([]), 1)).toBe(null)              // 空列表恒 miss
   })
 })

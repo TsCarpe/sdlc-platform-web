@@ -13,15 +13,18 @@ import ImgViewer from './ImgViewer.vue'
 import { fmtRel } from '../time.js'
 import { firstQuote, needlesFor } from '../trace.js'
 import { mdPlain } from '../docview.js'
+import { buildThreads, threadOf } from '../comments.js'
 import { useDocStructure } from '../composables/doc-structure.js'
 
 const props = defineProps({
   reqId: { type: String, required: true },
   doc: { type: Object, default: null },            // detail.doc（块表权威——非产物数据，空态照常渲染）
   snapshot: { type: Object, default: null },       // 依据版本展示（快照时点）
-  pendingByBlock: { type: Object, default: () => ({}) }   // anchor → 待澄清 seq[]（反向角标）
+  pendingByBlock: { type: Object, default: () => ({}) },   // anchor → 待澄清 seq[]（反向角标）
+  comments: { type: Array, default: () => [] },    // 评论行（评论出处卡数据源——壳层 GET /comments）
+  blockText: { type: Object, default: () => ({}) } // blockId → 文本摘要（根评论锚定块标签）
 })
-const emit = defineEmits(['locate', 'clarify', 'open-origin', 'collapse'])
+const emit = defineEmits(['locate', 'clarify', 'open-origin', 'collapse', 'open-comments'])
 
 const { docData, docBlocks, docToc, mediaList } = useDocStructure(() => props.doc, () => props.reqId)
 
@@ -148,7 +151,38 @@ function goToc(id) {
   const el = box.value?.querySelector(`[data-blk="${id}"]`)
   if (el) scrollIntoViewCtx(el)
 }
-defineExpose({ locateCtx })
+
+// ===== 评论出处卡（出处=评论的只读查看态）：头部区插卡不动原文滚动，与 locateCtx 可共存 =====
+const cmtCard = ref(null)      // { seq, cid } —— null = 无卡；随右栏收起/切 tab 的 v-if 卸载自然消失（与 ✕ 等效）
+const cmtEl = ref(null)        // 卡容器（flash 与内滚域）
+const cmtThread = computed(() => cmtCard.value ? threadOf(buildThreads(props.comments), cmtCard.value.cid) : null)
+/** 根评论锚定块短标签（与 CommentsPanel blkShort 同口径：24 字截断，title 悬停全文） */
+function blkLabel(id) {
+  const t = (props.blockText[id] || '').slice(0, 60) || id
+  return t.length > 24 ? t.slice(0, 24) + '…' : t
+}
+
+/** 评论出处定位（WorkbenchTab 出处=评论分流调用）：命中插卡+flash 目标消息；悬空（评论已删/
+ *  列表为空）返回 false 由调用方回退只读抽屉。不受 follow 开关限制——插卡不滚动原文，
+ *  无「打断阅读」可言（与 locateCtx 的本质差异）。 */
+async function locateComment({ seq = '', cid = null }) {
+  if (cid == null) return false
+  const t = threadOf(buildThreads(props.comments), cid)
+  if (!t) return false
+  cmtCard.value = { seq, cid }
+  missCard.value = null   // 同属出处态：新目标替换旧静态出处卡
+  await nextTick()
+  const card = cmtEl.value
+  const el = card?.querySelector(`[data-cid="${cid}"]`)
+  if (card && el) {
+    // 手动 scrollTop 只滚卡片容器（原生 scrollIntoView 连动浏览器窗口）；offsetTop 相对卡容器（CSS position:relative）
+    card.scrollTop = Math.max(0, el.offsetTop - 20)
+    el.classList.add('cmt-flash')
+    setTimeout(() => el.classList.remove('cmt-flash'), 1600)
+  }
+  return true
+}
+defineExpose({ locateCtx, locateComment })
 
 // ===== 灯箱（复用 v4.20 ImgViewer；图源 = 块表文档序） =====
 const viewerIdx = ref(-1)
@@ -170,6 +204,38 @@ function onDocMedia(id) {
               :title="follow ? '开启中：点击左侧摘引自动定位；点击关闭以自由滚动' : '已关闭：点击左侧摘引不再滚动定位'">
         <span class="dot"></span>跟随定位</button>
       <button class="btn small link" title="收起原文面板（大需求全宽阅读时可收起）" @click="emit('collapse')">收起 ›</button>
+    </div>
+
+    <!-- 评论出处卡（出处=评论的只读查看态）：线程消息复用全局 .ct-* 样式；miss（评论被删）
+         时 cmtThread 为 null 卡自动消失，不留空壳 -->
+    <div class="ctx-cmt" v-if="cmtCard && cmtThread" ref="cmtEl">
+      <div class="ctx-cmt-h">
+        <b><AppIcon name="message-square" :size="13" />评论出处{{ cmtCard.seq ? ' ' + cmtCard.seq : '' }}</b>
+        <span class="chip" v-if="cmtThread.resolved">已解决</span>
+        <span class="chip" v-if="cmtThread.root.origin === 'feishu'" title="飞书文档导入的历史评论">来自源文档</span>
+        <span class="spacer"></span>
+        <button class="x" @click="cmtCard = null" aria-label="关闭评论出处卡">✕</button>
+      </div>
+      <div class="ctx-cmt-blk" v-if="cmtThread.root.blockId">
+        锚定：<a class="linklike" @click="locateCtx({ seq: cmtCard.seq, anchor: cmtThread.root.blockId })"
+               :title="'定位原文块 ' + cmtThread.root.blockId">{{ blkLabel(cmtThread.root.blockId) }}</a>
+      </div>
+      <div class="ct-msgs">
+        <div class="ct-msg" :data-cid="cmtThread.root.id">
+          <b>{{ cmtThread.root.author || '匿名' }}</b><span class="sub" :title="cmtThread.root.createdAt"> · {{ fmtRel(cmtThread.root.createdAt) }}</span>
+          <div class="ct-text">{{ cmtThread.root.text }}</div>
+        </div>
+        <div class="ct-msg reply" v-for="r in cmtThread.replies" :key="r.id" :data-cid="r.id">
+          <b>{{ r.author || '匿名' }}</b><span class="sub" :title="r.createdAt"> · {{ fmtRel(r.createdAt) }}</span>
+          <div class="ct-text">{{ r.text }}</div>
+        </div>
+      </div>
+      <div class="ctx-cmt-f">
+        <button class="btn small" title="打开完整评论区（可回复 / 解决 / 升级）"
+                @click="emit('open-comments', cmtThread.root.id)">
+          <AppIcon name="arrow-up-right" :size="11" />打开评论区</button>
+        <span class="sub">查看态只读</span>
+      </div>
     </div>
 
     <!-- 目录（默认收起；巨表文档主体在行级，heading 导航不到时 table-row 也入列） -->

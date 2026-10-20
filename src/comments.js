@@ -38,3 +38,35 @@ export function buildCommentAnchorMap(docBlocks, comments) {
   }
   return m
 }
+
+/** 线程组装（CommentsPanel 面板与 CtxPane 评论出处卡共用）：threadRoots 取根 + 回复链
+ *  深度遍历（环由 seen 剪），resolved 看根（resolve 是线程级，根+链同值） */
+export function buildThreads(comments) {
+  const byId = new Map((comments || []).map(c => [c.id, c]))
+  const children = {}
+  for (const c of comments || []) {
+    if (c.replyTo != null && byId.has(c.replyTo)) (children[c.replyTo] = children[c.replyTo] || []).push(c)
+  }
+  return threadRoots(comments).map(r => ({
+    root: r,
+    replies: (function walk(id, acc = [], seen = new Set()) {
+      for (const ch of children[id] || []) {
+        if (seen.has(ch.id)) continue
+        seen.add(ch.id)
+        acc.push(ch)
+        walk(ch.id, acc, seen)
+      }
+      return acc
+    })(r.id),
+    resolved: r.resolved
+  }))
+}
+
+/** 按评论 id 找所属线程（根 id 直取；回复 id 深兜底——调用方给的恒为根 id，miss 返回 null） */
+export function threadOf(threads, cid) {
+  for (const t of threads || []) {
+    if (t.root.id === cid) return t
+    if (t.replies.some(r => r.id === cid)) return t
+  }
+  return null
+}

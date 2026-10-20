@@ -227,3 +227,46 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     expect(document.activeElement.id).toBe('tab-origin')
   })
 })
+
+describe('壳层分流：出处=评论 → 只读评论抽屉（v5.x 只读查看态）', () => {
+  it('DigestTab 评论锚 locate → CommentsPanel 只读（无发评区/操作行）；「管理评论」一键切回完整', async () => {
+    // 局部覆盖 mock：/comments 返回评论形状 + doc 含 comment 合成块（否则形状防御吞掉响应、分流不可达）
+    const { api } = await import('../src/api.js')
+    const base = api.get.getMockImplementation()
+    const detail = () => {
+      const d = detailFixture()
+      d.doc.content.blocks.push({ id: 'cm-7', type: 'comment', origin: 'platform', text: '这条口径有歧义' })
+      d.frPoints[0].anchor = 'cm-7'   // 需求点出处锚 = 评论合成块 → commentAnchorMap 命中
+      return d
+    }
+    api.get.mockImplementation(async url => {
+      if (url.includes('/gate')) return gateViewFixture()
+      if (url.includes('/design')) return { reqId: 'REQ-2026-001', tier: 'B', phase: 'none' }
+      if (url.includes('/tasks') || url.includes('/drafts')) return []
+      if (url.includes('/comments')) return {
+        comments: [{ id: 7, blockId: 'blk-1', origin: 'platform', externalId: '', author: '张三',
+          text: '这条口径有歧义', replyTo: null, resolved: false, createdAt: '2026-10-14 10:00:00' }],
+        unresolvedCount: 1 }
+      return detail()
+    })
+    try {
+      wrapper = await mountDetail()
+      await wrapper.findAll('[role="tab"]')[1].trigger('click')   // digest tab（无右栏 → 只读抽屉回退路径）
+      await flushPromises()
+      const link = wrapper.findAll('a.cite').find(a => a.find('.anchored-mark').exists())
+      expect(link).toBeTruthy()                                   // 评论锚图标（message-square）已分流呈现
+      await link.trigger('click')
+      await flushPromises()
+      const panel = wrapper.find('.cmts-drawer')
+      expect(panel.exists()).toBe(true)
+      expect(panel.text()).toContain('张三')
+      expect(panel.find('.cmts-compose').exists()).toBe(false)    // 只读：无发评区
+      expect(panel.findAll('.ct-ops').length).toBe(0)             // 无操作行
+      expect(panel.find('.cmts-h').text()).toContain('只读')
+      const edit = panel.findAll('button').find(b => b.text() === '管理评论')
+      expect(edit).toBeTruthy()
+      await edit.trigger('click')
+      expect(panel.find('.cmts-compose').exists()).toBe(true)     // emit edit → 壳层翻回完整模式
+    } finally { api.get.mockImplementation(base) }
+  })
+})

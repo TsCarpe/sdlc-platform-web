@@ -26,8 +26,12 @@ const props = defineProps({
   doc: { type: Object, default: null },            // detail.doc（右栏原文侧栏数据——非产物，空态照常渲染）
   snapshot: { type: Object, default: null },       // 侧栏「依据版本」展示
   commentAnchorMap: { type: Object, default: () => ({}) },  // v5.x 评论锚 → 面板定位目标（出处=评论区分流）
+  comments: { type: Array, default: () => [] },     // 评论行（CtxPane 评论出处卡数据源——壳层持有）
+  blockText: { type: Object, default: () => ({}) }, // blockId → 文本摘要（评论出处卡锚定块标签）
 })
-const emit = defineEmits(['locate', 'jump', 'toast', 'open-comment', 'open-origin'])
+// 事件语义：open-comment = 打开完整评论面板（CtxPane「打开评论区」转发）；view-comment = 只读
+// 查看回退（无右栏 / 悬空评论）——壳层分别以完整/只读模式接住
+const emit = defineEmits(['locate', 'jump', 'toast', 'open-comment', 'view-comment', 'open-origin'])
 
 const { openGrps, toggleGrp, expandAll, collapseAll, revealGrpFor } = useGrpCollapse()
 
@@ -111,11 +115,22 @@ onBeforeUnmount(() => { if (drag) endDrag() })
  *  locateCtx 必 miss）；map miss（块锚/无锚）走原定位路径 */
 const isCmtAnchor = anchor => props.commentAnchorMap[anchor] != null
 
+/** 评论出处分流（v5.x）：出处=评论 → 右栏评论出处卡只读查看（不弹抽屉、不遮右栏原文）；
+ *  无块结构（无右栏）或悬空评论（已被删除/列表为空）→ 回退只读抽屉（view-comment）——
+ *  只读抽屉至少可见全量评论列表，不做静默无反应 */
+async function openCommentInCtx(cid, seq) {
+  if (!hasDoc.value) return emit('view-comment', cid)
+  ctxCollapsed.value = false   // 右栏收起时先展开（nextTick 后 v-if 挂载完成、ctxRef 可用）
+  await nextTick()
+  const ok = await ctxRef.value?.locateComment({ seq, cid })
+  if (!ok) emit('view-comment', cid)
+}
+
 /** 摘引/出处点击（左栏问题卡与已定论卡）：优先侧栏联动（不切 tab，§2.1）；
  *  无块结构（快照老卡）回退壳层 locate 协议（切 origin needle 定位） */
 function locateInCtx(it) {
   const cid = props.commentAnchorMap[it.anchor]
-  if (cid != null) return emit('open-comment', cid)
+  if (cid != null) return openCommentInCtx(cid, it.seq || pidOf(it.id))
   if (!hasDoc.value) return emit('locate', firstQuote(it.quote) || it.ctx || it.title || it.where, it.anchor)
   ctxCollapsed.value = false
   nextTick(() => ctxRef.value?.locateCtx({
@@ -455,9 +470,10 @@ async function reopen(it) {
     <div class="ctx-col" v-if="hasDoc && !ctxCollapsed">
       <div class="ctx-resizer" title="拖动调整宽度（320-760px）" @mousedown="startDrag"></div>
       <CtxPane ref="ctxRef" :req-id="reqId" :doc="doc" :snapshot="snapshot"
-               :pending-by-block="pendingByBlock"
+               :pending-by-block="pendingByBlock" :comments="comments" :block-text="blockText"
                @clarify="locateCheck" @collapse="ctxCollapsed = true"
-               @locate="(s, a) => emit('locate', s, a)" @open-origin="emit('open-origin')" />
+               @locate="(s, a) => emit('locate', s, a)" @open-origin="emit('open-origin')"
+               @open-comments="cid => emit('open-comment', cid)" />
     </div>
     <button class="ctx-restore" v-if="hasDoc && ctxCollapsed" @click="ctxCollapsed = false">‹ 展开原文上下文</button>
   </div>
@@ -558,7 +574,7 @@ async function reopen(it) {
           <span class="chip">{{ it.seq }}</span>
           <!-- v4 origin 三族（§2/§6.3）：L 系来自评论升级（回链原讨论）；incremental 来自增量质检（变更后局部重检）；skill 来自体检报告 -->
           <button class="jump-link" v-if="it.origin === 'local'"
-                  title="由评论升级而来——点击回看原讨论" @click="emit('open-comment', it.srcCommentId)">
+                  title="由评论升级而来——点击在右栏查看原讨论（只读）" @click="openCommentInCtx(it.srcCommentId, it.seq)">
             来自评论<span v-if="it.srcCommentId"> #{{ it.srcCommentId }}</span><AppIcon name="arrow-up-right" :size="11" /></button>
           <span class="jump-link" v-else-if="it.origin === 'incremental'" title="增量质检产生（变更单确认后的局部重检），处置后可重新发布">来自增量质检</span>
           <span class="jump-link" v-else title="来自体检报告同源条目">来自体检.{{ it.seq }}</span>
@@ -687,9 +703,10 @@ async function reopen(it) {
     <div class="ctx-col" v-if="hasDoc && !ctxCollapsed">
       <div class="ctx-resizer" title="拖动调整宽度（320-760px）" @mousedown="startDrag"></div>
       <CtxPane ref="ctxRef" :req-id="reqId" :doc="doc" :snapshot="snapshot"
-               :pending-by-block="pendingByBlock"
+               :pending-by-block="pendingByBlock" :comments="comments" :block-text="blockText"
                @clarify="locateCheck" @collapse="ctxCollapsed = true"
-               @locate="(s, a) => emit('locate', s, a)" @open-origin="emit('open-origin')" />
+               @locate="(s, a) => emit('locate', s, a)" @open-origin="emit('open-origin')"
+               @open-comments="cid => emit('open-comment', cid)" />
     </div>
     </div><!-- /wb-grid -->
     <button class="ctx-restore" v-if="hasDoc && ctxCollapsed" @click="ctxCollapsed = false">‹ 展开原文上下文</button>

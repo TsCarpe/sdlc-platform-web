@@ -11,7 +11,7 @@ import { ask } from '../confirm.js'
 import { lvlLabel } from '../levels.js'
 import { fmtRel } from '../time.js'
 import { useModalFocus } from '../composables/modal-focus.js'
-import { threadRoots } from '../comments.js'
+import { buildThreads } from '../comments.js'
 
 const props = defineProps({
   reqId: { type: String, required: true },
@@ -19,9 +19,10 @@ const props = defineProps({
   blockText: { type: Object, default: () => ({}) },   // blockId → 文本摘要（线程上下文）
   escalatedIds: { type: Array, default: () => [] },   // 已升级的评论 id（按钮预禁用）
   focusId: { type: Number, default: null },           // 定位高亮某条评论（跳回协议）
-  composeBlockId: { type: String, default: '' }       // 发评目标块（'' = 卡片级）
+  composeBlockId: { type: String, default: '' },      // 发评目标块（'' = 卡片级）
+  readonly: { type: Boolean, default: false }         // 只读查看（出处=评论的查看态）：藏一切写操作
 })
-const emit = defineEmits(['close', 'refresh', 'locate', 'toast'])
+const emit = defineEmits(['close', 'refresh', 'locate', 'toast', 'edit'])
 
 const author = ref(localStorage.getItem('sdlc.op') || '')
 const replyDraft = ref({})        // '__new'=发评框；线程根 id → 回复文本
@@ -32,27 +33,8 @@ const busy = ref(false)
 const composeTarget = ref(props.composeBlockId || '')
 watch(() => props.composeBlockId, v => { composeTarget.value = v || '' })
 
-// ===== 线程组装：根（threadRoots 口径单点）+ 回复链 =====
-const threads = computed(() => {
-  const byId = new Map(props.comments.map(c => [c.id, c]))
-  const children = {}
-  for (const c of props.comments) {
-    if (c.replyTo != null && byId.has(c.replyTo)) (children[c.replyTo] = children[c.replyTo] || []).push(c)
-  }
-  return threadRoots(props.comments).map(r => ({
-    root: r,
-    replies: (function walk(id, acc = [], seen = new Set()) {
-      for (const ch of children[id] || []) {
-        if (seen.has(ch.id)) continue
-        seen.add(ch.id)
-        acc.push(ch)
-        walk(ch.id, acc, seen)
-      }
-      return acc
-    })(r.id),
-    resolved: r.resolved   // resolve 是线程级（根+链同值），看根即可
-  }))
-})
+// ===== 线程组装：根（threadRoots 口径单点）+ 回复链（buildThreads 抽公共——CtxPane 评论卡共用） =====
+const threads = computed(() => buildThreads(props.comments))
 const cardThreads = computed(() => threads.value.filter(t => !t.root.blockId))
 const blockThreads = computed(() => threads.value.filter(t => t.root.blockId))
 /** 渲染序列：分组头 + 线程（单循环渲染，避免两段重复模板） */
@@ -123,12 +105,15 @@ async function confirmEscalate() {
 }
 
 // ===== 定位高亮（跳回协议：澄清清单 L 系 → 原评论；v5.x 壳层角标联动/同值重复点击共用）。
-// 回调体抽 refocus 供 watch 与 defineExpose 共用——watch 同值不触发，壳层直调绕开 =====
+// 回调体抽 refocus 供 watch 与 defineExpose 共用——watch 同值不触发，壳层直调绕开。
+// 选择器限定抽屉自身域：CtxPane 评论出处卡同样带 data-cid 且在文档序更前——全局
+// document.querySelector 会命中抽屉外元素，高亮/滚动错位 =====
+const drawerEl = ref(null)
 async function refocus(id) {
   if (id == null) return
   await nextTick()
   await new Promise(r => setTimeout(r, 60))   // 线程 DOM 随 comments prop 渲染后再锚
-  const el = document.querySelector(`[data-cid="${id}"]`)
+  const el = drawerEl.value?.querySelector(`[data-cid="${id}"]`)
   if (!el) return
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   el.classList.add('cmt-flash')
@@ -153,16 +138,19 @@ function onKey(e) {
 </script>
 
 <template>
-  <section class="cmts-drawer" aria-label="评论区">
+  <section class="cmts-drawer" ref="drawerEl" aria-label="评论区">
     <div class="cmts-h">
       <b><AppIcon name="message-square" :size="14" />评论</b>
+      <span class="chip" v-if="props.readonly" title="从出处/澄清项进入的查看态——只读">只读</span>
       <span class="chip" v-if="unresolved">{{ unresolved }} 条未解决</span>
       <span class="spacer"></span>
+      <button class="btn small link" v-if="props.readonly" title="切换到完整评论区（可发评/回复/处置）"
+              @click="emit('edit')">管理评论</button>
       <button class="x" @click="emit('close')" aria-label="关闭评论面板">✕</button>
     </div>
 
-    <!-- 发评：目标块可切（块角标进入预选该块；卡片级 = 整体疑问） -->
-    <div class="cmts-compose">
+    <!-- 发评：目标块可切（块角标进入预选该块；卡片级 = 整体疑问）；只读查看态隐藏 -->
+    <div class="cmts-compose" v-if="!props.readonly">
       <div class="cmts-target">
         <span class="sub">发到：</span>
         <span class="chip" v-if="composeTarget" :title="blkText(composeTarget)">「{{ blkShort(composeTarget) }}」</span>
@@ -197,11 +185,11 @@ function onKey(e) {
             <div class="ct-msg reply" v-for="r in t.replies" :key="r.id" :data-cid="r.id">
               <b>{{ r.author || '匿名' }}</b><span class="sub" :title="r.createdAt"> · {{ fmtRel(r.createdAt) }}</span>
               <div class="ct-text">{{ r.text }}</div>
-              <button class="btn small link cdel" v-if="r.origin !== 'feishu'" title="删除本条"
+              <button class="btn small link cdel" v-if="!props.readonly && r.origin !== 'feishu'" title="删除本条"
                       @click="delComment(r)"><AppIcon name="trash" :size="11" /></button>
             </div>
           </div>
-          <div class="ct-ops">
+          <div class="ct-ops" v-if="!props.readonly">
             <input v-model="replyDraft[t.root.id]" :name="'reply-' + t.root.id" :aria-label="'回复 ' + t.root.author" placeholder="回复…" style="flex:1"
                    @keydown.ctrl.enter.prevent="post(t.root.blockId, replyDraft[t.root.id] || '', t.root.id)">
             <button class="btn small" :disabled="busy" @click="post(t.root.blockId, replyDraft[t.root.id] || '', t.root.id)">回复</button>

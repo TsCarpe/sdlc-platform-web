@@ -4,6 +4,7 @@ import { ref, onMounted } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import EmptyState from './EmptyState.vue'
+import { ask } from '../confirm.js'
 
 const props = defineProps({ iter: String })
 const emit = defineEmits(['back', 'submitted', 'toast'])
@@ -35,6 +36,20 @@ async function submit() {
     emit('submitted', out.id)
   } catch (e) { emit('toast', e.message, 'err') } finally { saving.value = false }
 }
+
+// 就地删除本空迭代（进错迭代不用退回列表再找行）
+async function delIter() {
+  if (!await ask({
+    title: `删除空迭代「${props.iter}」？`,
+    body: '仅未绑定需求的空迭代可删，删除后不可恢复（迭代工作目录不受影响）。',
+    danger: true, confirmText: '删除'
+  })) return
+  try {
+    await api.del('/api/iterations/detail?name=' + encodeURIComponent(props.iter))
+    emit('toast', `已删除空迭代「${props.iter}」`)
+    emit('back')
+  } catch (e) { emit('toast', e.message, 'err') }
+}
 </script>
 
 <template>
@@ -48,6 +63,9 @@ async function submit() {
         <h2>{{ row.name }}</h2>
         <span class="badge b-gray">空迭代</span>
         <span class="sub" v-if="row.note">{{ row.note }}</span>
+        <button class="btn small danger" style="margin-left:auto" @click="delIter">
+          <AppIcon name="trash" :size="13" />删除迭代
+        </button>
       </div>
       <p class="sub" style="margin-bottom:14px">
         该迭代还没有绑定需求（迭代 × 需求 1:1）。提交下方表单后，需求与迭代绑定，后续质检 / 澄清 / 发布 / 设计 / 门禁全在本迭代内闭环。</p>

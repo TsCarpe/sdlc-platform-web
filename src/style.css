@@ -710,6 +710,8 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .iter-side .sub{font-size:11.5px}
 .badge.blocker{cursor:default}
 .iter-chev{color:var(--faint);flex:none}
+/* 空迭代行内删除钮（复用表格 row-del 近隐语言；tr:hover 规则不覆盖 .iter-row，补齐） */
+.iter-row:hover .row-del, .iter-row .row-del:focus-visible{opacity:1}
 
 /* 七节点生命周期条 */
 .node-strip{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}

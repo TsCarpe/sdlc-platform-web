@@ -7,6 +7,7 @@ import EmptyState from './EmptyState.vue'
 import NodeStrip from './NodeStrip.vue'
 import { fmtRel } from '../time.js'
 import { nodesFromRow, blockerFromRow } from '../lifecycle.js'
+import { ask } from '../confirm.js'
 
 const emit = defineEmits(['open-iter', 'open-empty', 'toast'])
 const rows = ref([])
@@ -53,6 +54,20 @@ async function saveNew() {
     emit('toast', `迭代 ${d.name.trim()} 已创建（空迭代，可在页内提交需求）`)
     await load()
   } catch (e) { emit('toast', e.message, 'err') } finally { d.saving = false }
+}
+
+// 删除空迭代（后端语义：绑定存活需求 409 拒绝，故入口只对 !reqId 的行渲染）
+async function delIter(r) {
+  if (!await ask({
+    title: `删除空迭代「${r.name}」？`,
+    body: '仅未绑定需求的空迭代可删，删除后不可恢复（迭代工作目录不受影响）。',
+    danger: true, confirmText: '删除'
+  })) return
+  try {
+    await api.del('/api/iterations/detail?name=' + encodeURIComponent(r.name))
+    rows.value = rows.value.filter(x => x.name !== r.name)
+    emit('toast', `已删除空迭代「${r.name}」`)
+  } catch (e) { emit('toast', e.message, 'err') }
 }
 </script>
 
@@ -124,6 +139,10 @@ async function saveNew() {
             <span class="badge blocker" :class="blockerFromRow(r).cls">{{ blockerFromRow(r).text }}</span>
             <span class="sub nw tnum" :title="r.createdAt">{{ r.createdAt ? fmtRel(r.createdAt) : '' }}</span>
           </div>
+          <button class="row-del" v-if="!r.reqId" title="删除空迭代" aria-label="删除空迭代"
+                  @click.stop="delIter(r)" @keydown.enter.stop.prevent="delIter(r)">
+            <AppIcon name="trash" :size="13" />
+          </button>
           <AppIcon name="chevron-right" :size="15" class="iter-chev" />
         </div>
         <EmptyState v-if="!filtered.length" icon="inbox" title="没有匹配的迭代"

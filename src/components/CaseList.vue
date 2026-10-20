@@ -295,7 +295,7 @@ async function submitForm() {
       <tbody>
         <tr v-for="c in sorted" :key="c.reqId + '/' + c.id" tabindex="0" @click="openCase(c)"
             @keydown.enter.prevent="openCase(c)">
-          <td class="sub"><div>{{ c.id }}</div><div class="caseno" v-if="c.caseNo" title="全局登记序号（跨需求唯一，口头可引用）">#{{ c.caseNo }}</div></td>
+          <td class="sub"><div class="mono">{{ c.id }}</div><div class="caseno" v-if="c.caseNo" title="全局登记序号（跨需求唯一，口头可引用）">#{{ c.caseNo }}</div></td>
           <td><div class="cell-ell" :title="c.title">{{ c.title }}</div></td>
           <td class="cell-pts">
             <span class="sub" v-if="!parsePoints(c.points).length">—</span>
@@ -354,7 +354,7 @@ async function submitForm() {
               <h4><AppIcon name="message-square" :size="13" />评论（{{ cm.draft.comments.length }}）</h4>
               <p class="sub" v-if="!cm.draft.comments.length" style="margin-bottom:6px">暂无评论——有修改建议时留给维护人。</p>
               <div class="cmt" v-for="c in cm.draft.comments" :key="c.id">
-                <span class="at" :title="c.createdAt">{{ fmtRel(c.createdAt) }}</span><span class="by">{{ c.by }}</span>{{ c.text }}
+                <span class="at tnum" :title="c.createdAt">{{ fmtRel(c.createdAt) }}</span><span class="by">{{ c.by }}</span>{{ c.text }}
               </div>
               <div class="cmt-input">
                 <textarea v-model="cmtText" rows="2" placeholder="写下修改建议或评审意见…"></textarea>

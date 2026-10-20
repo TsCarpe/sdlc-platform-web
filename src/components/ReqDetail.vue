@@ -382,8 +382,8 @@ function resolveDocPath(path) {
     </div>
     <div class="meta">
       <span><AppIcon name="external-link" :size="12" />来源：{{ card.sourceType === 'feishu' ? '飞书文档' : '粘贴文本' }}</span>
-      <span v-if="card.submittedBy"><AppIcon name="user" :size="12" />{{ card.submittedBy }} · {{ fmtRel(card.createdAt) }}</span>
-      <span v-if="card.syncedAt" :title="card.syncedAt"><AppIcon name="refresh-cw" :size="12" />同步 {{ fmtRel(card.syncedAt) }}</span>
+      <span v-if="card.submittedBy" class="tnum"><AppIcon name="user" :size="12" />{{ card.submittedBy }} · {{ fmtRel(card.createdAt) }}</span>
+      <span v-if="card.syncedAt" class="tnum" :title="card.syncedAt"><AppIcon name="refresh-cw" :size="12" />同步 {{ fmtRel(card.syncedAt) }}</span>
       <span v-if="card.status === 'published' || card.status === 'changed'" class="op-inline" title="定稿/采纳/裁决/放行动作以此留名（无登录体系的归因方案）">
         <AppIcon name="user" :size="12" />操作人 <input type="text" v-model="operator" name="operator" aria-label="操作人" class="op-input"></span>
       <!-- v4 卡片级评论（整体疑问）：常显——零评论也可发第一条（破"有评论才亮"死锁）；有未解决才带计数 -->

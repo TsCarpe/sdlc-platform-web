@@ -192,7 +192,7 @@ function onDocMedia(id) {
       <AppIcon name="file-text" :size="14" />
       <div class="ctx-ht">
         <b>{{ docTitle || '原始需求 · 上下文' }}</b>
-        <span class="sub" v-if="snapshot">依据版本 {{ fmtRel(snapshot.at) }}</span>
+        <span class="sub tnum" v-if="snapshot">依据版本 {{ fmtRel(snapshot.at) }}</span>
       </div>
       <button class="follow" :class="{ on: follow }" @click="follow = !follow"
               :title="follow ? '开启中：点击左侧摘引自动定位；点击关闭以自由滚动' : '已关闭：点击左侧摘引不再滚动定位'">
@@ -216,11 +216,11 @@ function onDocMedia(id) {
       </div>
       <div class="ct-msgs">
         <div class="ct-msg" :data-cid="cmtThread.root.id">
-          <b>{{ cmtThread.root.author || '匿名' }}</b><span class="sub" :title="cmtThread.root.createdAt"> · {{ fmtRel(cmtThread.root.createdAt) }}</span>
+          <b>{{ cmtThread.root.author || '匿名' }}</b><span class="sub tnum" :title="cmtThread.root.createdAt"> · {{ fmtRel(cmtThread.root.createdAt) }}</span>
           <div class="ct-text">{{ cmtThread.root.text }}</div>
         </div>
         <div class="ct-msg reply" v-for="r in cmtThread.replies" :key="r.id" :data-cid="r.id">
-          <b>{{ r.author || '匿名' }}</b><span class="sub" :title="r.createdAt"> · {{ fmtRel(r.createdAt) }}</span>
+          <b>{{ r.author || '匿名' }}</b><span class="sub tnum" :title="r.createdAt"> · {{ fmtRel(r.createdAt) }}</span>
           <div class="ct-text">{{ r.text }}</div>
         </div>
       </div>

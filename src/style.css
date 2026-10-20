@@ -388,7 +388,7 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
 .doc ul{margin:7px 0 7px 20px; line-height:1.75}
 .doc li{margin:2px 0}
 .doc code{background:var(--bg-active); padding:1px 6px; border-radius:5px; font-size:12px; color:var(--charcoal);
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  font-family:var(--font-mono)}
 .doc table{width:100%; border-collapse:collapse; margin:9px 0; font-size:12.5px}
 .doc table th{background:var(--bg-soft); border:1px solid var(--line-soft); padding:6px 10px; text-align:left; font-size:12px; font-weight:600; color:var(--muted)}
 .doc table td{border:1px solid var(--line-soft); padding:6px 10px; line-height:1.65}
@@ -470,7 +470,7 @@ a.chip.linklike:hover{background:var(--blue-light); border-color:transparent; co
 .docstruct .clause-text{flex:1; min-width:0; overflow-wrap:anywhere; line-height:1.7}
 .docstruct .ordinal{flex:none; display:inline-block; font-size:11px; font-weight:600; color:var(--slate);
   background:var(--bg-active); border-radius:6px; padding:0 7px; line-height:1.8;
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  font-family:var(--font-mono)}
 .docstruct .cmbadge{flex:none; display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:600;
   color:var(--yellow-dark); background:var(--yellow-light); border:1px solid var(--yellow-border); border-radius:6px;
   padding:0 7px; line-height:1.8; cursor:pointer; align-self:center}
@@ -565,7 +565,7 @@ a.chip.linklike:hover{background:var(--blue-light); border-color:transparent; co
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
 
 /* 全局用例登记序号副行（评测 P0-4）：编号列下方小字 */
-.caseno{font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums}
+.caseno{font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; font-family:var(--font-mono)}
 
 /* 可排序表头（评测 P2-7） */
 th.sortable{cursor:pointer; user-select:none; white-space:nowrap}
@@ -782,7 +782,11 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .rp-chip b{font-weight:600;color:var(--text)}
 .rp-chip .sub{font-size:11.5px}
 .rp-chip .rp-sep{font-style:normal;color:var(--faint)}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+/* ---- 数据排版：mono（编号/ID/代码）+ tnum（时间戳数字对齐）---- */
+.mono{font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums}
+.tnum{font-variant-numeric:tabular-nums}
+.table code{font-family:var(--font-mono); font-size:11px}
+.table .sub.mono{font-size:12px}   /* .table .sub(0,2,0) 压过 .mono(0,1,0)，覆写统一三表编号 12px */
 
 /* ---- 自定义下拉（Dropdown.vue）：全站替代原生 select，选项面板统一样式（fixed 定位不进 overflow 容器） ---- */
 .dd{position:relative; display:inline-flex; max-width:100%; vertical-align:middle}
@@ -838,7 +842,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .badge.bd-op.insert{background:var(--green-soft); color:var(--green)}
 .badge.bd-op.delete{background:var(--red-soft); color:var(--red-deep)}
 .badge.bd-op.move{background:var(--blue-light); color:var(--blue)}
-.chip.bd-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--faint);
+.chip.bd-id{font-family:var(--font-mono); font-size:11px; color:var(--faint);
   max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .chip.bd-moved{display:inline-flex; align-items:center; gap:3px; color:var(--blue); border-color:transparent; background:var(--canvas)}
 .bdiff-pair{display:flex; flex-direction:column; gap:3px; font-size:13px; line-height:1.55; word-break:break-word}
@@ -851,7 +855,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .bdiff-attrs{margin-top:5px; font-size:12px}
 .bdiff-attrs summary{color:var(--faint); cursor:pointer; user-select:none}
 .bdiff-attrs summary:hover{color:var(--muted)}
-.bd-attrs-body{display:flex; flex-direction:column; gap:3px; margin-top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; word-break:break-all}
+.bd-attrs-body{display:flex; flex-direction:column; gap:3px; margin-top:4px; font-family:var(--font-mono); font-size:11px; word-break:break-all}
 .bdiff-dead{margin-top:4px; font-size:12.5px; color:var(--muted)}
 .bdiff-dead summary{cursor:pointer; user-select:none; color:var(--stone)}
 .bd-dead-row{padding:5px 2px; border-bottom:1px dashed var(--line-soft); word-break:break-word}

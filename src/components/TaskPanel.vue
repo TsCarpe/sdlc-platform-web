@@ -428,7 +428,7 @@ function elapsed(t) {
       <button class="btn small primary tp-next" v-if="nextAction"
               :title="card.status === 'submitted' ? '需求尚未质检——点击启动流水线' : '澄清已全部答完——点击生成标准文档'"
               @click.stop="nextAction.run()"><AppIcon name="play" :size="12" />{{ nextAction.label }}</button>
-      <span class="sub" v-if="latestTaskAt" :title="latestTaskAt">最近 {{ fmtRel(latestTaskAt) }}</span>
+      <span class="sub tnum" v-if="latestTaskAt" :title="latestTaskAt">最近 {{ fmtRel(latestTaskAt) }}</span>
       <button class="btn small tp-expand"><AppIcon name="chevron-down" :size="13" />展开管理</button>
     </div>
 

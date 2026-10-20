@@ -112,7 +112,7 @@ async function saveNew() {
             <div class="iter-req" v-if="r.reqId">
               <span class="badge" :class="statusCls[r.reqStatus]">{{ statusLabel[r.reqStatus] || r.reqStatus }}</span>
               <span class="cell-ell" :title="r.reqName">{{ r.reqName }}</span>
-              <span class="sub nw">{{ r.reqId }}</span>
+              <span class="sub nw mono">{{ r.reqId }}</span>
             </div>
             <div class="iter-req" v-else>
               <span class="badge b-gray">空迭代</span>
@@ -122,7 +122,7 @@ async function saveNew() {
           <div class="iter-side">
             <NodeStrip :nodes="nodesFromRow(r)" />
             <span class="badge blocker" :class="blockerFromRow(r).cls">{{ blockerFromRow(r).text }}</span>
-            <span class="sub nw" :title="r.createdAt">{{ r.createdAt ? fmtRel(r.createdAt) : '' }}</span>
+            <span class="sub nw tnum" :title="r.createdAt">{{ r.createdAt ? fmtRel(r.createdAt) : '' }}</span>
           </div>
           <AppIcon name="chevron-right" :size="15" class="iter-chev" />
         </div>

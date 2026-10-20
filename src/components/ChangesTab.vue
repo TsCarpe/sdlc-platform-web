@@ -390,7 +390,7 @@ function fmtCounts(c) {
         </div>
         <div class="field"><label><em>*</em>提单人</label><input type="text" v-model="rec.proposedBy" name="rec-by" style="max-width:200px" placeholder="手填身份（留痕）"></div>
         <div class="field"><label><em>*</em>解析结果 JSON（doc.json 形状）</label>
-          <textarea ref="recJsonInp" v-model="rec.json" rows="7" spellcheck="false" name="rec-json" style="font-family:ui-monospace,monospace;font-size:12px"
+          <textarea ref="recJsonInp" v-model="rec.json" rows="7" spellcheck="false" name="rec-json" class="mono"
                     placeholder='{"blocks":[{"id":"…","type":"paragraph","text":"…"}],"media":[]}'></textarea></div>
       </div>
       <div class="modal-f">

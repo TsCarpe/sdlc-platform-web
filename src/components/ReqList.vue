@@ -196,7 +196,7 @@ async function saveNewReq() {
           <tr v-for="r in sorted" :key="r.id" tabindex="0" @click="open(r.id)"
               @keydown.enter.self.prevent="open(r.id)">
             <td><div class="cell-ell" :title="r.name">{{ r.name }}</div>
-              <div class="sub">{{ r.id }}
+              <div class="sub mono">{{ r.id }}
                 <span class="badge" v-if="tierCls[r.riskTier]" :class="tierCls[r.riskTier]" :title="tierTip[r.riskTier]">{{ r.riskTier }}</span>
                 <!-- v4 未解决评论角标（逐卡拉取；点击进详情看评论面） -->
                 <span class="chip cmt-chip" v-if="cmts[r.id]" :title="`${cmts[r.id]} 条未解决评论`">
@@ -217,7 +217,7 @@ async function saveNewReq() {
               <span class="sub" v-else>—</span>
             </td>
             <td class="num">{{ r.caseCount }}</td>
-            <td class="sub nw" :title="r.syncedAt">{{ r.syncedAt ? fmtRel(r.syncedAt) : '—' }}</td>
+            <td class="sub nw tnum" :title="r.syncedAt">{{ r.syncedAt ? fmtRel(r.syncedAt) : '—' }}</td>
             <td class="row-arrow w-del">
               <button class="row-del" title="删除需求（软删除）" @click.stop="delReq(r)"><AppIcon name="trash" :size="13" /></button>
               <AppIcon name="chevron-right" :size="14" />

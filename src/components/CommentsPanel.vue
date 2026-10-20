@@ -138,7 +138,7 @@ function onKey(e) {
 </script>
 
 <template>
-  <section class="cmts-drawer" ref="drawerEl" aria-label="评论区">
+  <section class="drawer cmts-drawer" ref="drawerEl" aria-label="评论区">
     <div class="cmts-h">
       <b><AppIcon name="message-square" :size="14" />评论</b>
       <span class="chip" v-if="props.readonly" title="从出处/澄清项进入的查看态——只读">只读</span>

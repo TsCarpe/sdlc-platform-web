@@ -1,7 +1,7 @@
 <script setup>
 // AI 查询助理（P5 新增）：右侧抽屉 + SSE 流式（fetch stream，零新依赖）。
 // 只读查询；输出按纯文本渲染（pre-wrap），不走 markdown 注入面。
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { authHeaders } from '../api.js'
 import AppIcon from './AppIcon.vue'
 
@@ -14,6 +14,11 @@ const listEl = ref(null)
 let sid = localStorage.getItem('sdlc.chat.sid')
 if (!sid) { sid = 'chat-' + Date.now().toString(36); localStorage.setItem('sdlc.chat.sid', sid) }
 let aborter = null
+
+// Esc 关抽屉（window 冒泡阶段：上层弹窗开启时事件被 modal-focus 捕获截断，到不了这里，天然不抢）
+function onKey(e) { if (e.key === 'Escape' && open.value) open.value = false }
+onMounted(() => window.addEventListener('keydown', onKey))
+onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 function scrollBottom() {
   nextTick(() => { if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight })
@@ -86,8 +91,7 @@ async function clearSession() {
   </button>
 
   <Teleport to="body">
-    <Transition name="chat-slide">
-      <section class="chat-drawer" v-if="open" aria-label="AI 查询助理">
+      <section class="drawer chat-drawer" v-if="open" aria-label="AI 查询助理">
         <header class="chat-head">
           <strong>AI 助理</strong>
           <span class="chat-sub">查询平台数据 · 只读 · 会话记忆</span>
@@ -114,43 +118,6 @@ async function clearSession() {
           <button class="chat-btn send" title="停止" @click="stop" v-else><AppIcon name="x" :size="13" /></button>
         </footer>
       </section>
-    </Transition>
   </Teleport>
 </template>
 
-<style scoped>
-.chat-toggle.on { color: var(--pri, #4f46e5); }
-.chat-drawer {
-  position: fixed; right: 0; top: 0; bottom: 0; width: 420px; max-width: 92vw;
-  background: #fff; border-left: 1px solid #e5e7eb; box-shadow: -8px 0 24px rgba(0,0,0,.08);
-  display: flex; flex-direction: column; z-index: 60;
-}
-.chat-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; }
-.chat-sub { color: #6b7280; font-size: 12px; flex: 1; }
-.chat-btn { border: none; background: transparent; cursor: pointer; color: #6b7280; padding: 4px; border-radius: 6px; }
-.chat-btn:hover { background: #f3f4f6; color: #111827; }
-.chat-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-.chat-empty { color: #9ca3af; font-size: 13px; line-height: 1.8; }
-.chat-msg { display: flex; flex-direction: column; gap: 2px; }
-.chat-msg.user { align-items: flex-end; }
-.chat-who { font-size: 11px; color: #9ca3af; }
-.chat-text {
-  max-width: 92%; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.7;
-  white-space: pre-wrap; word-break: break-word;
-}
-.chat-msg.assistant .chat-text { background: #f3f4f6; }
-.chat-msg.user .chat-text { background: #eef2ff; }
-.chat-cursor { animation: blink 1s steps(1) infinite; color: #4f46e5; }
-@keyframes blink { 50% { opacity: 0; } }
-.chat-err { margin: 0 14px 4px; color: #dc2626; font-size: 12px; }
-.chat-input { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid #e5e7eb; align-items: flex-end; }
-.chat-input textarea {
-  flex: 1; resize: none; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px;
-  font-size: 13px; font-family: inherit; line-height: 1.5;
-}
-.chat-input textarea:focus { outline: none; border-color: #4f46e5; }
-.chat-btn.send { background: #4f46e5; color: #fff; border-radius: 8px; padding: 8px; }
-.chat-btn.send:disabled { opacity: .4; cursor: not-allowed; }
-.chat-slide-enter-active, .chat-slide-leave-active { transition: transform .2s ease; }
-.chat-slide-enter-from, .chat-slide-leave-to { transform: translateX(100%); }
-</style>

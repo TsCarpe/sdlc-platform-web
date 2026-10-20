@@ -26,11 +26,10 @@ const props = defineProps({
 })
 const emit = defineEmits(['locate', 'clarify', 'open-origin', 'collapse', 'open-comments'])
 
-const { docData, docBlocks, docToc, mediaList } = useDocStructure(() => props.doc, () => props.reqId)
+const { docData, docBlocks, mediaList } = useDocStructure(() => props.doc, () => props.reqId)
 
 const box = ref(null)                 // 平铺渲染容器（定位域）
 const follow = ref(true)              // 跟随定位开关（关闭后自由滚动不被打断）
-const tocOpen = ref(false)
 const fromTip = ref('')               // 顶部「📍 来自 Pxx」sticky 提示（空 = 隐藏）
 const missCard = ref(null)            // 定位全失的静态出处卡（r2 C1）：{ seq, src, quote, ctxText }
 
@@ -146,11 +145,6 @@ function showFrom(seq, el) {
   const label = el ? (el.textContent || '').trim().slice(0, 24) : ''
   fromTip.value = `📍 来自 ${seq}${label ? ' · ' + label : ''}（已定位并高亮，前后上下文可继续滚动）`
 }
-/** 侧栏内目录点击：平滑滚动（不占用壳层 locate 协议——本栏内闭合） */
-function goToc(id) {
-  const el = box.value?.querySelector(`[data-blk="${id}"]`)
-  if (el) scrollIntoViewCtx(el)
-}
 
 // ===== 评论出处卡（出处=评论的只读查看态）：头部区插卡不动原文滚动，与 locateCtx 可共存 =====
 const cmtCard = ref(null)      // { seq, cid } —— null = 无卡；随右栏收起/切 tab 的 v-if 卸载自然消失（与 ✕ 等效）
@@ -237,15 +231,6 @@ function onDocMedia(id) {
         <span class="sub">查看态只读</span>
       </div>
     </div>
-
-    <!-- 目录（默认收起；巨表文档主体在行级，heading 导航不到时 table-row 也入列） -->
-    <details class="toc ctx-toc" :open="tocOpen" v-if="docToc.length">
-      <summary @click="tocOpen = !tocOpen"><AppIcon name="list-tree" :size="12" />文档导航（{{ docToc.length }}）</summary>
-      <div class="toc-list">
-        <a v-for="h in docToc" :key="h.id" class="toc-item" :class="'lv' + (h.level || 1)"
-           @click="goToc(h.id)">{{ h.text }}</a>
-      </div>
-    </details>
 
     <div class="ctx-from" v-if="fromTip">{{ fromTip }}<button class="x" @click="fromTip = ''">✕</button></div>
 

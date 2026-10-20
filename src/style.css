@@ -1114,8 +1114,6 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
   border:1px solid var(--line);border-radius:9999px;padding:2px 9px;background:var(--canvas);cursor:pointer;flex:none}
 .follow.on{background:var(--blue-light);border-color:var(--blue-border);color:var(--primary);font-weight:600}
 .follow .dot{width:6px;height:6px;border-radius:50%;background:var(--primary)}
-.ctx-toc{padding:6px 14px 0;border-bottom:1px solid var(--line-soft)}
-.ctx-toc .toc-list{max-height:180px}
 .ctx-from{margin:8px 14px 0;background:var(--blue-light);border:1px solid var(--blue-border);color:var(--primary);
   font-size:11.5px;border-radius:8px;padding:4px 10px;display:flex;align-items:center;gap:6px}
 .ctx-from .x{margin-left:auto;border:none;background:none;color:var(--faint);cursor:pointer;font-size:12px}

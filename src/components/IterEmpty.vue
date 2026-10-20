@@ -63,7 +63,7 @@ async function delIter() {
         <h2>{{ row.name }}</h2>
         <span class="badge b-gray">空迭代</span>
         <span class="sub" v-if="row.note">{{ row.note }}</span>
-        <button class="btn small danger" style="margin-left:auto" @click="delIter">
+        <button class="btn small ghost-del" style="margin-left:auto" @click="delIter">
           <AppIcon name="trash" :size="13" />删除迭代
         </button>
       </div>

@@ -139,9 +139,9 @@ async function delIter(r) {
             <span class="badge blocker" :class="blockerFromRow(r).cls">{{ blockerFromRow(r).text }}</span>
             <span class="sub nw tnum" :title="r.createdAt">{{ r.createdAt ? fmtRel(r.createdAt) : '' }}</span>
           </div>
-          <button class="row-del" v-if="!r.reqId" title="删除空迭代" aria-label="删除空迭代"
+          <button class="iter-del" v-if="!r.reqId" title="删除空迭代" aria-label="删除空迭代"
                   @click.stop="delIter(r)" @keydown.enter.stop.prevent="delIter(r)">
-            <AppIcon name="trash" :size="13" />
+            <AppIcon name="trash" :size="14" />
           </button>
           <AppIcon name="chevron-right" :size="15" class="iter-chev" />
         </div>

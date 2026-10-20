@@ -371,7 +371,7 @@ function fmtCounts(c) {
 
   <!-- 对账导入弹层（管理向） -->
   <div class="modal-mask" v-if="rec" @click.self="rec = null">
-    <div class="modal" style="width:560px" role="dialog" aria-modal="true">
+    <div class="modal lg" role="dialog" aria-modal="true">
       <div class="modal-h">对账导入（系统单）<button class="x" @click="rec = null">✕</button></div>
       <div class="modal-b">
         <p class="sub" style="margin-bottom:10px">粘贴新解析的原文（doc.json 形状：<code>{"blocks":[…],"media":[…]}</code>，

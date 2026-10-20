@@ -233,7 +233,7 @@ async function saveNewReq() {
 
     <!-- 提交需求弹窗 -->
     <div class="modal-mask" v-if="nr" @click.self="nr = null">
-      <div class="modal" style="width:560px" role="dialog" aria-modal="true" aria-label="提交需求">
+      <div class="modal lg" role="dialog" aria-modal="true" aria-label="提交需求">
         <div class="modal-h">提交需求
           <button class="x" @click="nr = null" aria-label="关闭"><AppIcon name="x" :size="16" /></button>
         </div>

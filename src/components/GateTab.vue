@@ -191,7 +191,7 @@ const reopen = () => run(() => api.post(`/api/requirements/${props.reqId}/gate/r
 
   <!-- 裁决弹层 -->
   <div class="modal-mask" v-if="vd" @click.self="vd = null">
-    <div ref="vdEl" class="modal" style="width:500px" role="dialog" aria-modal="true" tabindex="-1">
+    <div ref="vdEl" class="modal md" role="dialog" aria-modal="true" tabindex="-1">
       <div class="modal-h">{{ vd.issue.code }} · {{ VERDICT_LABEL[vd.verdict] || vd.verdict }}<button class="x" @click="vd = null">✕</button></div>
       <div class="modal-b">
         <p class="sub" style="margin-bottom:10px">{{ vd.issue.scene }}</p>

@@ -725,7 +725,7 @@ async function reopen(it) {
 
     <!-- v2.2 处置理由弹窗（DESIGN-v2.2 D21）：驳回必填 / 挂起可选 -->
     <div class="modal-mask" v-if="disposeDlg" @click.self="disposeDlg = null">
-      <div ref="disposeEl" class="modal" role="dialog" aria-modal="true" tabindex="-1" style="width:460px">
+      <div ref="disposeEl" class="modal sm" role="dialog" aria-modal="true" tabindex="-1">
         <div class="modal-h">
           <b>{{ disposeDlg.title }}</b>
           <button class="x" @click="disposeDlg = null">✕</button>

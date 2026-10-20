@@ -3,6 +3,9 @@
    原则：中性灰阶画布 / 白卡细边框 / 语义色只用于状态 / 蓝为唯一强调色
          金丝雀黄仅保留 logo 品牌点与 flash 高亮 / 紧凑密度 / 系统字体栈
    兼容：保留全部既有 class 名与追溯钩子（.flash/#snapshot-hl/.cite/.reflink/.linklike）
+   ------------------------------------------------------------
+   字号档位表（新增样式只取档内值，勿造 12.6/14.5 等档外值）：
+     10 / 11 / 11.5 / 12 / 12.5 / 13 / 13.5 / 14 / 15 / 17 / 19 / 22 / 30
    ============================================================ */
 :root{
   /* surfaces */
@@ -30,6 +33,8 @@
   --shadow-modal:rgba(16,24,40,.18) 0 16px 44px -8px;
   --focus-ring:0 0 0 3px rgba(79,70,229,.12);  /* 输入控件统一焦点环（3px 靛蓝光晕） */
   --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;  /* 编号/ID/代码/时间戳专用 */
+  /* 弹窗宽度尺度（默认 680 不设变量；新弹窗只取四档，勿再内联宽） */
+  --modal-sm:440px; --modal-md:500px; --modal-lg:560px; --modal-xl:720px;
   --topbar-h:54px;
 }
 *{box-sizing:border-box; margin:0; padding:0}
@@ -82,7 +87,7 @@ button{cursor:pointer}
 .topbar-toggle{width:30px; height:30px; border:none; background:none; color:var(--muted); border-radius:8px;
   display:flex; align-items:center; justify-content:center; flex:none; transition:background .13s ease, color .13s ease}
 .topbar-toggle:hover{background:var(--bg-active); color:var(--text)}
-.topbar h1{font-size:14.5px; font-weight:600; letter-spacing:-.1px; color:var(--text)}
+.topbar h1{font-size:14px; font-weight:600; letter-spacing:-.1px; color:var(--text)}
 .topbar h1 .crumb{color:var(--faint); font-weight:500; margin:0 2px}
 .topbar h1 .cur{color:var(--text)}
 .sync-info{margin-left:auto; font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px}
@@ -323,6 +328,10 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
   animation:fadein .18s ease}
 .modal{background:var(--canvas); border-radius:14px; width:680px; max-width:100%; max-height:82vh;
   display:flex; flex-direction:column; box-shadow:var(--shadow-modal); animation:pop .2s cubic-bezier(.21,1.02,.73,1)}
+.modal.sm{width:var(--modal-sm)}
+.modal.md{width:var(--modal-md)}
+.modal.lg{width:var(--modal-lg)}
+.modal.xl{width:var(--modal-xl)}
 .modal-h{padding:13px 20px; border-bottom:1px solid var(--line-soft); display:flex; align-items:center;
   font-weight:600; font-size:14px; gap:8px}
 .modal-h .x{margin-left:auto; border:none; background:none; color:var(--muted); width:28px; height:28px;
@@ -365,11 +374,11 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
 .cmt-input textarea:focus{border-color:var(--blue); box-shadow:var(--focus-ring); outline:none}
 .cmt-foot{display:flex; align-items:center; margin-top:6px; gap:10px}
 .cmt-hint{font-size:11px; color:var(--faint)}
-.cmt-hint kbd{font-family:inherit; background:var(--bg-active); border-radius:4px; padding:0 5px; font-size:10.5px; color:var(--slate)}
+.cmt-hint kbd{font-family:inherit; background:var(--bg-active); border-radius:4px; padding:0 5px; font-size:11px; color:var(--slate)}
 
 /* ===== 文档排版（markdown 渲染与标准文档）：限宽 + 行高 ===== */
 .doc{font-size:13.5px}
-.doc h2{font-size:16px; font-weight:650; margin:20px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--line-soft); letter-spacing:-.1px}
+.doc h2{font-size:15px; font-weight:650; margin:20px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--line-soft); letter-spacing:-.1px}
 .doc h3{font-size:14px; font-weight:600; margin:15px 0 6px}
 .doc>p,.doc ul li{max-width:76ch}
 .doc p{margin:7px 0; line-height:1.75; color:var(--charcoal)}
@@ -437,7 +446,7 @@ a.chip.linklike:hover{background:var(--blue-light); border-color:transparent; co
 .docstruct .toc-item.lv3{padding-left:24px; color:var(--muted)}
 .docstruct .docblk-h{letter-spacing:-.1px; color:var(--ink-deep)}
 .docstruct .docblk-h.h2{font-size:17px; font-weight:650; border-bottom:1px solid var(--line-soft); padding-bottom:6px; margin:24px 0 10px}
-.docstruct .docblk-h.h3{font-size:14.5px; font-weight:600; margin:16px 0 7px}
+.docstruct .docblk-h.h3{font-size:14px; font-weight:600; margin:16px 0 7px}
 /* v2.2 章节分组：heading 栈切分的 section 容器——深度驱动缩进+引导线，行卡片等直属块视觉归属其标题；
    规则置于 .docblk-h 基础样式之后，按深度覆盖各级标题（不再依赖 level 绝对值，跳级文档同样成立） */
 .docstruct .docsec.d0{border-left:3px solid var(--line-strong); padding-left:18px; margin:32px 0 4px}
@@ -547,7 +556,7 @@ a.chip.linklike:hover{background:var(--blue-light); border-color:transparent; co
 /* 全局确认框（评测 P1-8：替代原生 confirm） */
 .cb-mask{position:fixed; inset:0; z-index:200; background:rgba(15,19,32,.38); display:flex; align-items:flex-start; justify-content:center; padding-top:18vh; animation:fade-in .12s ease-out}
 .cb-box{background:var(--canvas); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow-modal); width:min(440px, calc(100vw - 48px)); padding:18px 20px 16px}
-.cb-title{display:flex; align-items:center; gap:8px; font-size:14.5px; font-weight:600; color:var(--ink-deep)}
+.cb-title{display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:var(--ink-deep)}
 .cb-body{margin-top:10px; font-size:13px; color:var(--slate); white-space:pre-wrap; word-break:break-word; line-height:1.6; max-height:40vh; overflow:auto}
 .cb-btns{display:flex; justify-content:flex-end; gap:8px; margin-top:16px}
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
@@ -825,7 +834,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .badge.bd-op.insert{background:var(--green-soft); color:var(--green)}
 .badge.bd-op.delete{background:var(--red-soft); color:var(--red-deep)}
 .badge.bd-op.move{background:var(--blue-light); color:var(--blue)}
-.chip.bd-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; color:var(--faint);
+.chip.bd-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--faint);
   max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .chip.bd-moved{display:inline-flex; align-items:center; gap:3px; color:var(--blue); border-color:transparent; background:var(--canvas)}
 .bdiff-pair{display:flex; flex-direction:column; gap:3px; font-size:13px; line-height:1.55; word-break:break-word}
@@ -907,7 +916,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .bedit-problem{background:var(--red-soft); color:var(--red-deep); border-radius:8px; padding:6px 10px;
   font-size:12.5px; margin:4px 0}
 /* diff 预览弹层 */
-.bdiff-modal .modal{width:720px; max-width:94vw}
+.bdiff-modal .modal{width:var(--modal-xl); max-width:94vw}
 .bdiff-modal .modal-b{max-height:60vh; overflow-y:auto}
 
 /* 原文卡编辑工具行（编辑入口右对齐，不挤占阅读区） */
@@ -943,7 +952,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .ct-msg.reply{border-left:2px solid var(--line); padding-left:9px; margin-left:6px}
 .ct-msg b{font-size:12px; color:var(--charcoal)}
 /* v5.x 源文档评论标签（飞书导入线程根）：轻虚线 chip 区分来源 */
-.ct-msg .src-chip{font-size:10.5px; font-weight:600; color:var(--faint); background:var(--bg-soft);
+.ct-msg .src-chip{font-size:11px; font-weight:600; color:var(--faint); background:var(--bg-soft);
   border:1px dashed var(--line); border-radius:5px; padding:0 5px; margin-left:5px; vertical-align:1px}
 .ct-text{word-break:break-word; white-space:pre-wrap}
 .ct-msg .cdel{opacity:0; float:right; margin-left:6px}
@@ -1065,7 +1074,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .wb-prog .row1 .lbl .ttl{font-weight:650;color:var(--text);flex:none}
 .wb-prog .row1 .lbl .hint{font-size:11.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis}
 .wb-prog .n{font-size:13px;font-weight:600;color:var(--stone);flex:none;line-height:1}
-.wb-prog .n b{font-size:20px;font-weight:750;color:var(--primary);letter-spacing:-.5px}
+.wb-prog .n b{font-size:19px;font-weight:750;color:var(--primary);letter-spacing:-.5px}
 .wb-prog .n .tot{font-size:12px;color:var(--faint);margin-left:1px}
 .wb-prog .bar{flex:none;height:6px}
 .wb-prog .btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -1135,10 +1144,10 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .ctx-cmt-f .sub{font-size:11px}
 .ctx-body{overflow:auto;padding:6px 0 16px;flex:1;overscroll-behavior:contain;position:relative}
 /* v5.1 简化平铺渲染（demo 契约）：纯文本块流，窄栏干净 */
-.ctx-blk{padding:5px 16px;font-size:12.6px;line-height:1.65;color:var(--charcoal);
+.ctx-blk{padding:5px 16px;font-size:12.5px;line-height:1.65;color:var(--charcoal);
   border-left:2px solid transparent;word-break:break-word;overflow-wrap:anywhere}
 .ctx-blk.ctx-h{font-size:14px;font-weight:700;color:var(--ink-deep,#0f1320);padding-top:12px}
-.ctx-blk.ctx-sec{font-size:12.8px;font-weight:650;color:var(--slate);padding-top:10px}
+.ctx-blk.ctx-sec{font-size:13px;font-weight:650;color:var(--slate);padding-top:10px}
 .ctx-blk.ctx-sub{font-weight:600;color:var(--text)}
 .ctx-blk.ctx-li{padding-left:30px}
 .ctx-blk.ctx-d1{padding-left:44px}
@@ -1160,7 +1169,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .ctx-imgrow .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .ctx-imgrow .cap{flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;
   overflow:hidden;line-height:1.5;text-align:left}
-.ctx-imgrow .hint{flex:none;font-size:10.5px;color:var(--primary)}
+.ctx-imgrow .hint{flex:none;font-size:11px;color:var(--primary)}
 /* v5.2 侧栏链接可点（richHtml 渲染的 <a>）——长 URL 换行防溢出 */
 .ctx-blk a,.ctx-rich a{color:var(--primary);text-decoration:underline;text-underline-offset:2px;
   word-break:break-all;overflow-wrap:anywhere}
@@ -1182,7 +1191,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .ctx-restore:hover{background:var(--blue-light)}
 
 /* v5 §4 待澄清反向角标 pill（DocBlock 块上，复用评论角标同款整 map 下传机制） */
-.ref-pill{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:600;color:var(--primary);
+.ref-pill{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--primary);
   background:var(--blue-light);border:1px solid var(--blue-border);border-radius:9999px;padding:0 7px;
   margin-left:6px;vertical-align:1px;cursor:pointer}
 .ref-pill:hover{filter:brightness(.97)}
@@ -1191,7 +1200,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .optans{display:block}
 .opts{display:flex;flex-direction:column;gap:6px;margin:4px 0 8px}
 .opt{display:flex;align-items:flex-start;gap:9px;border:1px solid var(--line);background:var(--canvas);
-  border-radius:9px;padding:7px 11px;cursor:pointer;text-align:left;font-size:12.8px;color:var(--charcoal);
+  border-radius:9px;padding:7px 11px;cursor:pointer;text-align:left;font-size:13px;color:var(--charcoal);
   transition:all .12s;font-family:inherit}
 .opt:hover:not(:disabled){border-color:var(--blue-border);background:var(--bg-soft)}
 .opt:disabled{opacity:.55;cursor:not-allowed}
@@ -1200,7 +1209,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .opt .body{flex:1;min-width:0}
 .opt .body b{font-weight:600}
 .opt .why{display:block;font-size:11.5px;color:var(--stone);margin-top:2px;line-height:1.5}
-.opt .rec-tag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:650;color:var(--primary);
+.opt .rec-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:650;color:var(--primary);
   background:var(--blue-light);border:1px solid var(--blue-border);border-radius:9999px;padding:0 7px;
   margin-right:7px;vertical-align:1px}
 .opt.picked{border-color:var(--primary);background:var(--blue-light);box-shadow:0 0 0 1px var(--primary) inset}
@@ -1210,7 +1219,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .more-answer:hover{color:var(--muted)}
 .extra-ta{width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;
   resize:vertical;min-height:52px;margin-top:4px;color:var(--text);font-family:inherit;box-sizing:border-box}
-.done-ans{display:flex;align-items:flex-start;gap:8px;font-size:12.8px;margin-top:2px;width:100%}
+.done-ans{display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-top:2px;width:100%}
 .done-ans .txt{color:var(--charcoal);flex:1;min-width:0;line-height:1.6}
 .done-ans .redo, .redo{margin-left:auto;flex:none}
 
@@ -1223,8 +1232,8 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .mchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--charcoal);background:var(--bg-soft);
   border:1px solid var(--line);border-radius:9999px;padding:1px 11px}
 .mchip.hot{border-color:var(--blue-border)}
-.mchip .b{font-size:10.5px;font-weight:650;background:var(--amber-soft);color:var(--amber-deep);border-radius:9999px;padding:0 6px}
-.asm-item{display:flex;gap:9px;padding:7px 2px;border-bottom:1px dashed var(--line-soft);font-size:12.8px;align-items:baseline}
+.mchip .b{font-size:11px;font-weight:650;background:var(--amber-soft);color:var(--amber-deep);border-radius:9999px;padding:0 6px}
+.asm-item{display:flex;gap:9px;padding:7px 2px;border-bottom:1px dashed var(--line-soft);font-size:13px;align-items:baseline}
 .asm-item:last-child{border-bottom:none}
 .asm-item code{font-size:11.5px;color:var(--primary);background:var(--blue-light);border-radius:4px;padding:0 6px;flex:none}
 .asm-item .asm-txt{flex:1;min-width:0;color:var(--charcoal)}
@@ -1236,11 +1245,11 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .lane-band.alt{fill:var(--bg-soft)}
 .lane-name{font-size:11.5px;font-weight:650;fill:var(--charcoal)}
 .node{border:1px solid var(--line-strong);background:var(--canvas);border-radius:8px;padding:5px 6px 4px;
-  font-size:10.8px;line-height:1.45;color:var(--charcoal);height:100%;display:flex;flex-direction:column;
+  font-size:11px;line-height:1.45;color:var(--charcoal);height:100%;display:flex;flex-direction:column;
   justify-content:center;text-align:center;box-shadow:var(--shadow-card);box-sizing:border-box;overflow:hidden}
-.node .no{font-size:9px;color:var(--faint);font-weight:600;margin-bottom:1px}
+.node .no{font-size:10px;color:var(--faint);font-weight:600;margin-bottom:1px}
 .node b{font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.node .src{font-size:9px;color:var(--primary);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node .src{font-size:10px;color:var(--primary);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node .src.na{color:var(--muted)}
 .node.gap{border:1.5px dashed var(--amber);background:var(--amber-soft);cursor:pointer}
 .node.gap .no,.node.gap b{color:var(--amber-deep)}
@@ -1311,7 +1320,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
   .rdy-body{flex-direction:column;gap:12px}
   .rdy-score{width:auto;border-right:none;border-bottom:1px solid var(--line-soft);
     padding:0 0 10px;display:flex;flex-direction:row;align-items:baseline;gap:10px;text-align:left}
-  .rdy-score .n{font-size:26px}
+  .rdy-score .n{font-size:22px}
   .dims{grid-template-columns:1fr}
   .wb-prog .btns{flex-wrap:wrap}
   .wb-grid{grid-template-columns:minmax(0,1fr)}

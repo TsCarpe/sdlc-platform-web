@@ -210,7 +210,7 @@ function onKey(e) {
 
     <!-- 升级弹层 -->
     <div class="modal-mask" v-if="escDlg" @click.self="escDlg = null">
-      <div ref="escEl" class="modal" style="width:420px" role="dialog" aria-modal="true" tabindex="-1">
+      <div ref="escEl" class="modal sm" role="dialog" aria-modal="true" tabindex="-1">
         <div class="modal-h">升级为澄清项<button class="x" @click="escDlg = null">✕</button></div>
         <div class="modal-b">
           <p class="sub" style="margin-bottom:10px">评论原文将作为澄清问题（L 系编号），块文本作为摘引、块 ID 作为锚点；升级后到澄清清单处置。</p>

@@ -194,7 +194,7 @@ const confirmFinalize = () => {
 
   <!-- 定稿确认弹层 -->
   <div class="modal-mask" v-if="finalizeDlg" @click.self="finalizeDlg = null">
-    <div ref="finalizeEl" class="modal" style="width:480px" role="dialog" aria-modal="true" tabindex="-1">
+    <div ref="finalizeEl" class="modal md" role="dialog" aria-modal="true" tabindex="-1">
       <div class="modal-h">设计定稿（确认点②）<button class="x" @click="finalizeDlg = null">✕</button></div>
       <div class="modal-b">
         <p class="sub" style="margin-bottom:10px">定稿后将写入正式设计文档（version 递增，承接落改修订）。<b>定稿 ≠ 放行</b>：门禁评审以「已定稿」为开闸条件①。</p>

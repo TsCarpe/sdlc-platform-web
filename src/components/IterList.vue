@@ -133,7 +133,7 @@ async function saveNew() {
 
     <!-- 新建迭代弹层 -->
     <div class="modal-mask" v-if="ni" @click.self="ni = null">
-      <div class="modal" style="width:460px" role="dialog" aria-modal="true" aria-label="新建迭代">
+      <div class="modal sm" role="dialog" aria-modal="true" aria-label="新建迭代">
         <div class="modal-h">新建迭代
           <button class="x" @click="ni = null" aria-label="关闭"><AppIcon name="x" :size="16" /></button>
         </div>

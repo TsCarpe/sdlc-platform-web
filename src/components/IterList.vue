@@ -118,6 +118,10 @@ async function delIter(r) {
       <div class="iter-list">
         <div class="iter-row" v-for="r in filtered" :key="r.name" tabindex="0"
              @click="openRow(r)" @keydown.enter.self.prevent="openRow(r)">
+          <button class="iter-del" v-if="!r.reqId" title="删除空迭代" aria-label="删除空迭代"
+                  @click.stop="delIter(r)" @keydown.enter.stop.prevent="delIter(r)">
+            <AppIcon name="trash" :size="12" />
+          </button>
           <div class="iter-main">
             <div class="iter-name">
               <b>{{ r.name }}</b>
@@ -139,10 +143,6 @@ async function delIter(r) {
             <span class="badge blocker" :class="blockerFromRow(r).cls">{{ blockerFromRow(r).text }}</span>
             <span class="sub nw tnum" :title="r.createdAt">{{ r.createdAt ? fmtRel(r.createdAt) : '' }}</span>
           </div>
-          <button class="iter-del" v-if="!r.reqId" title="删除空迭代" aria-label="删除空迭代"
-                  @click.stop="delIter(r)" @keydown.enter.stop.prevent="delIter(r)">
-            <AppIcon name="trash" :size="14" />
-          </button>
           <AppIcon name="chevron-right" :size="15" class="iter-chev" />
         </div>
         <EmptyState v-if="!filtered.length" icon="inbox" title="没有匹配的迭代"

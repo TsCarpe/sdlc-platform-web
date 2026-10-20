@@ -88,7 +88,7 @@ async function saveNew() {
       <div class="filters">
         <div class="search">
           <AppIcon name="search" :size="13" />
-          <input v-model="fq.q" placeholder="搜索迭代名 / 需求名 / 需求编号">
+          <input v-model="fq.q" placeholder="搜索迭代名 / 需求名 / 需求编号（/ 聚焦）">
           <button class="clear" v-if="fq.q" @click="fq.q = ''" aria-label="清空搜索"><AppIcon name="x" :size="13" /></button>
         </div>
         <div class="spacer"></div>

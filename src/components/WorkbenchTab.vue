@@ -8,8 +8,9 @@ import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import EmptyState from './EmptyState.vue'
 import CtxPane from './CtxPane.vue'
+import TocPane from './TocPane.vue'
 import { render } from '../render.js'
-import { firstQuote, flashEl, pidOf } from '../trace.js'
+import { firstQuote, flashEl, settle, pidOf } from '../trace.js'
 import { isDone, isPending, dispLabel } from '../disposition.js'
 import { lvlLabel, lvlCls } from '../levels.js'
 import { layerShort, layerFull } from '../layers.js'
@@ -28,10 +29,11 @@ const props = defineProps({
   commentAnchorMap: { type: Object, default: () => ({}) },  // v5.x 评论锚 → 面板定位目标（出处=评论区分流）
   comments: { type: Array, default: () => [] },     // 评论行（CtxPane 评论出处卡数据源——壳层持有）
   blockText: { type: Object, default: () => ({}) }, // blockId → 文本摘要（评论出处卡锚定块标签）
+  activeHead: { type: String, default: '' },        // 体检报告目录滚动高亮（壳层 toc-scroll 协议）
 })
 // 事件语义：open-comment = 打开完整评论面板（CtxPane「打开评论区」转发）；view-comment = 只读
 // 查看回退（无右栏 / 悬空评论）——壳层分别以完整/只读模式接住
-const emit = defineEmits(['locate', 'jump', 'toast', 'open-comment', 'view-comment', 'open-origin'])
+const emit = defineEmits(['locate', 'jump', 'toast', 'open-comment', 'view-comment', 'open-origin', 'go-toc'])
 
 const { openGrps, toggleGrp, expandAll, collapseAll, revealGrpFor } = useGrpCollapse()
 
@@ -42,6 +44,29 @@ const allAnswered = computed(() => totalQ.value > 0 && answered.value === totalQ
 
 /** 组头副标题：澄清组带已答进度（模板内联） */
 function answeredIn(items) { return (items || []).filter(isDone).length }
+
+// ===== 体检报告原文右栏目录（C7：复用 StdTab 的 TocPane / 壳层 toc-scroll 协议） =====
+const auditToc = ref([])
+const auditBox = ref(null)
+const auditOpen = ref(false)
+async function onAuditToggle(e) {
+  auditOpen.value = e.target.open
+  if (!e.target.open) { auditToc.value = []; return }
+  if (!props.audit?.markdown) return
+  await settle(60)
+  const box = auditBox.value
+  if (!box) return
+  const hs = [...box.querySelectorAll('h2, h3')]
+  hs.forEach((h, i) => { if (!h.id) h.id = 'aud-' + i })
+  auditToc.value = hs.map(h => ({ id: h.id, level: h.tagName === 'H2' ? 1 : 2, text: h.textContent.trim().slice(0, 46) }))
+  // 展开不产生 scroll 事件、watch(tab) 不触发——主动派发一次让壳层 onScroll 算出初始高亮
+  window.dispatchEvent(new Event('scroll'))
+}
+/** 折叠态必须返回空数组：details 隐藏子树仍在 DOM，隐藏元素 rect.top 恒 0 会被滚动判定误当当前标题 */
+function headEls() {
+  return auditOpen.value && auditBox.value ? [...auditBox.value.querySelectorAll('h2[id],h3[id]')] : []
+}
+defineExpose({ headEls })
 
 // ===== v5 audit 合并（§1.2/D14）：已定论 / 影响分析 / 孤儿行 =====
 const auditItems = computed(() => props.audit?.content?.items || [])
@@ -717,10 +742,13 @@ async function reopen(it) {
       <span style="flex:1">⚠ {{ orphanCount }} 条体检条目未关联澄清项且无定论标记（可能编号漂移）——点开下方体检报告原文核对。</span>
     </div>
 
-    <!-- 页尾：体检报告 markdown 折叠（自 AuditTab 迁入） -->
-    <details class="card" v-if="audit?.markdown">
+    <!-- 页尾：体检报告 markdown 折叠（自 AuditTab 迁入；C7 展开后右栏目录——里层不加 .card 防卡中卡） -->
+    <details class="card" v-if="audit?.markdown" @toggle="onAuditToggle">
       <summary style="cursor:pointer;font-size:13px;color:var(--muted)">查看体检报告原文（markdown）</summary>
-      <div class="doc" style="margin-top:10px" v-html="render(audit.markdown)"></div>
+      <div class="doc-layout" style="margin-top:10px">
+        <div class="doc" ref="auditBox" v-html="render(audit.markdown)"></div>
+        <TocPane :items="auditToc" :active-id="activeHead" @go="emit('go-toc', $event)" />
+      </div>
     </details>
 
     <!-- v2.2 处置理由弹窗（DESIGN-v2.2 D21）：驳回必填 / 挂起可选 -->

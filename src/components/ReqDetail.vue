@@ -85,6 +85,7 @@ const grp = provideGroupCollapse({ fr: frGroups, audit: concludedGroups, check: 
 const originTabRef = ref(null)
 const digestTabRef = ref(null)
 const stdTabRef = ref(null)
+const workbenchTabRef = ref(null)
 
 // ===== 跨 tab 协议：追溯跳转（locate/applyJump 消费 pendingJump） =====
 const { locate, applyJump } = useTraceJump({
@@ -109,6 +110,8 @@ function onJump(j) {
 function headElsNow() {
   if (tab.value === 'std') return stdTabRef.value?.headEls() ?? []
   if (tab.value === 'origin') return originTabRef.value?.headEls() ?? []
+  // 工作台体检报告目录（C7）：details 折叠态组件自身返回空数组，滚动高亮自然空转
+  if (tab.value === 'checklist') return workbenchTabRef.value?.headEls() ?? []
   return []
 }
 const { activeHead, showTop, goToc, toTop } = useTocScroll({
@@ -479,7 +482,8 @@ function resolveDocPath(path) {
     <!-- v5 澄清工作台（audit 已并入，D1）：作答/处置/已定论卡/影响分析/孤儿提示 + 原文侧栏；出处=评论
          → 右栏评论出处卡（组件内分流）；open-comment=打开完整面板（卡上「打开评论区」）；
          view-comment=只读回退（无右栏/悬空评论） -->
-    <WorkbenchTab v-if="tab === 'checklist'" :req-id="card.id" :items="d.items" :status="card.status"
+    <WorkbenchTab v-if="tab === 'checklist'" ref="workbenchTabRef" :req-id="card.id" :items="d.items" :status="card.status"
+                  :active-head="activeHead" @go-toc="goToc"
                   :groups="checklistGroups" :audit="d.audit" :concluded-groups="concludedGroups"
                   :doc="d.doc" :snapshot="d.snapshot" :comment-anchor-map="commentAnchorMap"
                   :comments="cm?.comments || []" :block-text="cmBlockText"

@@ -137,6 +137,14 @@ onMounted(() => {
   applyHash()
   window.addEventListener('hashchange', applyHash)
   refreshCounts()
+  // 全局快捷键（C7 最小集）：/ 聚焦当前页搜索框（输入态不抢键）；无搜索框的页面 no-op
+  window.addEventListener('keydown', e => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return
+    const t = e.target
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+    const inp = document.querySelector('.content .search input')
+    if (inp) { e.preventDefault(); inp.focus() }
+  })
 })
 
 // v1.1 追溯跳转：trace.js 发起，这里只负责切页/开卡；tab 内定位由目标组件消费 nonce 完成

@@ -270,7 +270,7 @@ async function submitForm() {
       <Dropdown v-model="cq.tool" :options="toolOpts" aria-label="按来源筛选" @change="load" />
       <div class="search">
         <AppIcon name="search" :size="13" />
-        <input v-model="cq.q" placeholder="搜索用例标题…" @keyup.enter="load">
+        <input v-model="cq.q" placeholder="搜索用例标题…（/ 聚焦）" @keyup.enter="load">
         <button class="clear" v-if="cq.q" @click="clearSearch" aria-label="清空搜索"><AppIcon name="x" :size="13" /></button>
       </div>
       <div class="spacer"></div>

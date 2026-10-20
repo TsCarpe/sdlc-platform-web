@@ -677,9 +677,14 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .btn.danger:hover{background:var(--red-soft); border-color:var(--red)}
 .tp-btns .btn.danger{margin-left:auto}
 
-/* ---- 动效可关闭（BeUI reduced-motion-safe 理念） ---- */
+/* ---- 动效可关闭（毯式规则：所有过渡/动画近零时长；副作用——.spin 转圈与流式光标停摆属该查询标准语义） ---- */
 @media (prefers-reduced-motion: reduce){
-  .grp-body, .grp-t .grp-chev, .toc-side-item, .to-top{transition:none}
+  *, *::before, *::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
 }
 
 /* ==================== v2.4 迭代×设计×门禁（DESIGN-v2.4 D37，自交互原型移植，token 对齐） ==================== */

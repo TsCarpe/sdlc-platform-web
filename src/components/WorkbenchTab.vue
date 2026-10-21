@@ -3,6 +3,8 @@
 // audit 合并（D1/D14）：audit 是 clarify 的超集，差集 ∧ go✅ 条目以「已定论」只读折叠组获得宿主
 // （组名带「已定论·」前缀防与 check 组撞名联动，同状态机前缀先例）；audit 字段归宿——去向/关联
 // 用例进问题卡「影响分析」折叠，audit.md 原文折叠挪页尾。作答/处置/三态筛选/跳转等既有能力全保留。
+// v5.3 扫题零成本上下文改版：分组由「需求域 theme」切「文档章节」（壳层 anchor→最近目录项）；
+// 活动卡（点击/侦测激活）联动右栏常驻高亮 + TOC 同步 + 面包屑；theme 降为卡上标签。
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
@@ -21,7 +23,7 @@ const props = defineProps({
   reqId: { type: String, required: true },
   items: { type: Array, default: () => [] },
   status: { type: String, default: '' },
-  groups: { type: Array, default: () => [] },      // 壳层需求域分组（revealGrpFor 共用）
+  groups: { type: Array, default: () => [] },      // 壳层章节分组（v5.3：anchor→最近目录项；无块回退需求域。revealGrpFor 共用）
   audit: { type: Object, default: null },          // 体检产物（已定论/影响分析/孤儿行数据源）
   concludedGroups: { type: Array, default: () => [] },  // 壳层算好的已定论分组（差集∧✅，name 带「已定论·」前缀）
   doc: { type: Object, default: null },            // detail.doc（右栏原文侧栏数据——非产物，空态照常渲染）
@@ -151,20 +153,46 @@ async function openCommentInCtx(cid, seq) {
   if (!ok) emit('view-comment', cid)
 }
 
-/** 摘引/出处点击（左栏问题卡与已定论卡）：优先侧栏联动（不切 tab，§2.1）；
- *  无块结构（快照老卡）回退壳层 locate 协议（切 origin needle 定位） */
-function locateInCtx(it) {
-  const cid = props.commentAnchorMap[it.anchor]
-  if (cid != null) return openCommentInCtx(cid, it.seq || pidOf(it.id))
-  if (!hasDoc.value) return emit('locate', firstQuote(it.quote) || it.ctx || it.title || it.where, it.anchor)
-  ctxCollapsed.value = false
+// ===== v5.3 活动卡（扫题零成本上下文）：点击/聚焦/跳题/滚动侦测激活 → 右栏常驻高亮联动 =====
+const activeSeq = ref('')
+let spyHoldUntil = 0      // 显式激活后的侦测停摆窗：程序性滚动（flash/jump）不抢回活动卡
+const qcol = ref(null)    // 左栏容器（侦测取卡域）
+
+/** 激活核心：标记活动卡 + 右栏定位；expand=true 时连带展开收起的右栏（点击/摘引），
+ *  滚动侦测（expand=false）尊重收起态只标记不展开。follow 关闭时 CtxPane 内部短路不滚动。 */
+function activate(it, expand = false) {
+  activeSeq.value = it.seq || pidOf(it.id)
+  if (!hasDoc.value) return
+  if (ctxCollapsed.value) {
+    if (!expand) return
+    ctxCollapsed.value = false
+  }
   nextTick(() => ctxRef.value?.locateCtx({
     seq: it.seq || pidOf(it.id), src: it.ctx || it.where || '', anchor: it.anchor || '',
     quote: it.quote || '', ctxText: it.ctx || it.where || ''
   }))
 }
-/** 反向角标点击（CtxPane 上抛）：滚回左栏对应问题并 flash（§4） */
+/** 显式激活（卡面点击/摘引/跳题/反向角标）：800ms 停摆窗——随后的程序性滚动不被侦测误抢 */
+function activateExplicit(it) {
+  spyHoldUntil = Date.now() + 800
+  activate(it, true)
+}
+/** 摘引/出处点击（左栏问题卡与已定论卡）：评论锚走出处卡，其余走活动卡侧栏联动（不切 tab，§2.1）；
+ *  无块结构（快照老卡）回退壳层 locate 协议（切 origin needle 定位） */
+function locateInCtx(it) {
+  const cid = props.commentAnchorMap[it.anchor]
+  if (cid != null) {
+    activeSeq.value = it.seq || pidOf(it.id)
+    spyHoldUntil = Date.now() + 800
+    return openCommentInCtx(cid, it.seq || pidOf(it.id))
+  }
+  if (!hasDoc.value) return emit('locate', firstQuote(it.quote) || it.ctx || it.title || it.where, it.anchor)
+  activateExplicit(it)
+}
+/** 反向角标点击（CtxPane 上抛）：滚回左栏对应问题并 flash（§4）；同步活动卡与侦测停摆 */
 function locateCheck(seq) {
+  const it = props.items.find(i => i.seq === seq)
+  if (it) { activeSeq.value = it.seq; spyHoldUntil = Date.now() + 800 }
   revealGrpFor('check', seq)
   nextTick(() => {
     const el = document.querySelector(`[data-pid="${seq}"]`)
@@ -172,6 +200,30 @@ function locateCheck(seq) {
     else emit('toast', `未定位到 ${seq}（可能已被过滤隐藏）`, 'err')
   })
 }
+
+// 滚动侦测：捕获阶段监听（页面与嵌套容器滚动都收）；右栏内部滚动不反跟随；
+// 停止 ~180ms 后取「阅读线」（视口偏上 38%，封顶 420px）下方第一张卡为活动卡。
+let spyT = null
+function onSpyScroll(e) {
+  if (e.target !== document && e.target?.closest?.('.ctx-body, .ctx-toc')) return
+  clearTimeout(spyT)
+  spyT = setTimeout(spyActivate, 180)
+}
+function spyActivate() {
+  if (!hasDoc.value || ctxCollapsed.value || Date.now() < spyHoldUntil) return
+  const bySeq = new Map(props.items.map(i => [i.seq, i]))
+  const line = Math.min(window.innerHeight * 0.38, 420)
+  for (const el of qcol.value?.querySelectorAll('.check-item[data-pid]:not(.done)') || []) {
+    if (el.closest('.grp.closed')) continue   // 折叠组（0fr 裁剪非 display:none）内卡不可见——跳过防不可见激活
+    if (el.getBoundingClientRect().bottom > line) {
+      const it = bySeq.get(el.getAttribute('data-pid'))
+      if (it && activeSeq.value !== it.seq) activate(it)
+      return
+    }
+  }
+}
+window.addEventListener('scroll', onSpyScroll, true)
+onBeforeUnmount(() => { window.removeEventListener('scroll', onSpyScroll, true); clearTimeout(spyT) })
 
 // ===== v5 就绪度覆盖地图（§2.2，D3/D12）：维度 = items[].layer（1-7，v1.6 可选），
 // 分母口径 = clarify 表全量（空 layer 入「未分类」桶——与发布门禁 counts 一致永不分裂；
@@ -198,14 +250,14 @@ const visibleCheckGroups = computed(() => {
   if (dimFilter.value) {
     // #7：过滤后空组保留当且仅当组内有已定论块——已定论卡是只读参照，不随过滤消失
     groups = groups
-      .map(g => ({ name: g.name, items: g.items.filter(it => (it.layer ? String(it.layer) : 'na') === dimFilter.value) }))
+      .map(g => ({ name: g.name, title: g.title, items: g.items.filter(it => (it.layer ? String(it.layer) : 'na') === dimFilter.value) }))
       .filter(g => g.items.length || concludedByRaw.value[g.name])
   }
   if (clfFilter.value === 'all') return groups
   const pred = clfFilter.value === 'pending' ? isPending : isDone
   // #7：三态过滤同口径——done/pending 过滤下已定论块常驻（过滤语义只作用于澄清题）
   return groups
-    .map(g => ({ name: g.name, items: g.items.filter(pred) }))
+    .map(g => ({ name: g.name, title: g.title, items: g.items.filter(pred) }))
     .filter(g => g.items.length || concludedByRaw.value[g.name])
 })
 const nextUnanswered = computed(() => props.items.find(isPending) || null)
@@ -217,6 +269,7 @@ function jumpNextUnanswered() {
   const it = nextUnanswered.value
   if (!it) return
   revealGrpFor('check', it.seq)   // 目标组在折叠列表内 → 先展开（跳转协议不因折叠失效）
+  activateExplicit(it)            // v5.3：跳题同步活动卡（右栏定位+停摆窗防回抢）
   nextTick(() => {
     const el = document.querySelector(`[data-pid="${it.seq}"]`)
     if (!el) return
@@ -556,11 +609,11 @@ async function reopen(it) {
 
     <!-- v5 双栏（§2.1）：左问题流 + 右原文上下文侧栏（可拖宽 320-760 / 可收起；无块结构单栏降级） -->
     <div class="wb-grid" :class="{ 'no-ctx': !hasDoc || ctxCollapsed }" :style="gridStyle">
-    <div class="q-col">
-    <!-- 左栏问题流：check 组（组内顶部挂同名已定论子折叠块，D14） -->
+    <div class="q-col" ref="qcol">
+    <!-- 左栏问题流：check 组（v5.3 章节分组：title=节名，name=锚键；组内顶部挂同节已定论子折叠块） -->
     <div class="grp" v-for="g in visibleCheckGroups" :key="g.name" :class="{ closed: !openGrps.has(g.name) }">
       <div class="grp-t" @click="toggleGrp(g.name)">
-        <AppIcon name="chevron-right" :size="13" class="grp-chev" />{{ g.name }}
+        <AppIcon name="chevron-right" :size="13" class="grp-chev" />{{ g.title || g.name }}
         <span class="cnt">{{ !g.items.length
           ? `0 题 · 已定论 ${concludedByRaw[g.name].items.length} 条`   // #7：空组存活当且仅当有已定论块——直取安全
           : clfFilter !== 'all'
@@ -593,7 +646,7 @@ async function reopen(it) {
         </div>
       </div>
 
-      <div v-for="it in g.items" :key="it.seq" class="check-item" :class="it.level" :data-pid="it.seq">
+      <div v-for="it in g.items" :key="it.seq" class="check-item" :class="[it.level, { active: activeSeq === it.seq }]" :data-pid="it.seq" @click="activateExplicit(it)">
         <div class="ci-head">
           <span class="badge" :class="lvlCls[it.level]">{{ lvlLabel[it.level] }}</span>
           <span class="chip">{{ it.seq }}</span>
@@ -605,6 +658,8 @@ async function reopen(it) {
           <span class="jump-link" v-else title="来自体检报告同源条目">来自体检.{{ it.seq }}</span>
           <!-- v1.6 缺陷分层（可选）：层名待三期 dimensions.md 契约对齐，一期先 L<n> 数字标签 -->
           <span class="lvl-tag sub" v-if="it.layer" title="缺陷分层（v1.6 可选字段）">L{{ it.layer }}</span>
+          <!-- v5.3 章节分组后 theme 降为卡上标签（原需求域语义保留，不再组级呈现） -->
+          <span class="theme-tag" v-if="it.theme" :title="'需求域：' + it.theme">{{ it.theme }}</span>
         </div>
         <div class="q">{{ it.question }}</div>
         <div class="ctx" v-if="it.ctx">出处：<a class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">{{ it.ctx }}<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a></div>
@@ -700,7 +755,7 @@ async function reopen(it) {
     <div class="grp concluded-grp" v-for="g in standaloneConcluded" :key="g.name" :class="{ closed: !openGrps.has(g.name) }">
       <div class="grp-t" @click="toggleGrp(g.name)">
         <AppIcon name="chevron-right" :size="13" class="grp-chev" />
-        <AppIcon name="check-circle" :size="12" style="color:var(--green)" />{{ (g.raw || g.name) }} · 已定论
+        <AppIcon name="check-circle" :size="12" style="color:var(--green)" />{{ g.title || g.raw || g.name }} · 已定论
         <span class="cnt">{{ g.items.length }} 条 · 体检 ✅ 项</span>
       </div>
       <div class="grp-body"><div class="grp-inner">

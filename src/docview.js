@@ -115,6 +115,57 @@ export function mdPlain(t) {
     .trim()
 }
 
+/**
+ * 目录项提取（doc-structure docToc 同源，v5.3 抽为纯函数供工作台章节分组/侧栏共用）：
+ * heading/title 全收；table-row 行卡作导航节点但排除版本号形态 rowLabel（§x.y.z 纯数字行）。
+ */
+export function docTocOf(blocks) {
+  return (blocks || [])
+    .filter(b => b.type === 'heading' || b.type === 'title'
+      || (b.type === 'table-row' && !/^\d+(\.\d+)+$/.test(String(b.rowLabel || ''))))
+    .map(b => ({
+      id: b.id,
+      level: b.type === 'table-row' ? 3 : (b.level || 1),
+      text: b.type === 'table-row' ? (b.rowLabel || '') : mdPlain(b.text)
+    }))
+}
+
+/**
+ * 目录索引（v5.3）：一次建块序与目录项位置，供「块 → 所属章节」与「章节 → 祖先面包屑」。
+ * 返回 { posOf, sectionOf, crumbOf, nodes }；nodes 为带文档序的目录项（find/crumb 遍历用）。
+ */
+export function tocIndex(blocks, toc) {
+  const blockIdx = new Map()
+  ;(blocks || []).forEach((b, i) => blockIdx.set(b.id, i))
+  const nodes = (toc || []).map(t => ({ ...t, pos: blockIdx.get(t.id) ?? -1 }))
+  /** blockId → 文档序（不存在 → -1） */
+  const posOf = id => blockIdx.get(id) ?? -1
+  /** blockId → 所属目录项：其前方最近者（首个目录项之前 → null） */
+  function sectionOf(blockId) {
+    const i = posOf(blockId)
+    if (i < 0) return null
+    let hit = null
+    for (const n of nodes) {
+      if (n.pos < 0) continue
+      if (n.pos > i) break
+      hit = n
+    }
+    return hit
+  }
+  /** entryId → 祖先链 […, 自身]：向前取 level 严格递减的目录项 */
+  function crumbOf(entryId) {
+    const i = nodes.findIndex(n => n.id === entryId)
+    if (i < 0) return []
+    const chain = [nodes[i]]
+    let minLv = nodes[i].level
+    for (let j = i - 1; j >= 0; j--) {
+      if (nodes[j].level < minLv) { chain.unshift(nodes[j]); minLv = nodes[j].level }
+    }
+    return chain
+  }
+  return { posOf, sectionOf, crumbOf, nodes }
+}
+
 /** tree 块序 → 渲染项序（lead 挂靠）：连续 list-item run 挂最近前驱非 subheading 段落 */
 function attachLeads(tree) {
   const items = []

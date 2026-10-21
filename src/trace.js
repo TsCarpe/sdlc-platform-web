@@ -3,6 +3,7 @@
 //
 // 跳转 = 切页/切 tab → 滚动至目标 → 高亮/闪烁（约 2.2s 消退）；定位失败必须诚实提示。
 import { reactive, nextTick } from 'vue'
+import { docTocOf, tocIndex } from './docview.js'
 
 /**
  * 跳转描述符：{ page:'reqs'|'cases', reqId, tab, kind, id, needle }
@@ -52,6 +53,36 @@ export function groupItems(items, key, domains) {
     if (buckets.get(d)?.length) out.push({ name: d, items: sortByLevel(buckets.get(d)) })
   }
   if (other.length) out.push({ name: '其他', items: sortByLevel(other) })
+  return out
+}
+
+/** 文档章节分组（v5.3 工作台改版）：anchor → 最近目录项（任意级，含 table-row 导航节点）。
+ *  组序 = 目录项文档序；组内维持 🔴→🟡→🔵 level 排序（阻断优先）。anchor 指向首个目录项
+ *  之前的块 →「文档开头」组；anchor 缺失/失效 → 末尾「未定位」组。name = 稳定键（块 id），
+ *  title = 展示名——壳层 revealGrpFor/openGrps 按 name 联动不受影响。 */
+export function groupByDocSection(items, blocks) {
+  const toc = docTocOf(blocks)
+  const idx = tocIndex(blocks, toc)
+  const bySec = new Map()
+  const preface = []
+  const unlocated = []
+  for (const it of items || []) {
+    const sec = it.anchor ? idx.sectionOf(it.anchor) : null
+    if (sec) {
+      if (!bySec.has(sec.id)) bySec.set(sec.id, [])
+      bySec.get(sec.id).push(it)
+    } else if (it.anchor && idx.posOf(it.anchor) >= 0) {
+      preface.push(it)
+    } else {
+      unlocated.push(it)
+    }
+  }
+  const out = []
+  if (preface.length) out.push({ name: '§preface', title: '文档开头', items: sortByLevel(preface) })
+  for (const t of toc) {
+    if (bySec.has(t.id)) out.push({ name: t.id, title: t.text || '（空节）', items: sortByLevel(bySec.get(t.id)) })
+  }
+  if (unlocated.length) out.push({ name: '§unlocated', title: '未定位（无锚点）', items: sortByLevel(unlocated) })
   return out
 }
 

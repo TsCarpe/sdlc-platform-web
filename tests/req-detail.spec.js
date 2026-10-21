@@ -10,17 +10,18 @@ const detailFixture = () => ({
     status: 'clarifying', submittedBy: 'tester', standardDoc: '', createdAt: '2026-10-01 10:00:00',
     syncedAt: null, riskTier: 'B' },
   items: [{ seq: 'P01', level: 'yellow', theme: '域一', question: '问题一？', answer: '', answeredAt: null,
-    status: 'pending', note: '', ctx: '详述1', quote: '「摘引」', anchor: '' }],
+    status: 'pending', note: '', ctx: '详述1', quote: '「摘引」', anchor: 'blk-1' }],
   digest: { markdown: '# digest', version: 1, pushedAt: '2026-10-01 10:00:00',
     content: { summary: '概要', roles: ['用户'], features: [], flows: [], states: [] } },
   audit: { markdown: '# audit', version: 1, pushedAt: '2026-10-01 10:00:00',
     content: { red: 0, yellow: 1, blue: 0, items: [
-      { id: 'P01', level: 'yellow', title: '存疑点', where: '§1', go: '写入标准文档 §2 条款', group: '域一', quote: '', anchor: '' },
+      { id: 'P01', level: 'yellow', title: '存疑点', where: '§1', go: '写入标准文档 §2 条款', group: '域一', quote: '', anchor: 'blk-1' },
       // audit-only 已定论（差集 ∧ go✅，D14）：review F1 回归夹具——其宿主是 check 父组内的已定论子折叠块
-      { id: 'P02', level: 'blue', title: '已定论条目', where: '§1', go: '✅已确认：按 A 口径', group: '域一', quote: '', anchor: '' }] } },
+      { id: 'P02', level: 'blue', title: '已定论条目', where: '§1', go: '✅已确认：按 A 口径', group: '域一', quote: '', anchor: 'blk-1' }] } },
   snapshot: { md: '# 原文快照\n\n段落文本', at: '2026-10-01 10:00:00', version: 1 },
   doc: { markdown: '', version: 1, pushedAt: '2026-10-01 10:00:00',
-    content: { blocks: [{ id: 'blk-1', type: 'paragraph', text: '结构化原文块' }], media: [] } },
+    content: { blocks: [{ id: 'blk-h', type: 'heading', level: 2, text: '一、概述' },
+                        { id: 'blk-1', type: 'paragraph', text: '结构化原文块' }], media: [] } },
   domains: ['域一'],
   frCount: 1,
   frPoints: [{ id: '需求.FR-01', name: '点一', source: '详述1', group: '域一', module: '', anchor: '', coveredBy: [] }],
@@ -110,7 +111,8 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     expect(wrapper.text()).toContain('来自体检.P01')       // 同源徽标保留（§1.2）
     expect(wrapper.text()).toContain('影响分析')            // audit go/relatedCases 归宿（默认收起的 details）
     expect(wrapper.text()).toContain('写入标准文档 §2 条款')
-    expect(wrapper.text()).toContain('域一')                // 分组名（domains 同源）
+    expect(wrapper.text()).toContain('一、概述')              // v5.3：组头 = 文档章节（anchor→最近标题）
+    expect(wrapper.text()).toContain('域一')                // theme 降为卡上业务域标签
   })
 
   it('工作台：待处置项 + 作答输入框 + 处置按钮', async () => {
@@ -146,18 +148,18 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
   it('audit: 跳转命中 audit-only 已定论卡（父组折叠态）仍可达——revealGrpFor 同步展开父组（review F1）', async () => {
     const { pendingJump } = await import('../src/trace.js')
     // P1-11 后含 pending 的组默认展开——先持久化「手动折叠」制造折叠前提
-    localStorage.setItem('wb.grps.REQ-2026-001', JSON.stringify({ 域一: false }))
+    localStorage.setItem('wb.grps.REQ-2026-001', JSON.stringify({ 'blk-h': false }))
     wrapper = await mountDetail()
-    await wrapper.findAll('[role="tab"]')[2].trigger('click')   // 工作台（域一被用户折叠）
+    await wrapper.findAll('[role="tab"]')[2].trigger('click')   // 工作台（「一、概述」被用户折叠）
     await flushPromises()
-    // 已定论卡 P02 渲染在「域一」父组的子折叠块里；跳转前父组应为 closed（夹具前提自证）
-    const grpBefore = wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
+    // 已定论卡 P02 渲染在「一、概述」父组的子折叠块里；跳转前父组应为 closed（夹具前提自证）
+    const grpBefore = wrapper.findAll('.q-col .grp').find(g => g.text().includes('一、概述'))
     expect(grpBefore.classes()).toContain('closed')
     await wrapper.findAll('[role="tab"]')[0].trigger('click')   // 离开工作台再跳（验证协议带切回）
     await flushPromises()
     Object.assign(pendingJump, { nonce: Date.now(), page: 'reqs', reqId: 'REQ-2026-001', kind: 'audit', id: 'P02', needle: '' })
     await new Promise(r => setTimeout(r, 400))
-    const grpAfter = wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
+    const grpAfter = wrapper.findAll('.q-col .grp').find(g => g.text().includes('一、概述'))
     expect(grpAfter.classes()).not.toContain('closed')          // 父组已展开（只开子块键时父组仍折 = F1 病灶）
     expect(wrapper.find('.q-col [data-pid="P02"].flash').exists()).toBe(true)
   })
@@ -165,18 +167,18 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
   // ===== P1-11：首屏可见待答问题 + 折叠状态按 reqId 持久化 =====
   it('P1-11 首次进入含 pending 的分组默认展开；手动折叠后按 reqId 持久化，刷新保持', async () => {
     wrapper = await mountDetail()
-    const grp = () => wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
+    const grp = () => wrapper.findAll('.q-col .grp').find(g => g.text().includes('一、概述'))
     expect(grp().classes()).not.toContain('closed')             // 首屏直接可见问题卡（不再是组头）
     expect(wrapper.find('.q-col [data-pid="P01"]').exists()).toBe(true)
 
     await grp().find('.grp-t').trigger('click')                  // 手动折叠
     expect(grp().classes()).toContain('closed')
-    expect(JSON.parse(localStorage.getItem('wb.grps.REQ-2026-001'))).toMatchObject({ 域一: false })
+    expect(JSON.parse(localStorage.getItem('wb.grps.REQ-2026-001'))).toMatchObject({ 'blk-h': false })
 
     wrapper.unmount()                                            // 模拟刷新：同 reqId 重新挂载
     wrapper = null
     wrapper = await mountDetail()
-    const grpAfter = wrapper.findAll('.q-col .grp').find(g => g.text().includes('域一'))
+    const grpAfter = wrapper.findAll('.q-col .grp').find(g => g.text().includes('一、概述'))
     expect(grpAfter.classes()).toContain('closed')               // 折叠状态保留
   })
 

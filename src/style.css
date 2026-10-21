@@ -260,6 +260,12 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
 .check-item.red{border-left-color:var(--lv-red)}
 .check-item.yellow{border-left-color:var(--lv-yellow)}
 .check-item.blue{border-left-color:var(--lv-blue)}
+/* v5.3 活动卡：常驻描边强调（与 hover 瞬态阴影区分——扫题时「当前题」一眼可见）；
+   左缘级别色不被描边吞掉（阻断优先排序下红色是第一信号） */
+.check-item.active{border-color:var(--blue-border);box-shadow:0 0 0 1.5px var(--blue-border), var(--shadow-card)}
+.check-item.red.active{border-left-color:var(--lv-red)}
+.check-item.yellow.active{border-left-color:var(--lv-yellow)}
+.check-item.blue.active{border-left-color:var(--lv-blue)}
 /* 级别可视化统一：统计卡左色条 + 数字按级着色（与问题卡左条同语言），零值降饱和置灰 */
 .stats.inline.lv-stats{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr))}
 .lv-stats .stat{border-left:3px solid transparent}
@@ -1166,6 +1172,9 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 
 /* 维度小标签（v1.6 可选 layer；层名待三期契约对齐先 L<n>） */
 .lvl-tag{margin-left:auto;font-size:11px;color:var(--faint);flex:none}
+/* v5.3 需求域标签（章节分组后 theme 降为卡上小标签——域名过长省略不挤行） */
+.theme-tag{font-size:11px;color:var(--faint);background:var(--bg-soft);border:1px solid var(--line-soft);
+  border-radius:9999px;padding:0 8px;flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ---- v5 双栏原文侧栏（§2.1）：拖宽 320-760 / 收起恢复 / 定位高亮 / 反向角标 ---- */
 .wb-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start;position:relative}
@@ -1186,6 +1195,18 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
   border:1px solid var(--line);border-radius:9999px;padding:2px 9px;background:var(--canvas);cursor:pointer;flex:none}
 .follow.on{background:var(--blue-light);border-color:var(--blue-border);color:var(--primary);font-weight:600}
 .follow .dot{width:6px;height:6px;border-radius:50%;background:var(--primary)}
+.ctx-toc{padding:6px 14px 0;border-bottom:1px solid var(--line-soft)}
+.ctx-toc .toc-list{max-height:180px;overflow-y:auto;scrollbar-width:thin;display:flex;flex-direction:column;gap:1px;padding:4px 0 8px}
+/* v5.3 侧栏目录条目（原 .docstruct 作用域外裸奔——补上独立样式 + 同步高亮 + 节级待澄清徽标） */
+.ctx-toc .toc-item{display:block;font-size:12px;line-height:1.6;color:var(--blue);cursor:pointer;
+  text-decoration:none;padding:2px 8px;border-radius:6px}
+.ctx-toc .toc-item:hover{background:var(--blue-light);color:var(--blue-pressed)}
+.ctx-toc .toc-item.lv1{font-weight:600}
+.ctx-toc .toc-item.lv2{padding-left:20px}
+.ctx-toc .toc-item.lv3{padding-left:32px;color:var(--muted)}
+.ctx-toc .toc-item.on{background:var(--blue-light);color:var(--blue-pressed);font-weight:600}
+.ctx-toc .toc-pill{display:inline-block;margin-left:6px;font-size:10px;font-weight:650;line-height:1.5;
+  color:var(--amber-deep);background:var(--amber-soft);border-radius:9999px;padding:0 6px;vertical-align:1px}
 .ctx-from{margin:8px 14px 0;background:var(--blue-light);border:1px solid var(--blue-border);color:var(--primary);
   font-size:11.5px;border-radius:8px;padding:4px 10px;display:flex;align-items:center;gap:6px}
 .ctx-from .x{margin-left:auto;border:none;background:none;color:var(--faint);cursor:pointer;font-size:12px}

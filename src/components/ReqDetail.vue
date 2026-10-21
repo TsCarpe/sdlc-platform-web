@@ -18,7 +18,7 @@ import ChangesTab from './ChangesTab.vue'
 import CommentsPanel from './CommentsPanel.vue'
 import { fmtRel } from '../time.js'
 import { nextActionCta } from '../lifecycle.js'
-import { jumpTo, groupItems, groupByFirstAppearance, pidOf } from '../trace.js'
+import { jumpTo, groupItems, groupByFirstAppearance, groupByDocSection, pidOf } from '../trace.js'
 import { isDone, isPending } from '../disposition.js'
 import { provideGroupCollapse } from '../composables/group-collapse.js'
 import { useTraceJump } from '../composables/trace-jump.js'
@@ -61,17 +61,26 @@ const domains = computed(() => d.value?.domains || [])
 // v5（D8）：设计/门禁置灰口径 = 未发布（变更/用例不置灰——reconcile 通道与用例读面放行）
 const postLocked = computed(() => !['published', 'changed'].includes(card.value.status))
 
-// 分组列表（checklist/fr 同源 domains）留在壳：revealGrpFor 跳转展开依赖全量表
-const checklistGroups = computed(() => groupItems(d.value?.items || [], 'theme', domains.value))
+// v1.2 原文块表（resolveDocPath/cmBlockText/章节分组共用——v5.3 上提，章节分组依赖块序）
+const docBlocks = computed(() => d.value?.doc?.content?.blocks || [])
+
+// 分组列表留在壳：revealGrpFor 跳转展开依赖全量表。
+// v5.3：check/已定论改按「文档章节」分组（anchor→最近目录项；组内 level 序，阻断优先）——
+// 列表顺序=原文顺序，组头即位置信息；无块结构（快照老文档）回退 theme 需求域分组。
+const checklistGroups = computed(() =>
+  docBlocks.value.length
+    ? groupByDocSection(d.value?.items || [], docBlocks.value)
+    : groupItems(d.value?.items || [], 'theme', domains.value))
 const frGroups = computed(() => groupByFirstAppearance(d.value?.frPoints || [], 'group'))
 
 // v5（D14）已定论分组：audit 差集 ∧ go✅ 条目（audit-only 且已定论的只读卡宿主）。组名带
-// 「已定论·」前缀（openGrps 域防与 check 组撞名联动），raw 留原组名供工作台内挂载匹配
+// 「已定论·」前缀（openGrps 域防与 check 组撞名联动），raw 留原组键供工作台内挂载匹配
 const concludedGroups = computed(() => {
   const seqs = new Set((d.value?.items || []).map(i => i.seq))
   const rows = (d.value?.audit?.content?.items || [])
     .filter(a => !seqs.has(pidOf(a.id)) && String(a.go || '').startsWith('✅'))
-  return groupItems(rows, 'group', domains.value)
+  return (docBlocks.value.length ? groupByDocSection(rows, docBlocks.value)
+                                 : groupItems(rows, 'group', domains.value))
     .map(g => ({ ...g, name: '已定论·' + g.name, raw: g.name }))
 })
 
@@ -310,7 +319,6 @@ onMounted(async () => {
 })
 
 /** v1.2：原文出处路径（详述N[.N.*]）→ 原文块锚。行号定位表行，小节号/文本匹配行内条款；未命中返回 null */
-const docBlocks = computed(() => d.value?.doc?.content?.blocks || [])
 const childrenByParent = computed(() => {
   const m = {}
   for (const b of docBlocks.value) {

@@ -12,8 +12,8 @@ import AppIcon from './AppIcon.vue'
 import ImgViewer from './ImgViewer.vue'
 import { fmtRel } from '../time.js'
 import { firstQuote, needlesFor } from '../trace.js'
-import { mdPlain } from '../docview.js'
 import { buildThreads, threadOf } from '../comments.js'
+import { mdPlain, tocIndex } from '../docview.js'
 import { useDocStructure } from '../composables/doc-structure.js'
 
 const props = defineProps({
@@ -26,7 +26,22 @@ const props = defineProps({
 })
 const emit = defineEmits(['locate', 'clarify', 'open-origin', 'collapse', 'open-comments'])
 
-const { docData, docBlocks, mediaList } = useDocStructure(() => props.doc, () => props.reqId)
+const { docData, docBlocks, docToc, mediaList } = useDocStructure(() => props.doc, () => props.reqId)
+
+// ===== v5.3 章节联动：块→所属目录项 / 目录祖先面包屑 / 节级待澄清徽标 =====
+// （与左栏章节分组同一「节」口径——两侧都由 docTocOf/tocIndex 推导，分组即徽标同一坐标系）
+const tocIdx = computed(() => tocIndex(docBlocks.value, docToc.value))
+const tocOpen = ref(false)         // 侧栏目录默认收起
+const activeToc = ref('')           // 最近定位命中的所在节目录项 id（TOC 同步高亮）
+const tocBox = ref(null)            // 目录列表容器（激活项滚入可见区）
+const pendingByToc = computed(() => {
+  const m = {}
+  for (const [anchor, seqs] of Object.entries(props.pendingByBlock || {})) {
+    const sec = tocIdx.value.sectionOf(anchor)
+    if (sec) m[sec.id] = (m[sec.id] || 0) + seqs.length
+  }
+  return m
+})
 
 const box = ref(null)                 // 平铺渲染容器（定位域）
 const follow = ref(true)              // 跟随定位开关（关闭后自由滚动不被打断）
@@ -83,10 +98,12 @@ function rowText(b) {
 const docTitle = computed(() => renderBlocks.value.find(b => b.type === 'title')?.text || '')
 
 // ===== 定位协议（v5.1 重写：手动 scrollTop 只滚侧栏 + 二次校正，不连动浏览器窗口） =====
+const hlBlkId = ref('')   // v5.3：常驻高亮的宿主块 id——:class 走 vnode 绑定（对象绑定每渲染产出新引用，
+                          // Vue patch 会整体重写 className，手加 class 必被抹——高亮必须由 Vue 托管）
 function clearHl() {
-  box.value?.querySelectorAll('.ctx-hl').forEach(x => x.classList.remove('ctx-hl'))
+  hlBlkId.value = ''
   const m = document.getElementById('ctx-needle')
-  if (m?.parentNode) { m.parentNode.replaceChild(document.createTextNode(m.textContent), m); m.parentNode.normalize() }
+  if (m?.parentNode) { const p = m.parentNode; p.replaceChild(document.createTextNode(m.textContent), m); p.normalize() }
 }
 function scrollIntoViewCtx(el) {
   const body = box.value
@@ -95,13 +112,19 @@ function scrollIntoViewCtx(el) {
 }
 function focusEl(el, seq) {
   clearHl()
-  el.classList.add('ctx-hl')
-  scrollIntoViewCtx(el)
-  el.classList.remove('ctx-flash'); void el.offsetWidth; el.classList.add('ctx-flash')
-  setTimeout(() => el.classList.remove('ctx-flash'), 2000)
+  // needle 命中的 mark 是手插临时节点——常驻高亮改 vnode 绑定落宿主 [data-blk] 块，mark 只作滚动锚
+  hlBlkId.value = (el.closest?.('[data-blk]') || el)?.getAttribute?.('data-blk') || ''
+  console.log('[focusEl]', seq, 'el=', el.tagName, 'hlBlkId=', hlBlkId.value, 'parent=', el.parentNode?.tagName, el.parentNode?.className, 'conn=', el.isConnected)
+  scrollIntoViewCtx(el.isConnected ? el : box.value?.querySelector(`[data-blk="${hlBlkId.value}"]`))
   showFrom(seq, el)
-  // 二次校正：初次滚动后布局仍可能微调（字体/占位行/懒加载）——稳定后再对齐一次
-  setTimeout(() => { if (el.isConnected && el.classList.contains('ctx-hl')) scrollIntoViewCtx(el) }, 300)
+  // patch 落定后再做 flash + 二次校正（异步 DOM 稳定窗口内对齐一次）
+  nextTick(() => {
+    const real = hlBlkId.value && box.value?.querySelector(`[data-blk="${hlBlkId.value}"]`)
+    if (!real) return
+    real.classList.remove('ctx-flash'); void real.offsetWidth; real.classList.add('ctx-flash')
+    setTimeout(() => real.classList.remove('ctx-flash'), 2000)
+    setTimeout(() => { if (hlBlkId.value) scrollIntoViewCtx(el.isConnected ? el : real) }, 300)
+  })
 }
 /** 容器内 needle 文本定位：TreeWalker 匹配 + mark 包裹（平铺纯文本单节点，命中率高） */
 function needleEl(nd) {
@@ -141,8 +164,14 @@ async function locateCtx({ seq = '', src = '', anchor = '', quote = '', ctxText 
   }
   missCard.value = { seq, src, quote, ctxText }
 }
+/** v5.3：命中块 → 所在节目录项（TOC 高亮+滚入）+ 祖先面包屑进 fromTip（位置常驻可见） */
 function showFrom(seq, el) {
-  const label = el ? (el.textContent || '').trim().slice(0, 24) : ''
+  const blkEl = el?.closest?.('[data-blk]')
+  const sec = blkEl ? tocIdx.value.sectionOf(blkEl.getAttribute('data-blk')) : null
+  activeToc.value = sec?.id || ''
+  nextTick(() => tocBox.value?.querySelector('.toc-item.on')?.scrollIntoView?.({ block: 'nearest' }))
+  const crumb = sec ? tocIdx.value.crumbOf(sec.id).map(t => t.text).filter(Boolean).join(' › ') : ''
+  const label = crumb || (el ? (el.textContent || '').trim().slice(0, 24) : '')
   fromTip.value = `📍 来自 ${seq}${label ? ' · ' + label : ''}（已定位并高亮，前后上下文可继续滚动）`
 }
 
@@ -154,6 +183,12 @@ const cmtThread = computed(() => cmtCard.value ? threadOf(buildThreads(props.com
 function blkLabel(id) {
   const t = (props.blockText[id] || '').slice(0, 60) || id
   return t.length > 24 ? t.slice(0, 24) + '…' : t
+}
+/** 侧栏内目录点击：平滑滚动（不占用壳层 locate 协议——本栏内闭合）；同步高亮所到节 */
+function goToc(id) {
+  activeToc.value = id
+  const el = box.value?.querySelector(`[data-blk="${id}"]`)
+  if (el) scrollIntoViewCtx(el)
 }
 
 /** 评论出处定位（WorkbenchTab 出处=评论分流调用）：命中插卡+flash 目标消息；悬空（评论已删/
@@ -232,6 +267,16 @@ function onDocMedia(id) {
       </div>
     </div>
 
+    <!-- 目录（默认收起；巨表文档主体在行级，heading 导航不到时 table-row 也入列） -->
+    <details class="toc ctx-toc" :open="tocOpen" v-if="docToc.length">
+      <summary @click="tocOpen = !tocOpen"><AppIcon name="list-tree" :size="12" />文档导航（{{ docToc.length }}）</summary>
+      <div class="toc-list" ref="tocBox">
+        <a v-for="h in docToc" :key="h.id" class="toc-item" :class="['lv' + (h.level || 1), { on: h.id === activeToc }]"
+           @click="goToc(h.id)">{{ h.text }}<span v-if="pendingByToc[h.id]" class="toc-pill"
+           :title="pendingByToc[h.id] + ' 题待澄清'">{{ pendingByToc[h.id] }}</span></a>
+      </div>
+    </details>
+
     <div class="ctx-from" v-if="fromTip">{{ fromTip }}<button class="x" @click="fromTip = ''">✕</button></div>
 
     <div class="ctx-body" ref="box">
@@ -249,6 +294,7 @@ function onDocMedia(id) {
              图片画板占位行点击灯箱 / 深度缩进。每项带 data-blk 锚点与反向角标。 -->
         <div v-for="b in renderBlocks" :key="b.id" :data-blk="b.id"
              class="ctx-blk" :class="{
+               'ctx-hl': b.id === hlBlkId,
                'ctx-h': b.type === 'title',
                'ctx-sec': b.type === 'heading',
                'ctx-li': b.type === 'list-item',

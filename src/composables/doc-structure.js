@@ -2,8 +2,7 @@
 // 渲染所需全套结构（父子索引/章节分组/标量小表切分/目录/媒体清单）。
 // OriginTab（全宽阅读）与 CtxPane（工作台侧栏）共享——两处渲染一致性由同源计算保证。
 import { computed } from 'vue'
-import { partitionRows } from '../docview.js'
-import { mdPlain } from '../docview.js'
+import { partitionRows, docTocOf } from '../docview.js'
 
 /**
  * @param doc      detail.doc（块表权威视图：content.blocks + media）
@@ -53,15 +52,14 @@ export function useDocStructure(getDoc, getReqId) {
   })
   const partitionedSections = computed(() =>
     docSections.value.map(sec => ({ ...sec, parts: partitionRows(sec.blocks, childCountBy.value) })))
-  // v2.2 目录纳入 table-row 行卡片（巨表文档主体在行级，heading 导航不到）；排除版本号形态 rowLabel
-  const docToc = computed(() => docBlocks.value
-    .filter(b => b.type === 'heading' || b.type === 'title'
-      || (b.type === 'table-row' && !/^\d+(\.\d+)+$/.test(String(b.rowLabel || ''))))
-    .map(b => ({
-      id: b.id,
-      level: b.type === 'table-row' ? 3 : (b.level || 1),
-      text: b.type === 'table-row' ? (b.rowLabel || '') : mdPlain(b.text)
-    })))
+  const commentByRef = computed(() => {
+    const m = {}
+    for (const b of docBlocks.value) if (b.type === 'comment') m[b.ref] = b
+    return m
+  })
+  // v2.2 目录纳入 table-row 行卡片（巨表文档主体在行级，heading 导航不到）；排除版本号形态 rowLabel。
+  // v5.3：提取规则移 docview.docTocOf——与原先内联过滤同一口径，工作台章节分组与侧栏共用
+  const docToc = computed(() => docTocOf(docBlocks.value))
   // v4.20 灯箱图源：全量块表按文档序取 image/画板缩略图
   const mediaList = computed(() => docBlocks.value
     .filter(b => (b.type === 'image' || b.type === 'whiteboard') && b.media)
@@ -71,5 +69,5 @@ export function useDocStructure(getDoc, getReqId) {
       caption: b.caption || b.alt || (b.type === 'whiteboard' ? '画板缩略图' : '')
     })))
   return { docData, docBlocks, childrenByParent, rootBlocks, docSections, partitionedSections,
-           docToc, mediaList }
+           commentByRef, docToc, mediaList }
 }

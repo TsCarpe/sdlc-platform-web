@@ -1,7 +1,7 @@
 // docview.js 纯函数单测（v4.1 层级还原渲染层）：全标量小表聚合 / D1 标量分流 / cell 分组 + lead 挂靠。
 // 夹具形状对齐 parse_doc 0.5 产物（head 非空、cells 与列数等长、内容格空串、行内子块带 cell 锳）。
 import { describe, it, expect } from 'vitest'
-import { partitionRows, splitRowScalars, groupRowChildren, mdPlain } from '../src/docview.js'
+import { partitionRows, splitRowScalars, groupRowChildren, mdPlain, docTocOf, tocIndex } from '../src/docview.js'
 
 const row = (id, head, cells, extra = {}) =>
   ({ id, type: 'table-row', rowLabel: id, head, cells, ...extra })
@@ -187,5 +187,43 @@ describe('mdPlain：块文本 md 行内源码 → 纯文本标签', () => {
     expect(mdPlain('')).toBe('')
     expect(mdPlain(null)).toBe('')
     expect(mdPlain(undefined)).toBe('')
+  })
+})
+
+describe('docTocOf / tocIndex：目录提取与章节归属（v5.3）', () => {
+  const blocks = [
+    { id: 'p0', type: 'paragraph', text: '前言段' },
+    { id: 't1', type: 'title', text: '**区域成绩分析**v0.1' },
+    { id: 'h1', type: 'heading', level: 1, text: '一、修订记录' },
+    { id: 'p1', type: 'paragraph', text: '段一' },
+    { id: 'h2', type: 'heading', level: 2, text: '1.1 小节' },
+    { id: 'r1', type: 'table-row', rowLabel: '补充说明页' },
+    { id: 'rv', type: 'table-row', rowLabel: '1.0.1' },          // 版本号形态 → 不入目录
+    { id: 'h3', type: 'heading', level: 1, text: '二、需求背景' },
+    { id: 'p2', type: 'paragraph', text: '尾段' },
+  ]
+  const toc = docTocOf(blocks)
+
+  it('heading/title 全收、table-row 入目录、版本号形态 rowLabel 排除', () => {
+    expect(toc.map(t => t.id)).toEqual(['t1', 'h1', 'h2', 'r1', 'h3'])
+    expect(toc.find(t => t.id === 'r1').level).toBe(3)          // 行卡固定 lv3
+    expect(toc.find(t => t.id === 't1').text).toBe('区域成绩分析v0.1')  // md 标记剥除
+  })
+
+  it('sectionOf：块前方最近目录项为所属节；首目录项之前 → null', () => {
+    const idx = tocIndex(blocks, toc)
+    expect(idx.sectionOf('p0')).toBeNull()                      // 前言：首个目录项之前
+    expect(idx.sectionOf('p1').id).toBe('h1')
+    expect(idx.sectionOf('rv').id).toBe('r1')                   // 版本号行不占目录位
+    expect(idx.sectionOf('h2').id).toBe('h2')                   // 目录项自身归自己
+    expect(idx.sectionOf('p2').id).toBe('h3')
+    expect(idx.sectionOf('ghost')).toBeNull()                   // 失效锚
+  })
+
+  it('crumbOf：祖先链 level 严格递减回溯 […, 自身]', () => {
+    const idx = tocIndex(blocks, toc)
+    expect(idx.crumbOf('r1').map(n => n.id)).toEqual(['h1', 'h2', 'r1'])         // r1(lv3)←h2(lv2)←h1(lv1)；t1 与 h1 同级不入链
+    expect(idx.crumbOf('h3').map(n => n.id)).toEqual(['h3'])                     // 与 t1/h1 同级 → 无祖先
+    expect(idx.crumbOf('ghost')).toEqual([])
   })
 })

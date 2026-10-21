@@ -408,3 +408,41 @@ describe('WorkbenchTab：批 E（P1-13 CSS 变量 / U-11 弹窗 Esc）', () => {
     expect(w.find('.modal').exists()).toBe(false)
   })
 })
+
+describe('WorkbenchTab：v5.3 章节分组 + 活动卡联动', () => {
+  const DOC = { content: { blocks: [
+    { id: 'h1', type: 'heading', level: 1, text: '一、背景' },
+    { id: 'p1', type: 'paragraph', text: '操作权限服从区域平台的统一管理' },
+    { id: 'h2', type: 'heading', level: 1, text: '二、需求背景' },
+    { id: 'p2', type: 'paragraph', text: '段二' },
+  ], media: [] } }
+  const SEC_ITEM = { seq: 'P01', level: 'red', theme: '权限', question: '角色矩阵缺失？', answer: '',
+    status: 'pending', note: '', ctx: '详述·产品入口说明 2', quote: '「操作权限服从」', anchor: 'p1', origin: 'skill' }
+
+  const mountSec = async (items, groups) => {
+    const { default: WorkbenchTab } = await import('../src/components/WorkbenchTab.vue')
+    const { GRP_KEY } = await import('../src/composables/group-collapse.js')
+    const grp = { openGrps: new Set(['h1']), toggleGrp: () => {}, expandAll: () => {}, collapseAll: () => {}, revealGrpFor: () => {} }
+    return mount(WorkbenchTab, { props: { reqId: 'REQ-1', items, status: 'clarifying',
+      groups: groups ?? [{ name: 'h1', title: '一、背景', items }], audit: null, concludedGroups: [],
+      doc: DOC, snapshot: null },
+      global: { provide: { [GRP_KEY]: grp } } })
+  }
+
+  it('组头渲染 title 节名（name=锚键不外显）；theme 降为卡上标签', async () => {
+    const w = await mountSec([SEC_ITEM])
+    expect(w.find('.grp-t').text()).toContain('一、背景')
+    expect(w.find('.theme-tag').text()).toBe('权限')
+  })
+
+  it('点击卡 → 活动卡描边 + 右栏常驻高亮 + 面包屑 fromTip + TOC 同步/节级徽标', async () => {
+    const w = await mountSec([SEC_ITEM])
+    await w.find('.check-item').trigger('click')
+    await flushPromises()
+    expect(w.find('.check-item.active').attributes('data-pid')).toBe('P01')   // 活动卡描边
+    expect(w.find('[data-blk="p1"]').classes()).toContain('ctx-hl')           // 右栏常驻高亮
+    expect(w.find('.ctx-from').text()).toContain('一、背景')                   // fromTip 节链面包屑
+    expect(w.find('.ctx-toc .toc-item.on').text()).toContain('一、背景')       // TOC 同步高亮
+    expect(w.find('.toc-pill').text()).toBe('1')                               // 节级待澄清徽标（anchor→节聚合）
+  })
+})

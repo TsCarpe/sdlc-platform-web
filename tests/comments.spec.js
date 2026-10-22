@@ -140,12 +140,12 @@ describe('WorkbenchTab（原 ChecklistTab）：L 系 origin 呈现与跳回', ()
     await link.trigger('click')
     expect(w.emitted('view-comment')[0]).toEqual([7])   // 无块结构（无右栏）→ 只读抽屉回退
   })
-  it('P 系行保持「来自体检」；incremental 行显示「来自增量质检」', async () => {
+  it('P 系（默认来源）不再标注「来自体检」（v5.4 卡头精简）；incremental 行显示静态「增量质检」标签', async () => {
     const items = [{ seq: 'P01', level: 'yellow', theme: '域', question: 'q', answer: '', status: 'pending', origin: 'skill' },
       { seq: 'P2', level: 'yellow', theme: '域', question: '增量问', answer: '', status: 'pending', origin: 'incremental' }]
     const w = await mountCheck(items)
-    expect(w.text()).toContain('来自体检.P01')
-    expect(w.text()).toContain('来自增量质检')
+    expect(w.text()).not.toContain('来自体检.P01')
+    expect(w.find('.origin-tag').text()).toBe('增量质检')   // 非链接样式（不再冒充 jump-link）
     expect(w.text()).not.toContain('来自评论')
   })
 

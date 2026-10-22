@@ -260,9 +260,11 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
 .check-item.red{border-left-color:var(--lv-red)}
 .check-item.yellow{border-left-color:var(--lv-yellow)}
 .check-item.blue{border-left-color:var(--lv-blue)}
-/* v5.3 活动卡：常驻描边强调（与 hover 瞬态阴影区分——扫题时「当前题」一眼可见）；
+/* v5.3 活动卡：常驻描边+蓝底强调（与 hover 瞬态阴影区分——扫题时「当前题」一眼可见，
+   与右栏黄色定位块成对：蓝=当前题，黄=被定位的原文）；
    左缘级别色不被描边吞掉（阻断优先排序下红色是第一信号） */
-.check-item.active{border-color:var(--blue-border);box-shadow:0 0 0 1.5px var(--blue-border), var(--shadow-card)}
+.check-item.active{border-color:var(--blue-border);background:var(--blue-light);
+  box-shadow:0 0 0 1.5px var(--blue-border), var(--shadow-card)}
 .check-item.red.active{border-left-color:var(--lv-red)}
 .check-item.yellow.active{border-left-color:var(--lv-yellow)}
 .check-item.blue.active{border-left-color:var(--lv-blue)}
@@ -1003,6 +1005,8 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .cthread-card .tp-on{background:var(--green-soft); color:var(--green); border-color:transparent}
 .cmts-empty{padding:22px 8px; text-align:center}
 .cmt-flash{background:var(--yellow-light); border-radius:6px; transition:background .4s ease}
+/* v5.3 评论出处卡目标消息常驻高亮（与原文 .ctx-hl 同语言：黄底 + 深黄左缘），换题才换 */
+.ctx-cmt .ct-msg.cmt-hl{background:var(--yellow-light); box-shadow:inset 3px 0 0 var(--yellow-deep); padding-left:9px}
 .cmt-chip{display:inline-flex; align-items:center; gap:3px; color:var(--amber-deep); background:var(--amber-soft);
   border-color:transparent; vertical-align:1px}
 /* 段落/条款上的平台评论角标（复用 cmbadge 基础样式，靠后微调） */
@@ -1175,6 +1179,39 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 /* v5.3 需求域标签（章节分组后 theme 降为卡上小标签——域名过长省略不挤行） */
 .theme-tag{font-size:11px;color:var(--faint);background:var(--bg-soft);border:1px solid var(--line-soft);
   border-radius:9999px;padding:0 8px;flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* v5.4 非默认来源标签（增量质检）：灰色静态标签，不再冒充链接 */
+.origin-tag{font-size:11px;color:var(--amber-deep);background:var(--amber-soft);border-radius:9999px;padding:0 8px;flex:none}
+.ci-head .fold-back{padding:0 6px;font-size:11.5px}
+
+/* v5.4 已处置卡收起摘要行：一行 = 状态 + 编号 + 问题 + 答复，超长省略；点击展开 */
+.check-item.folded{padding:7px 14px;margin-bottom:6px;box-shadow:none;cursor:pointer;background:var(--bg-soft)}
+.check-item.folded:hover{background:var(--canvas);box-shadow:var(--shadow-card)}
+.check-item.folded.active{background:var(--blue-light)}
+.ci-fold{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px}
+.ci-fold .fold-ok{color:var(--green);flex:none}
+.ci-fold .fold-ok.muted{color:var(--faint)}
+.ci-fold .fold-st{flex:none;font-size:11.5px;color:var(--green);font-weight:600}
+.ci-fold .fold-st.rejected,.ci-fold .fold-st.deferred{color:var(--muted)}
+.ci-fold .fold-q{flex:1 1 40%;min-width:0;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ci-fold .fold-a{flex:1 1 40%;min-width:0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ci-fold .fold-a::before{content:"→ ";color:var(--faint)}
+.ci-fold .fold-x{flex:none;color:var(--faint)}
+
+/* v5.4 作答流开关 */
+.wb-sw{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line-soft)}
+.sw{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--slate);cursor:pointer;user-select:none;white-space:nowrap}
+.sw input{accent-color:var(--primary);margin:0;cursor:pointer}
+
+/* v5.4 左栏吸顶细条：零高 sticky 壳（不占文档流）+ 绝对定位条；停在 sticky tabs（topbar+46）下沿 */
+.wb-mini-wrap{position:sticky;top:calc(var(--topbar-h) + 46px);height:0;z-index:var(--z-clf)}
+.wb-mini{position:absolute;left:0;right:0;top:0;height:40px;display:flex;align-items:center;gap:12px;padding:0 12px;
+  background:var(--canvas);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-pop);
+  opacity:0;transform:translateY(-6px);pointer-events:none;transition:opacity .15s ease,transform .15s ease}
+.wb-mini.on{opacity:1;transform:none;pointer-events:auto}
+.wb-mini .n{font-size:12px;color:var(--stone);flex:none;font-variant-numeric:tabular-nums}
+.wb-mini .n b{font-size:15px;color:var(--primary);font-weight:700}
+.wb-mini .bar{flex:1;min-width:40px;max-width:160px;height:5px}
+.wb-mini .sub{display:inline-flex;align-items:center;gap:4px;font-size:12px}
 
 /* ---- v5 双栏原文侧栏（§2.1）：拖宽 320-760 / 收起恢复 / 定位高亮 / 反向角标 ---- */
 .wb-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start;position:relative}
@@ -1304,6 +1341,8 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .done-ans{display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-top:2px;width:100%}
 .done-ans .txt{color:var(--charcoal);flex:1;min-width:0;line-height:1.6}
 .done-ans .redo, .redo{margin-left:auto;flex:none}
+.optans .done-ans{margin-bottom:6px;align-items:baseline}
+.done-ans .sub{flex:none;font-size:11.5px;color:var(--faint)}
 
 /* ---- v5 摘要重定位（§3，D6/D9）：AI 理解摘要卡 / 模块 chips / 遗留假设卡 / 主流程泳道 ---- */
 .und-card{border-left:4px solid var(--primary)}

@@ -5,10 +5,13 @@
 // 捕获语义（D-B）、无 options 卡草稿体制（draft/dirty/懒播种/items 替换失效重播种）。
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
 
 vi.mock('../src/api.js', () => ({
   api: { get: vi.fn(async () => []), post: vi.fn(async () => ({})), put: vi.fn(async () => ({})), del: vi.fn(async () => ({})) }
 }))
+// 清空重答二次确认（v5.4）：测试环境不挂 ConfirmDialog，ask 直接按确认结算
+vi.mock('../src/confirm.js', () => ({ ask: vi.fn(async () => true) }))
 
 const mountWb = async (items, status = 'clarifying') => {
   const { default: WorkbenchTab } = await import('../src/components/WorkbenchTab.vue')
@@ -36,7 +39,14 @@ const LAYER_ITEMS = [
   { seq: 'P04', level: 'blue', theme: '域', question: 'q4', answer: '', status: 'pending', note: '', origin: 'skill' },  // 无 layer → 未分类桶
 ]
 
-beforeEach(() => vi.clearAllMocks())
+// v5.4 作答流开关默认开——作答机制类用例需看完整卡（已答不收成摘要、不自动跳题），默认关闭；
+// 开关行为本身在「v5.4 作答流」describe 内显式打开验证
+beforeEach(() => {
+  vi.clearAllMocks()
+  localStorage.clear()
+  localStorage.setItem('wb.autoCollapse', '0')
+  localStorage.setItem('wb.autoNext', '0')
+})
 
 describe('WorkbenchTab：选择题化作答（v5 §2.3）', () => {
   it('点选即 PUT（二期结构化）：body answer 为 kind=option JSON，快照渲染 answerText', async () => {
@@ -48,7 +58,7 @@ describe('WorkbenchTab：选择题化作答（v5 §2.3）', () => {
     expect(api.put).toHaveBeenCalledWith('/api/requirements/REQ-1/answers/P01',
       { answer: '{"kind":"option","optionKey":"A","optionText":"选项A全文"}', status: 'answered' })
     expect(w.text()).toContain('选项A全文')        // 已答快照（answerText 解构文本，无 key 前缀）
-    expect(w.text()).toContain('重新作答')
+    expect(w.text()).toContain('清空重答')         // v5.4：原「重新作答」改名（破坏性动作明示）
   })
 
   it('per-seq 串行链最后值胜：连点 A→B，B 请求排队不丢、终值为 B（payload+answerText 各就位）', async () => {
@@ -96,16 +106,52 @@ describe('WorkbenchTab：选择题化作答（v5 §2.3）', () => {
     expect(w.findAll('.opt')[0].attributes('disabled')).toBeDefined()   // 选项禁用（互斥条款 ①）
   })
 
-  it('重新作答 = 清空重选不预选（r4#11）：reopen 后选项无选中态', async () => {
+  it('清空重答（v5.4，原重新作答）：二次确认后回待确认、选项无选中态（r4#11）', async () => {
+    const { ask } = await import('../src/confirm.js')
     const items = [{ ...OPT_ITEM }]
     const w = await mountWb(items)
     await w.findAll('.opt')[0].trigger('click')
     await flushPromises()
-    expect(w.text()).toContain('重新作答')
     await w.find('.redo').trigger('click')
     await flushPromises()
+    expect(ask).toHaveBeenCalledTimes(1)               // 破坏性动作必经确认
     expect(items[0].status).toBe('pending')
     expect(w.findAll('.opt.picked').length).toBe(0)   // 不预选、不做选中态恢复
+  })
+
+  it('清空重答取消确认：不发 PUT、答复保留', async () => {
+    const { api } = await import('../src/api.js')
+    const { ask } = await import('../src/confirm.js')
+    const items = [{ ...OPT_ITEM, status: 'answered',
+      answer: '{"kind":"option","optionKey":"A","optionText":"选项A全文"}', answerText: '选项A全文' }]
+    const w = await mountWb(items)
+    ask.mockResolvedValueOnce(false)
+    await w.find('.redo').trigger('click')
+    await flushPromises()
+    expect(api.put).not.toHaveBeenCalled()
+    expect(items[0].status).toBe('answered')
+  })
+
+  it('展开即改（v5.4）：已答按选项全文回显高亮；点其他选项直接覆盖并保留已存补充说明', async () => {
+    const { api } = await import('../src/api.js')
+    const items = [{ ...OPT_ITEM, status: 'answered',
+      answer: '{"kind":"option","optionKey":"Z","optionText":"选项A全文","extra":"两校区"}', answerText: '选项A全文（补充：两校区）' }]
+    const w = await mountWb(items)
+    // 存储 key=Z 已漂移（选项重生成）——按全文匹配回显 A，不以 optionKey 回显（r4#11）
+    expect(w.findAll('.opt')[0].classes()).toContain('picked')
+    await w.findAll('.opt')[1].trigger('click')
+    await flushPromises()
+    expect(api.put).toHaveBeenCalledWith('/api/requirements/REQ-1/answers/P01',
+      { answer: '{"kind":"option","optionKey":"B","optionText":"选项B全文","extra":"两校区"}', status: 'answered' })
+    expect(w.findAll('.opt')[1].classes()).toContain('picked')
+  })
+
+  it('全文不匹配任何选项（选项重生成）→ 不高亮，宁缺不错', async () => {
+    const items = [{ ...OPT_ITEM, status: 'answered',
+      answer: '{"kind":"option","optionKey":"A","optionText":"旧版选项文案"}', answerText: '旧版选项文案' }]
+    const w = await mountWb(items)
+    expect(w.findAll('.opt.picked').length).toBe(0)
+    expect(w.find('.done-ans').text()).toContain('旧版选项文案')
   })
 
   it('无 options 存量卡降级 textarea（D12）', async () => {
@@ -444,5 +490,115 @@ describe('WorkbenchTab：v5.3 章节分组 + 活动卡联动', () => {
     expect(w.find('.ctx-from').text()).toContain('一、背景')                   // fromTip 节链面包屑
     expect(w.find('.ctx-toc .toc-item.on').text()).toContain('一、背景')       // TOC 同步高亮
     expect(w.find('.toc-pill').text()).toBe('1')                               // 节级待澄清徽标（anchor→节聚合）
+  })
+})
+
+describe('WorkbenchTab：v5.4 作答流（下一待处置口径 / 自动推进 / 自动收起 / 待处置筛选暂留）', () => {
+  Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => {})
+  // 前序用例以 mockImplementation 永久替换 api.put 为挂起 Promise（clearAllMocks 不复原实现）——本组需真实成功回调
+  beforeEach(async () => {
+    const { api } = await import('../src/api.js')
+    api.put.mockImplementation(async () => ({}))
+  })
+  const opt = (seq, extra = {}) => ({ ...OPT_ITEM, seq, question: 'q' + seq, ...extra })
+  // 显示序（组序）≠ items 原始序：g1=[P03,P01] → g2=[P02]
+  const mountG = async (items, order = [['g1', ['P03', 'P01']], ['g2', ['P02']]]) => {
+    const { default: WorkbenchTab } = await import('../src/components/WorkbenchTab.vue')
+    const { GRP_KEY } = await import('../src/composables/group-collapse.js')
+    const grp = { openGrps: new Set(), toggleGrp: () => {}, expandAll: () => {}, collapseAll: () => {}, revealGrpFor: () => {} }
+    const by = Object.fromEntries(items.map(i => [i.seq, i]))
+    const groups = order.map(([name, seqs]) => ({ name, items: seqs.map(s => by[s]) }))
+    return mount(WorkbenchTab, { props: { reqId: 'REQ-1', items, status: 'clarifying', groups,
+      audit: null, concludedGroups: [], doc: null, snapshot: null }, global: { provide: { [GRP_KEY]: grp } } })
+  }
+  const active = w => w.find('.check-item.active').attributes('data-pid')
+  const jumpBtn = w => w.findAll('.wb-prog .btn.primary')[0]
+
+  it('下一待处置按页面显示序走、从当前卡往后找、到底绕回第一题（非 items 原始序首个）', async () => {
+    const items = [opt('P01'), opt('P02'), opt('P03')]
+    const w = await mountG(items)
+    await w.find('[data-pid="P01"]').trigger('click')       // 激活 P01（显示序第 2）
+    await jumpBtn(w).trigger('click')
+    expect(active(w)).toBe('P02')                           // 显示序下一张
+    await jumpBtn(w).trigger('click')
+    expect(active(w)).toBe('P03')                           // 到底绕回显示序第一题
+  })
+
+  it('下一待处置跳过已处置卡；全部答完按钮消失', async () => {
+    // reactive：壳层 items 来自 ref（深响应式），字段原地改写才会驱动 computed——夹具同构
+    const items = reactive([opt('P01'), opt('P02', { status: 'answered', answerText: 'x', answer: 'x' }), opt('P03')])
+    const w = await mountG(items)
+    await w.find('[data-pid="P01"]').trigger('click')
+    await jumpBtn(w).trigger('click')
+    expect(active(w)).toBe('P03')                           // P02 已答被跳过，绕回 P03
+    items.forEach(i => { i.status = 'answered' })
+    await flushPromises()
+    expect(w.find('.wb-prog .btn.primary').exists()).toBe(false)
+  })
+
+  it('答完自动下一题：点选保存后 ~400ms 活动卡推进到显示序下一待处置；开关关闭则停留', async () => {
+    localStorage.setItem('wb.autoNext', '1')
+    const items = [opt('P01'), opt('P02'), opt('P03')]
+    const w = await mountG(items)
+    await w.find('[data-pid="P03"] .opt').trigger('click')  // 点选冒泡激活 P03 并保存
+    await flushPromises()
+    expect(active(w)).toBe('P03')
+    await new Promise(r => setTimeout(r, 450))
+    expect(active(w)).toBe('P01')                           // 显示序 P03 → P01
+    await w.findAll('.wb-sw input')[0].setValue(false)     // 关「答完自动下一题」
+    await w.find('[data-pid="P01"] .opt').trigger('click')
+    await flushPromises()
+    await new Promise(r => setTimeout(r, 450))
+    expect(active(w)).toBe('P01')                           // 开关关：不推进
+    expect(localStorage.getItem('wb.autoNext')).toBe('0')   // 开关记忆
+  })
+
+  it('修改已答卡（非待处置）不触发自动推进', async () => {
+    localStorage.setItem('wb.autoNext', '1')
+    const items = [opt('P01', { status: 'answered', answer: '{"kind":"option","optionKey":"A","optionText":"选项A全文"}', answerText: '选项A全文' }), opt('P02'), opt('P03')]
+    const w = await mountG(items)
+    await w.findAll('[data-pid="P01"] .opt')[1].trigger('click')
+    await flushPromises()
+    await new Promise(r => setTimeout(r, 450))
+    expect(active(w)).toBe('P01')
+  })
+
+  it('答完自动收起：已处置卡（含进页面即已完成的）收成摘要行；点击展开可改，「收起」复原', async () => {
+    localStorage.setItem('wb.autoCollapse', '1')
+    const items = [opt('P01', { status: 'answered', answer: '{"kind":"option","optionKey":"A","optionText":"选项A全文"}', answerText: '选项A全文' }),
+      opt('P02', { status: 'rejected', note: '不是问题' }), opt('P03')]
+    const w = await mountG(items)
+    expect(w.find('[data-pid="P01"]').classes()).toContain('folded')
+    expect(w.find('[data-pid="P01"] .ci-fold').text()).toContain('选项A全文')
+    expect(w.find('[data-pid="P02"] .ci-fold').text()).toContain('不是问题')   // 驳回摘要带理由
+    expect(w.find('[data-pid="P03"]').classes()).not.toContain('folded')      // 待处置不收
+    await w.find('[data-pid="P01"] .ci-fold').trigger('click')
+    expect(w.find('[data-pid="P01"]').classes()).not.toContain('folded')
+    expect(w.findAll('[data-pid="P01"] .opt').length).toBe(2)                // 展开即改：选项可点
+    await w.find('[data-pid="P01"] .fold-back').trigger('click')
+    expect(w.find('[data-pid="P01"]').classes()).toContain('folded')
+  })
+
+  it('点选作答后卡片即收起（开关开）', async () => {
+    localStorage.setItem('wb.autoCollapse', '1')
+    const items = [opt('P01'), opt('P02'), opt('P03')]
+    const w = await mountG(items)
+    await w.find('[data-pid="P01"] .opt').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-pid="P01"]').classes()).toContain('folded')
+  })
+
+  it('「只看待处置」下刚答的卡暂留不消失；切换筛选后才按真实状态隐藏', async () => {
+    const items = [opt('P01'), opt('P02'), opt('P03')]
+    const w = await mountG(items)
+    const flt = () => w.find('.wb-prog .btns .btn:not(.primary)')   // 已处置筛选下无可见待处置，跳题按钮隐藏——不按下标取
+    await flt().trigger('click')                              // all → pending
+    await w.find('[data-pid="P01"] .opt').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-pid="P01"]').exists()).toBe(true)    // 暂留
+    await flt().trigger('click')                              // → done
+    await flt().trigger('click')                              // → all
+    await flt().trigger('click')                              // → pending（暂留集已清）
+    expect(w.find('[data-pid="P01"]').exists()).toBe(false)
   })
 })

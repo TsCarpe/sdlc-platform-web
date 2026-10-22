@@ -111,10 +111,8 @@ function scrollIntoViewCtx(el) {
   body.scrollTop = Math.max(0, el.offsetTop - (body.clientHeight - el.offsetHeight) / 2)
 }
 function focusEl(el, seq) {
-  clearHl()
   // needle 命中的 mark 是手插临时节点——常驻高亮改 vnode 绑定落宿主 [data-blk] 块，mark 只作滚动锚
   hlBlkId.value = (el.closest?.('[data-blk]') || el)?.getAttribute?.('data-blk') || ''
-  console.log('[focusEl]', seq, 'el=', el.tagName, 'hlBlkId=', hlBlkId.value, 'parent=', el.parentNode?.tagName, el.parentNode?.className, 'conn=', el.isConnected)
   scrollIntoViewCtx(el.isConnected ? el : box.value?.querySelector(`[data-blk="${hlBlkId.value}"]`))
   showFrom(seq, el)
   // patch 落定后再做 flash + 二次校正（异步 DOM 稳定窗口内对齐一次）
@@ -153,6 +151,7 @@ function needleEl(nd) {
 async function locateCtx({ seq = '', src = '', anchor = '', quote = '', ctxText = '' }) {
   missCard.value = null
   if (!follow.value) return
+  clearHl()   // 清场必须在 needleEl 插新 mark 之前——原在 focusEl 内会误拆当次 needle 产物（原生 bug）
   await nextTick()
   if (anchor) {
     const el = box.value?.querySelector(`[data-blk="${anchor}"]`)
@@ -169,7 +168,13 @@ function showFrom(seq, el) {
   const blkEl = el?.closest?.('[data-blk]')
   const sec = blkEl ? tocIdx.value.sectionOf(blkEl.getAttribute('data-blk')) : null
   activeToc.value = sec?.id || ''
-  nextTick(() => tocBox.value?.querySelector('.toc-item.on')?.scrollIntoView?.({ block: 'nearest' }))
+  // 原生 scrollIntoView 会连带滚动 window → 触发左栏侦测抢回活动卡（反馈环）。手动 scrollTop 只滚
+  // TOC 容器；目录收起时元素不可见也无需同步
+  nextTick(() => {
+    if (!tocOpen.value || !tocBox.value) return
+    const item = tocBox.value.querySelector('.toc-item.on')
+    if (item) tocBox.value.scrollTop = Math.max(0, item.offsetTop - tocBox.value.clientHeight / 2)
+  })
   const crumb = sec ? tocIdx.value.crumbOf(sec.id).map(t => t.text).filter(Boolean).join(' › ') : ''
   const label = crumb || (el ? (el.textContent || '').trim().slice(0, 24) : '')
   fromTip.value = `📍 来自 ${seq}${label ? ' · ' + label : ''}（已定位并高亮，前后上下文可继续滚动）`
@@ -211,7 +216,24 @@ async function locateComment({ seq = '', cid = null }) {
   }
   return true
 }
-defineExpose({ locateCtx, locateComment })
+
+/** v5.3 活动卡跟随统一入口（WorkbenchTab activate 调用）：评论出处卡与原文同步切换——
+ *  出处=评论（cid 命中线程）→ 换卡 + 原文定位到评论锚定块（讨论的就是那段原文）；
+ *  出处≠评论 → 撤旧卡（防「评论卡≠活动卡」错配）。受 follow 总闸约束：关闭时整栏不动。 */
+async function track(t) {
+  if (!follow.value) return
+  const thread = t.cid != null ? threadOf(buildThreads(props.comments), t.cid) : null
+  if (!thread) cmtCard.value = null
+  else if (cmtCard.value?.cid !== t.cid || cmtCard.value?.seq !== t.seq) await locateComment(t)  // 同线程不重插不重闪
+  if (thread && !thread.root.blockId) {   // 卡片级评论（无锚定块）：原文无处可定，清高亮并提示看评论卡
+    clearHl()
+    missCard.value = null
+    fromTip.value = `💬 来自 ${t.seq} · 出处为卡片级评论（见上方评论出处卡）`
+    return
+  }
+  return locateCtx(thread ? { ...t, anchor: thread.root.blockId } : t)
+}
+defineExpose({ locateCtx, locateComment, track })
 
 // ===== 灯箱（复用 v4.20 ImgViewer；图源 = 块表文档序） =====
 const viewerIdx = ref(-1)
@@ -250,11 +272,11 @@ function onDocMedia(id) {
                :title="'定位原文块 ' + cmtThread.root.blockId">{{ blkLabel(cmtThread.root.blockId) }}</a>
       </div>
       <div class="ct-msgs">
-        <div class="ct-msg" :data-cid="cmtThread.root.id">
+        <div class="ct-msg" :class="{ 'cmt-hl': cmtThread.root.id === cmtCard.cid }" :data-cid="cmtThread.root.id">
           <b>{{ cmtThread.root.author || '匿名' }}</b><span class="sub tnum" :title="cmtThread.root.createdAt"> · {{ fmtRel(cmtThread.root.createdAt) }}</span>
           <div class="ct-text">{{ cmtThread.root.text }}</div>
         </div>
-        <div class="ct-msg reply" v-for="r in cmtThread.replies" :key="r.id" :data-cid="r.id">
+        <div class="ct-msg reply" :class="{ 'cmt-hl': r.id === cmtCard.cid }" v-for="r in cmtThread.replies" :key="r.id" :data-cid="r.id">
           <b>{{ r.author || '匿名' }}</b><span class="sub tnum" :title="r.createdAt"> · {{ fmtRel(r.createdAt) }}</span>
           <div class="ct-text">{{ r.text }}</div>
         </div>

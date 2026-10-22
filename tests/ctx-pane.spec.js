@@ -86,3 +86,46 @@ describe('CtxPane：评论出处卡（locateComment，出处=评论的只读查�
     expect(w.find('.ctx-cmt').exists()).toBe(true)                // 插卡不滚动原文，两者共存
   })
 })
+
+describe('CtxPane：活动卡跟随（track——评论出处卡与原文同步切换）', () => {
+  const mountCtx = async () => {
+    const { default: CtxPane } = await import('../src/components/CtxPane.vue')
+    const doc = { content: { blocks: [
+      { id: 'blk-1', type: 'paragraph', text: '正文段落' },
+      { id: 'blk-2', type: 'paragraph', text: '另一段' },
+    ], media: [] } }
+    const comments = [
+      { id: 7, blockId: 'blk-1', origin: 'platform', externalId: '', author: '张三', text: '口径歧义',
+        replyTo: null, resolved: false, createdAt: '2026-10-14 10:00:00' },
+      { id: 9, blockId: '', origin: 'platform', externalId: '', author: '赵六', text: '卡片级疑问',
+        replyTo: null, resolved: false, createdAt: '2026-10-14 11:00:00' }]
+    return mount(CtxPane, { props: { reqId: 'REQ-1', doc, snapshot: null, pendingByBlock: {}, comments, blockText: {} } })
+  }
+  const hlBlk = w => w.find('.ctx-hl').attributes('data-blk')
+
+  it('评论出处卡随活动卡切换：评论题出卡 + 原文定到评论锚定块；非评论题撤卡', async () => {
+    const w = await mountCtx()
+    await w.vm.track({ seq: 'P13', anchor: 'cm-7', cid: 7 })
+    await new Promise(r => setTimeout(r, 20))
+    expect(w.find('.ctx-cmt').text()).toContain('评论出处 P13')
+    expect(w.find('.ctx-cmt [data-cid="7"]').classes()).toContain('cmt-hl')   // 目标消息常驻高亮（vnode 绑定，非瞬态 flash）
+    expect(hlBlk(w)).toBe('blk-1')                                 // 原文同步到评论讨论的那段
+    await w.vm.track({ seq: 'P34', anchor: 'blk-2', cid: null })
+    await new Promise(r => setTimeout(r, 20))
+    expect(w.find('.ctx-cmt').exists()).toBe(false)                // 旧评论卡撤掉，不与活动卡错配
+    expect(hlBlk(w)).toBe('blk-2')
+  })
+
+  it('卡片级评论（无锚定块）：出卡、清原文高亮并提示；follow 关闭时整栏不动', async () => {
+    const w = await mountCtx()
+    await w.vm.track({ seq: 'P01', anchor: 'blk-2', cid: null })
+    await w.vm.track({ seq: 'L01', cid: 9 })
+    await new Promise(r => setTimeout(r, 20))
+    expect(w.find('.ctx-cmt').text()).toContain('卡片级疑问')
+    expect(w.find('.ctx-hl').exists()).toBe(false)
+    expect(w.find('.ctx-from').text()).toContain('卡片级评论')
+    await w.find('.follow').trigger('click')                      // 关闭跟随
+    await w.vm.track({ seq: 'P34', anchor: 'blk-2', cid: null })
+    expect(w.find('.ctx-cmt').exists()).toBe(true)                 // 总闸关闭：评论卡不被撤
+  })
+})

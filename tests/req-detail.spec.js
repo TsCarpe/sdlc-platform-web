@@ -108,7 +108,7 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     await wrapper.findAll('[role="tab"]')[2].trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('问题一？')
-    expect(wrapper.text()).toContain('来自体检.P01')       // 同源徽标保留（§1.2）
+    expect(wrapper.find('.q-col [data-pid="P01"] .ci-head').text()).not.toContain('来自体检')   // v5.4：默认来源不再标注（与编号重复的假链接）
     expect(wrapper.text()).toContain('影响分析')            // audit go/relatedCases 归宿（默认收起的 details）
     expect(wrapper.text()).toContain('写入标准文档 §2 条款')
     expect(wrapper.text()).toContain('一、概述')              // v5.3：组头 = 文档章节（anchor→最近标题）

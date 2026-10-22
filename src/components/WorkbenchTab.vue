@@ -18,6 +18,7 @@ import { lvlLabel, lvlCls } from '../levels.js'
 import { layerShort, layerFull } from '../layers.js'
 import { useGrpCollapse } from '../composables/group-collapse.js'
 import { useModalFocus } from '../composables/modal-focus.js'
+import { ask } from '../confirm.js'
 
 const props = defineProps({
   reqId: { type: String, required: true },
@@ -167,10 +168,22 @@ function activate(it, expand = false) {
     if (!expand) return
     ctxCollapsed.value = false
   }
-  nextTick(() => ctxRef.value?.locateCtx({
+  nextTick(() => ctxRef.value?.track({
     seq: it.seq || pidOf(it.id), src: it.ctx || it.where || '', anchor: it.anchor || '',
-    quote: it.quote || '', ctxText: it.ctx || it.where || ''
+    quote: it.quote || '', ctxText: it.ctx || it.where || '', cid: cmtIdOf(it)
   }))
+}
+/** 卡的评论出处 id：评论锚优先，L 系（评论升级）回落 srcCommentId；非评论出处 null */
+function cmtIdOf(it) {
+  return props.commentAnchorMap[it.anchor] ?? (it.origin === 'local' ? it.srcCommentId ?? null : null)
+}
+/** 显式点评论出处（出处链接 / L 系「来自评论」）：先出卡（不受 follow 限制、悬空回退只读抽屉），
+ *  再走活动卡跟随把原文同步到评论锚定块（track 识别同线程不重插卡） */
+async function openCmtFor(it, cid) {
+  spyHoldUntil = Date.now() + 800
+  activeSeq.value = it.seq || pidOf(it.id)
+  await openCommentInCtx(cid, it.seq || pidOf(it.id))
+  if (hasDoc.value) activate(it)
 }
 /** 显式激活（卡面点击/摘引/跳题/反向角标）：800ms 停摆窗——随后的程序性滚动不被侦测误抢 */
 function activateExplicit(it) {
@@ -181,11 +194,7 @@ function activateExplicit(it) {
  *  无块结构（快照老卡）回退壳层 locate 协议（切 origin needle 定位） */
 function locateInCtx(it) {
   const cid = props.commentAnchorMap[it.anchor]
-  if (cid != null) {
-    activeSeq.value = it.seq || pidOf(it.id)
-    spyHoldUntil = Date.now() + 800
-    return openCommentInCtx(cid, it.seq || pidOf(it.id))
-  }
+  if (cid != null) return openCmtFor(it, cid)
   if (!hasDoc.value) return emit('locate', firstQuote(it.quote) || it.ctx || it.title || it.where, it.anchor)
   activateExplicit(it)
 }
@@ -206,6 +215,7 @@ function locateCheck(seq) {
 let spyT = null
 function onSpyScroll(e) {
   if (e.target !== document && e.target?.closest?.('.ctx-body, .ctx-toc')) return
+  updateMini()   // v5.4 吸顶细条显隐（同步算——不进防抖，滚动中即时出现）
   clearTimeout(spyT)
   spyT = setTimeout(spyActivate, 180)
 }
@@ -254,28 +264,90 @@ const visibleCheckGroups = computed(() => {
       .filter(g => g.items.length || concludedByRaw.value[g.name])
   }
   if (clfFilter.value === 'all') return groups
-  const pred = clfFilter.value === 'pending' ? isPending : isDone
+  // v5.4：「只看待处置」下本次刚处置的卡暂留（linger）——答完即消失会让列表整体上跳、选错找不回；
+  // 切筛选/维度时清空暂留集，才按真实状态隐藏
+  const pred = clfFilter.value === 'pending' ? (it => isPending(it) || linger.has(it.seq)) : isDone
   // #7：三态过滤同口径——done/pending 过滤下已定论块常驻（过滤语义只作用于澄清题）
   return groups
     .map(g => ({ name: g.name, title: g.title, items: g.items.filter(pred) }))
     .filter(g => g.items.length || concludedByRaw.value[g.name])
 })
-const nextUnanswered = computed(() => props.items.find(isPending) || null)
+const linger = reactive(new Set())   // 待处置筛选下本次刚处置、暂不隐藏的 seq
 // #8：过滤视图下组不再折叠，待处置项直接可见——dimFilter 单独变且 clf='all' 时也要展开（旧版漏）
-watch([clfFilter, dimFilter], ([c, d]) => { if (c !== 'all' || d) expandAll(props.groups) })
+watch([clfFilter, dimFilter], ([c, d]) => { linger.clear(); if (c !== 'all' || d) expandAll(props.groups) })
 // #8：hasLayers 翻转为 false（items 重拉无 layer）→ 维度条卸载、唯一取消入口消失——清残留防全栏空死锁
 watch(hasLayers, v => { if (!v) dimFilter.value = '' })
-function jumpNextUnanswered() {
-  const it = nextUnanswered.value
-  if (!it) return
+
+// ===== v5.4 下一待处置：页面卡片显示序（可见组拍平）、当前活动卡之后、到底绕回第一题 =====
+const visibleItems = computed(() => visibleCheckGroups.value.flatMap(g => g.items))
+const hasPendingVisible = computed(() => visibleItems.value.some(isPending))
+/** from 之后（显示序）首个待处置；from 不在可见序（未激活/被过滤）则从头找；全答完返回 null */
+function nextPendingAfter(from) {
+  const list = visibleItems.value
+  const i0 = list.findIndex(it => it.seq === from)
+  for (let k = 1; k <= list.length; k++) {
+    const it = list[(i0 + k + list.length) % list.length]
+    if (isPending(it)) return it
+  }
+  return null
+}
+function goToItem(it) {
   revealGrpFor('check', it.seq)   // 目标组在折叠列表内 → 先展开（跳转协议不因折叠失效）
   activateExplicit(it)            // v5.3：跳题同步活动卡（右栏定位+停摆窗防回抢）
   nextTick(() => {
     const el = document.querySelector(`[data-pid="${it.seq}"]`)
     if (!el) return
     flashEl(el)
-    el.querySelector('textarea')?.focus()
+    el.querySelector('textarea')?.focus({ preventScroll: true })
   })
+}
+function jumpNextUnanswered() {
+  const it = nextPendingAfter(activeSeq.value)
+  if (it) goToItem(it)
+}
+
+// ===== v5.4 作答流两开关（localStorage 记忆，默认开；大进度卡与吸顶细条共用同一状态） =====
+const prefOn = k => localStorage.getItem(k) !== '0'
+const autoNext = ref(prefOn('wb.autoNext'))           // 答完自动下一题
+const autoCollapse = ref(prefOn('wb.autoCollapse'))   // 答完自动收起
+watch(autoNext, v => localStorage.setItem('wb.autoNext', v ? '1' : '0'))
+watch(autoCollapse, v => localStorage.setItem('wb.autoCollapse', v ? '1' : '0'))
+const expanded = reactive({})   // seq → true：收起开关下手动展开的已处置卡（保持展开直到再答一次）
+const editable = computed(() => props.status === 'clarifying' || props.status === 'changed')
+/** 收起摘要行判定：作答态 ∧ 开关开 ∧ 已处置 ∧ 未手动展开（含进页面时即已完成的卡） */
+function isFolded(it) {
+  return editable.value && autoCollapse.value && isDone(it) && !expanded[it.seq]
+}
+/** 摘要行答复文本：已答取 answerText（回退 answer 非 JSON 形态），驳回/挂起取理由 */
+function foldText(it) {
+  if (it.status === 'answered') {
+    const t = it.answerText ?? it.answer ?? ''
+    return t.startsWith('{"kind"') ? '' : t
+  }
+  return it.note || ''
+}
+function expandCard(it) {
+  expanded[it.seq] = true
+  activateExplicit(it)
+}
+/** 处置成功后的推进：待处置筛选下暂留；开关开且仍停在该卡（用户未切走）→ 400ms 后到下一题 */
+function afterDisposed(seq, wasPending) {
+  delete expanded[seq]            // 再答一次 → 收起开关下重新收成摘要
+  if (clfFilter.value === 'pending') linger.add(seq)
+  if (!wasPending || !autoNext.value) return
+  setTimeout(() => {
+    if (activeSeq.value && activeSeq.value !== seq) return
+    const it = nextPendingAfter(seq)
+    if (it) goToItem(it)
+  }, 400)
+}
+
+// ===== v5.4 左栏吸顶细条：顶部大卡滚出（底边越过 tabs 下沿）后显出 =====
+const wbTopEl = ref(null)
+const showMini = ref(false)
+function updateMini() {
+  const el = wbTopEl.value
+  showMini.value = !!el && el.getBoundingClientRect().bottom < 100
 }
 
 // ===== 答复：失焦自动保存 + 行内微状态（保存中/已保存） =====
@@ -349,6 +421,8 @@ function enqueuePut(seq, makeBody) {
 function pickOption(it, key) {
   if (disposeDlg.value) return            // 处置弹窗打开——选项点击抑制（互斥条款 ①）
   if (it.status === 'rejected' || it.status === 'deferred') return
+  const wasPending = isPending(it)
+  if (!wasPending) seedExtra(it)          // v5.4 展开即改：覆盖已答前先播种已存补充说明——全量装配不丢 extra
   picked[it.seq] = key
   const payload = assemblePayload(it)     // 捕获时点装配（结构化 JSON）
   const display = assembleDisplay(it)     // 与服务端 answerText 同构的展示文本
@@ -362,6 +436,7 @@ function pickOption(it, key) {
       ansState.value[it.seq] = 'saved'
       setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
       flushPendingExtra(it, payload)
+      afterDisposed(it.seq, wasPending)
     })
     .catch(e => { delete ansState.value[it.seq]; if (picked[it.seq] === key) delete picked[it.seq]; emit('toast', '保存失败：' + e.message, 'err') })   // #9：失败清乐观选中——条件化（无条件删会误清串行链上排队后续点击的新乐观态）
 }
@@ -427,8 +502,42 @@ async function saveExtra(it) {
  *  （saveExtra 幂等短路，无变更零 PUT）；展开仅置位 */
 function toggleExtra(it) {
   const closing = extraOpen[it.seq]
+  if (!closing && it.status === 'answered') seedExtra(it)   // 已答展开补充：带出已存补充文本再改
   extraOpen[it.seq] = !closing
   if (closing) saveExtra(it)
+}
+
+// ===== v5.4 已答「展开即改」：选项回显 + 已存 extra 播种 =====
+/** 已存答复解析：结构化 JSON → {optionText, extra}；纯文本旧答/纯补充 → {text}；空 → null */
+function parsedAnswer(it) {
+  const a = it.answer || ''
+  if (!a) return null
+  try {
+    const p = JSON.parse(a)
+    if (p && p.kind === 'option') return { optionText: p.optionText || '', extra: p.extra || '' }
+  } catch { /* 纯文本形态 */ }
+  return { text: a }
+}
+/** 当前答复对应的选项 key：本次会话点选优先；否则按选项**全文**匹配（r4#11：optionKey 不做回显
+ *  匹配键——选项可能重生成，key 漂移会错配；全文不等即不高亮，宁缺不错） */
+function curKey(it) {
+  if (picked[it.seq]) return picked[it.seq]
+  const p = parsedAnswer(it)
+  const t = p?.optionText ?? p?.text ?? ''
+  return t ? ((it.options || []).find(o => o.text === t)?.key || '') : ''
+}
+/** 覆盖已答前播种 extra（仅本地无值时）：结构化取 extra；纯文本且非选项全文 = 自由作答，整段视为补充 */
+function seedExtra(it) {
+  if (extra[it.seq]) return
+  const p = parsedAnswer(it)
+  if (!p) return
+  if (p.optionText !== undefined) { if (p.extra) extra[it.seq] = p.extra; return }
+  if (!(it.options || []).some(o => o.text === p.text)) extra[it.seq] = p.text
+}
+/** 清空重答（原「重新作答」）：清空已存答复回待确认——破坏性，二次确认 */
+async function clearAnswer(it) {
+  const ok = await ask({ title: `清空 ${it.seq} 的答复？`, body: '已存答复与补充说明将被清空，该题回到待确认状态。若只想换个选项，直接点其他选项即可覆盖。', danger: true, confirmText: '清空重答' })
+  if (ok) reopen(it)
 }
 
 // ===== 无 options 卡草稿体制（v1.6 二期）：draft/dirty + 懒播种 + items 替换失效重播种 =====
@@ -507,9 +616,11 @@ async function confirmDispose() {
     // set_disposition 是 answer/status/note 三元组整行覆写
     await enqueuePut(dlg.seq, () => ({ status: dlg.status, note: dlg.note.trim() }))
     const it = props.items.find(i => i.seq === dlg.seq)
+    const wasPending = it ? isPending(it) : false
     if (it) { it.status = dlg.status; it.note = dlg.note.trim() }
     disposeDlg.value = null
     emit('toast', `已${dlg.status === 'rejected' ? '驳回' : '挂起'}：${dlg.seq}`)
+    afterDisposed(dlg.seq, wasPending)
   } catch (e) {
     emit('toast', '处置失败：' + e.message, 'err')
   }
@@ -557,7 +668,7 @@ async function reopen(it) {
   </div>
   <template v-else>
     <!-- v5 工作台顶条（§2.1/§2.2）：就绪度覆盖地图（维度条，v1.6 layer 产出后点亮）+ 澄清进度 -->
-    <div class="wb-top" :class="{ duo: hasLayers }" v-if="status === 'clarifying' || status === 'changed'">
+    <div class="wb-top" ref="wbTopEl" :class="{ duo: hasLayers }" v-if="status === 'clarifying' || status === 'changed'">
       <div class="readiness" v-if="hasLayers">
         <h3>需求就绪度 <span class="sub">按缺陷维度看缺口，点维度过滤下方问题</span></h3>
         <div class="rdy-body">
@@ -588,11 +699,16 @@ async function reopen(it) {
         </div>
         <div class="bar"><div class="bar-fill" :style="{ width: prog + '%' }"></div></div>
         <div class="btns">
-          <button class="btn small primary" v-if="nextUnanswered" @click="jumpNextUnanswered">
+          <button class="btn small primary" v-if="hasPendingVisible" @click="jumpNextUnanswered">
             <AppIcon name="arrow-up-right" :size="11" />跳到下一待处置</button>
           <button class="btn small" :class="{ on: clfFilter !== 'all' }" @click="clfFilter = clfFilter === 'all' ? 'pending' : (clfFilter === 'pending' ? 'done' : 'all')">
             {{ clfFilter === 'all' ? '只看待处置' : (clfFilter === 'pending' ? '只看已处置' : '显示全部') }}</button>
           <span class="sub" v-if="allAnswered"><AppIcon name="check-circle" :size="12" style="color:var(--green)" />全部处置完成，可生成标准文档</span>
+        </div>
+        <!-- v5.4 作答流开关（与吸顶细条同一状态） -->
+        <div class="wb-sw">
+          <label class="sw"><input type="checkbox" v-model="autoNext" />答完自动下一题</label>
+          <label class="sw"><input type="checkbox" v-model="autoCollapse" />答完自动收起</label>
         </div>
       </div>
     </div>
@@ -610,6 +726,18 @@ async function reopen(it) {
     <!-- v5 双栏（§2.1）：左问题流 + 右原文上下文侧栏（可拖宽 320-760 / 可收起；无块结构单栏降级） -->
     <div class="wb-grid" :class="{ 'no-ctx': !hasDoc || ctxCollapsed }" :style="gridStyle">
     <div class="q-col" ref="qcol">
+    <!-- v5.4 吸顶细条：零高 sticky 壳 + 绝对定位条（显隐不改文档流高度——v-if 插入 40px 会让滚动中内容整体下跳） -->
+    <div class="wb-mini-wrap" v-if="editable">
+      <div class="wb-mini" :class="{ on: showMini }" :aria-hidden="!showMini">
+        <span class="n"><b>{{ answered }}</b>/{{ totalQ }}</span>
+        <span class="bar"><span class="bar-fill" :style="{ width: prog + '%' }"></span></span>
+        <button class="btn small primary" v-if="hasPendingVisible" :tabindex="showMini ? 0 : -1" @click="jumpNextUnanswered">
+          <AppIcon name="arrow-up-right" :size="11" />下一待处置</button>
+        <span class="sub" v-else-if="allAnswered"><AppIcon name="check-circle" :size="12" style="color:var(--green)" />全部处置完成</span>
+        <label class="sw"><input type="checkbox" v-model="autoNext" :tabindex="showMini ? 0 : -1" />自动下一题</label>
+        <label class="sw"><input type="checkbox" v-model="autoCollapse" :tabindex="showMini ? 0 : -1" />自动收起</label>
+      </div>
+    </div>
     <!-- 左栏问题流：check 组（v5.3 章节分组：title=节名，name=锚键；组内顶部挂同节已定论子折叠块） -->
     <div class="grp" v-for="g in visibleCheckGroups" :key="g.name" :class="{ closed: !openGrps.has(g.name) }">
       <div class="grp-t" @click="toggleGrp(g.name)">
@@ -646,16 +774,28 @@ async function reopen(it) {
         </div>
       </div>
 
-      <div v-for="it in g.items" :key="it.seq" class="check-item" :class="[it.level, { active: activeSeq === it.seq }]" :data-pid="it.seq" @click="activateExplicit(it)">
+      <div v-for="it in g.items" :key="it.seq" class="check-item" :class="[it.level, { active: activeSeq === it.seq, folded: isFolded(it) }]" :data-pid="it.seq" @click="activateExplicit(it)">
+        <!-- v5.4 答完自动收起：已处置卡收成一行摘要，点击展开（展开后可直接改选项） -->
+        <div v-if="isFolded(it)" class="ci-fold" :title="'点击展开 ' + it.seq" @click.stop="expandCard(it)">
+          <AppIcon name="check-circle" :size="13" class="fold-ok" :class="{ muted: it.status !== 'answered' }" />
+          <span class="chip">{{ it.seq }}</span>
+          <span class="fold-st" :class="it.status">{{ dispLabel(it) }}</span>
+          <span class="fold-q">{{ it.question }}</span>
+          <span class="fold-a" v-if="foldText(it)">{{ foldText(it) }}</span>
+          <AppIcon name="chevron-down" :size="13" class="fold-x" />
+        </div>
+        <template v-else>
         <div class="ci-head">
           <span class="badge" :class="lvlCls[it.level]">{{ lvlLabel[it.level] }}</span>
           <span class="chip">{{ it.seq }}</span>
-          <!-- v4 origin 三族（§2/§6.3）：L 系来自评论升级（回链原讨论）；incremental 来自增量质检（变更后局部重检）；skill 来自体检报告 -->
+          <!-- v4 origin 三族（§2/§6.3）：L 系来自评论升级（回链原讨论）；incremental 来自增量质检（变更后局部重检）；
+               skill（体检报告）为默认来源——v5.4 不再标注（与编号重复且是不可点的假链接） -->
           <button class="jump-link" v-if="it.origin === 'local'"
-                  title="由评论升级而来——点击在右栏查看原讨论（只读）" @click="openCommentInCtx(it.srcCommentId, it.seq)">
+                  title="由评论升级而来——点击在右栏查看原讨论（只读）" @click="openCmtFor(it, it.srcCommentId)">
             来自评论<span v-if="it.srcCommentId"> #{{ it.srcCommentId }}</span><AppIcon name="arrow-up-right" :size="11" /></button>
-          <span class="jump-link" v-else-if="it.origin === 'incremental'" title="增量质检产生（变更单确认后的局部重检），处置后可重新发布">来自增量质检</span>
-          <span class="jump-link" v-else title="来自体检报告同源条目">来自体检.{{ it.seq }}</span>
+          <span class="origin-tag" v-else-if="it.origin === 'incremental'" title="增量质检产生（变更单确认后的局部重检），处置后可重新发布">增量质检</span>
+          <button class="btn small link fold-back" v-if="editable && autoCollapse && isDone(it) && expanded[it.seq]"
+                  @click.stop="delete expanded[it.seq]">收起</button>
           <!-- v1.6 缺陷分层（可选）：层名待三期 dimensions.md 契约对齐，一期先 L<n> 数字标签 -->
           <span class="lvl-tag sub" v-if="it.layer" title="缺陷分层（v1.6 可选字段）">L{{ it.layer }}</span>
           <!-- v5.3 章节分组后 theme 降为卡上标签（原需求域语义保留，不再组级呈现） -->
@@ -693,23 +833,20 @@ async function reopen(it) {
           </span>
         </div>
         <!-- v5 选择题化作答（§2.3）：pending = 选项区（AI 推荐常显理由）；answered = 全文快照 + 重新作答
-             （清空重选不预选，r4#11）；无 options 卡走下方 textarea 降级 -->
+             （v5.4 改展开即改：全文匹配回显，仍不以 optionKey 回显，r4#11）；无 options 卡走下方 textarea 降级 -->
         <div class="ans optans" v-else-if="(status === 'clarifying' || status === 'changed') && (it.options || []).length">
           <!-- 变更确认重开的项：原答复在 note——PM 需看到再重新作答 -->
           <div class="sub" v-if="it.status === 'pending' && it.note" style="width:100%;margin:2px 0">{{ it.note }}</div>
-          <template v-if="it.status === 'answered'">
-            <span class="lb">已答复（可修改）</span>
-            <span class="saved" v-if="ansState[it.seq] === 'saved'"><AppIcon name="check-circle" :size="11" />已保存</span>
-            <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
-            <div class="done-ans">
-              <span class="txt">{{ it.answerText ?? it.answer }}</span>
-              <button class="btn small link redo" @click="reopen(it)">重新作答</button>
-            </div>
-          </template>
-          <template v-else>
+          <!-- v5.4 展开即改：已答也渲染选项（全文匹配高亮当前答案），点其他选项直接覆盖保存；
+               清空回待确认改为「清空重答」+ 二次确认（原「重新作答」静默清空） -->
+          <div class="done-ans" v-if="it.status === 'answered'">
+            <span class="lb">当前答复</span>
+            <span class="txt">{{ foldText(it) || '（结构化答复）' }}</span>
+            <span class="sub">点其他选项直接修改</span>
+          </div>
             <div class="opts">
               <button v-for="o in it.options" :key="o.key" class="opt"
-                      :class="{ rec: o.recommended, picked: picked[it.seq] === o.key }"
+                      :class="{ rec: o.recommended, picked: curKey(it) === o.key }"
                       :disabled="!!disposeDlg" @click="pickOption(it, o.key)">
                 <span class="radio"></span>
                 <span class="body">
@@ -722,7 +859,8 @@ async function reopen(it) {
             <div class="ans-ops">
               <button class="btn small link" title="认定不是问题：不进标准文档定稿" @click="askDispose(it, 'rejected')">驳回（不是问题）</button>
               <button class="btn small link" title="本期不处理：合成时转遗留假设" @click="askDispose(it, 'deferred')">挂起（转遗留假设）</button>
-              <button class="more-answer" @click="toggleExtra(it)">{{ extraOpen[it.seq] ? '收起补充说明 ▴' : '以上都不对，我要自己写 ▾' }}</button>
+              <button class="more-answer" @click="toggleExtra(it)">{{ extraOpen[it.seq] ? '收起补充说明 ▴' : (it.status === 'answered' ? '修改补充说明 ▾' : '以上都不对，我要自己写 ▾') }}</button>
+              <button class="btn small link redo" v-if="it.status === 'answered'" title="清空已存答复，回到待确认（二次确认）" @click="clearAnswer(it)">清空重答</button>
               <span class="saved" v-if="ansState[it.seq] === 'saved'"><AppIcon name="check-circle" :size="11" />已保存</span>
               <span class="saved" v-else-if="ansState[it.seq] === 'saving'" style="color:var(--muted)">保存中…</span>
             </div>
@@ -730,7 +868,6 @@ async function reopen(it) {
                       :aria-label="it.seq + ' 补充说明'"
                       placeholder="补充说明：选「其他」时填写具体口径，将写入标准文档对应条款…"
                       @blur="saveExtra(it)" @input="autoGrow"></textarea>
-          </template>
         </div>
         <div class="ans" v-else-if="status === 'clarifying' || status === 'changed'">
           <!-- 标签判定读 draft（输入面）——it.answer 是存储态（二期可为 JSON），不反映输入现场 -->
@@ -747,6 +884,7 @@ async function reopen(it) {
           </div>
         </div>
         <div class="ans" v-else><span class="lb warn">待答复</span></div>
+        </template>
       </div>
       </div></div>
     </div>

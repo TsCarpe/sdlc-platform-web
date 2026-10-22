@@ -1179,6 +1179,8 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 /* v5.3 需求域标签（章节分组后 theme 降为卡上小标签——域名过长省略不挤行） */
 .theme-tag{font-size:11px;color:var(--faint);background:var(--bg-soft);border:1px solid var(--line-soft);
   border-radius:9999px;padding:0 8px;flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* v5.4 出处行内「在快照中定位」（原文摘引块取消后并入）：与出处链接留间距 */
+.check-item .ctx .cite + .loc-snap{margin-left:10px}
 /* v5.4 非默认来源标签（增量质检）：灰色静态标签，不再冒充链接 */
 .origin-tag{font-size:11px;color:var(--amber-deep);background:var(--amber-soft);border-radius:9999px;padding:0 8px;flex:none}
 .ci-head .fold-back{padding:0 6px;font-size:11.5px}

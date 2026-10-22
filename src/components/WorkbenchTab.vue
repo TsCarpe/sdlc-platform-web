@@ -763,10 +763,7 @@ async function reopen(it) {
               <span class="jump-link" title="体检报告已定论条目（未生成澄清题）">来自体检.{{ pidOf(a.id) }}</span>
             </div>
             <div class="q">{{ a.title }}</div>
-            <div class="ctx" v-if="a.where">出处：<a class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">{{ a.where }}<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
-            <blockquote class="quote" v-if="a.quote">
-              <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">在快照中定位<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ a.quote }}
-            </blockquote>
+            <div class="ctx" v-if="a.where || a.quote">出处：<a v-if="a.where" class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">{{ a.where }}<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><a v-if="a.quote" class="cite loc-snap" :class="{ anchored: a.anchor }" :title="'原文摘引：' + a.quote" @click="locateInCtx(a)">在快照中定位<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
             <div class="ctx" v-if="(a.relatedCases || []).length" style="margin-top:6px">
               关联用例：<a class="chip linklike real" v-for="c in a.relatedCases" :key="c" @click="emit('jump', { kind: 'case', id: c })">{{ c }}</a>
             </div>
@@ -802,10 +799,8 @@ async function reopen(it) {
           <span class="theme-tag" v-if="it.theme" :title="'需求域：' + it.theme">{{ it.theme }}</span>
         </div>
         <div class="q">{{ it.question }}</div>
-        <div class="ctx" v-if="it.ctx">出处：<a class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">{{ it.ctx }}<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a></div>
-        <blockquote class="quote" v-if="it.quote">
-          <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">在快照中定位<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ it.quote }}
-        </blockquote>
+        <!-- v5.4 原文摘引块取消（右栏已常驻高亮同段原文）：「在快照中定位」并入出处行，摘引全文进悬停提示 -->
+        <div class="ctx" v-if="it.ctx || it.quote">出处：<a v-if="it.ctx" class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">{{ it.ctx }}<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><a v-if="it.quote" class="cite loc-snap" :class="{ anchored: it.anchor }" :title="'原文摘引：' + it.quote" @click="locateInCtx(it)">在快照中定位<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></div>
         <!-- 影响分析折叠（audit 字段归宿 §1.2）：去向 + 关联用例，默认收起 -->
         <details class="impact" v-if="impactOf(it.seq) && (impactOf(it.seq).go || impactOf(it.seq).relatedCases.length)">
           <summary><AppIcon name="git-branch" :size="11" />影响分析（去向 / 关联用例）</summary>
@@ -904,10 +899,7 @@ async function reopen(it) {
           <span class="jump-link" title="体检报告已定论条目（未生成澄清题）">来自体检.{{ pidOf(a.id) }}</span>
         </div>
         <div class="q">{{ a.title }}</div>
-        <div class="ctx" v-if="a.where">出处：<a class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">{{ a.where }}<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
-        <blockquote class="quote" v-if="a.quote">
-          <span class="qlb">原文摘引 · <a class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">在快照中定位<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></span>{{ a.quote }}
-        </blockquote>
+        <div class="ctx" v-if="a.where || a.quote">出处：<a v-if="a.where" class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">{{ a.where }}<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><a v-if="a.quote" class="cite loc-snap" :class="{ anchored: a.anchor }" :title="'原文摘引：' + a.quote" @click="locateInCtx(a)">在快照中定位<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
         <div class="ctx" v-if="(a.relatedCases || []).length" style="margin-top:6px">
           关联用例：<a class="chip linklike real" v-for="c in a.relatedCases" :key="c" @click="emit('jump', { kind: 'case', id: c })">{{ c }}</a>
         </div>

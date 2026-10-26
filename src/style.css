@@ -387,16 +387,33 @@ tr.row-gap td .gapmark{color:var(--yellow-dark)}
 .cmt-hint{font-size:11px; color:var(--faint)}
 .cmt-hint kbd{font-family:inherit; background:var(--bg-active); border-radius:4px; padding:0 5px; font-size:11px; color:var(--slate)}
 
-/* ===== 文档排版（markdown 渲染与标准文档）：限宽 + 行高 ===== */
+/* ===== 文档排版（markdown 渲染：标准文档/摘要/设计/快照直渲共用） =====
+   基排须全元素覆盖：全局 *{margin:0;padding:0} 后，此处未列出的元素会裸奔回浏览器
+   默认样式（h1 曾以 27px 无间距渲染、ol 无缩进编号贴边、hr 立体灰线、pre 无框），
+   任何产物 markdown 的元素组合都应在此层内闭合；字号只取档内值 */
 .doc{font-size:13.5px}
+.doc h1{font-size:17px; font-weight:650; margin:30px 0 10px; letter-spacing:-.2px; color:var(--ink-deep)}
+.doc > h1:first-child{font-size:19px; margin:0 0 12px}          /* 仅文档首元素 = 主标题（嵌套/中部 h1 不误判，
+                                                                   与 StdTab extractToc 的 firstElementChild 判定同口径） */
 .doc h2{font-size:15px; font-weight:650; margin:20px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--line-soft); letter-spacing:-.1px}
 .doc h3{font-size:14px; font-weight:600; margin:15px 0 6px}
-.doc>p,.doc ul li{max-width:76ch}
+.doc h4{font-size:13.5px; font-weight:650; margin:14px 0 6px}
+.doc h5,.doc h6{font-size:13px; font-weight:600; margin:12px 0 5px; color:var(--charcoal)}
+.doc>p,.doc ul li,.doc ol li{max-width:76ch}
 .doc p{margin:7px 0; line-height:1.75; color:var(--charcoal)}
-.doc ul{margin:7px 0 7px 20px; line-height:1.75}
+.doc ul,.doc ol{margin:7px 0 7px 4px; padding-left:22px; line-height:1.75}   /* ul/ol 同形对齐；padding 容纳两位编号不出界 */
 .doc li{margin:2px 0}
 .doc code{background:var(--bg-active); padding:1px 6px; border-radius:5px; font-size:12px; color:var(--charcoal);
   font-family:var(--font-mono)}
+.doc pre{margin:10px 0; padding:10px 12px; background:var(--bg-soft); border:1px solid var(--line-soft);
+  border-radius:8px; overflow-x:auto; font-family:var(--font-mono); font-size:12px; line-height:1.7}
+.doc pre code{display:block; background:none; padding:0; border-radius:0; font-size:inherit; color:inherit}
+                                                                   /* block 化：mermaid svg 居中不依赖 inline 内匿名块 */
+.doc pre svg{display:block; margin:0 auto}                        /* mermaid 图居中于代码框 */
+.doc hr{border:none; border-top:1px solid var(--line-soft); margin:18px 0}
+.doc img{max-width:100%}
+.doc a{color:var(--blue); text-decoration:none}
+.doc a:hover{text-decoration:underline}
 .doc table{width:100%; border-collapse:collapse; margin:9px 0; font-size:12.5px}
 .doc table th{background:var(--bg-soft); border:1px solid var(--line-soft); padding:6px 10px; text-align:left; font-size:12px; font-weight:600; color:var(--muted)}
 .doc table td{border:1px solid var(--line-soft); padding:6px 10px; line-height:1.65}
@@ -649,6 +666,8 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .toc-side-item:hover{color:var(--text); text-decoration:none}
 .toc-side-item.on{color:var(--blue); font-weight:600; border-left-color:var(--blue); background:var(--blue-light)}
 .toc-side-item.lv1{font-weight:500; color:var(--charcoal)}
+.toc-side-item.lv2 + .toc-side-item.lv1,
+.toc-side-item.lv3 + .toc-side-item.lv1{margin-top:5px}   /* 章级分组间距：仅上一组子节结束时空开（扁平全 lv1 目录不受影响） */
 .toc-side-item.lv2{padding-left:16px}
 .toc-side-item.lv3{padding-left:24px; font-size:11.5px}
 @media (max-width:1150px){

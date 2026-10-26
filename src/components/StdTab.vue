@@ -24,15 +24,23 @@ async function extractToc() {
   await settle(60)
   const box = stdBox.value
   if (!box) return
-  const hs = [...box.querySelectorAll('h2, h3')]
+  const hs = [...box.querySelectorAll('h1, h2, h3')]
   hs.forEach((h, i) => { if (!h.id) h.id = 'stdh-' + i })
-  stdToc.value = hs.map(h => ({ id: h.id, level: h.tagName === 'H2' ? 1 : 2, text: h.textContent.trim().slice(0, 46) }))
+  const lv = { H1: 1, H2: 2, H3: 3 }
+  const body = box.firstElementChild?.tagName === 'H1' ? hs.slice(1) : hs   // 文档首元素为 h1 才视为标题（与 CSS .doc > h1:first-child 同口径）
+  const items = body.map(h => ({ id: h.id, level: lv[h.tagName] || 2, text: h.textContent.trim().slice(0, 46) }))
+  const min = Math.min(...items.map(x => x.level))             // 层级归一：文档最深用到的层级决定缩进档
+  stdToc.value = items.map(x => ({ ...x, level: x.level - min + 1 }))
 }
 onMounted(extractToc)
 watch(stdHtml, extractToc)
 
-/** 当前目录标题元素序列（壳层 onScroll 高亮计算用） */
-function headEls() { return stdBox.value ? [...stdBox.value.querySelectorAll('h2[id],h3[id]')] : [] }
+/** 当前目录标题元素序列（壳层 onScroll 高亮计算用）——与 extractToc 同口径收 h1/h2/h3（首元素标题 h1 同跳过） */
+function headEls() {
+  if (!stdBox.value) return []
+  const els = [...stdBox.value.querySelectorAll('h1[id],h2[id],h3[id]')]
+  return els[0] && els[0] === stdBox.value.firstElementChild && els[0].tagName === 'H1' ? els.slice(1) : els
+}
 defineExpose({ headEls })
 
 /** 标准文档引用点击（事件委托，D7 四类引用） */

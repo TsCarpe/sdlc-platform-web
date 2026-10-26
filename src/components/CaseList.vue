@@ -9,9 +9,53 @@ import Dropdown from './Dropdown.vue'
 import ChipList from './ChipList.vue'
 import EmptyState from './EmptyState.vue'
 
-const emit = defineEmits(['toast'])
+const emit = defineEmits(['toast', 'refresh', 'reload'])
 // fixedReqId：工作台内嵌模式（DESIGN-v2.4 D37）——需求固定，隐藏需求/迭代筛选
-const props = defineProps({ fixedReqId: String })
+// draft：v5.x 批2 测试用例草稿行（迁自 TaskPanel）——仅内嵌模式渲染；独立用例页（App.vue）不传即无此区
+const props = defineProps({ fixedReqId: String, draft: { type: Object, default: null } })
+
+// ===== v5.x 批2：测试用例草稿域（迁自 TaskPanel，确认文案原样；采纳登记后本列表原地刷新） =====
+const casesBusy = ref(false)
+const conflicts = ref(null)       // 采纳 409 冲突明细——留在组件内，切页签即丢（重触发 409 可复现，取舍记录于方案）
+const casesExpanded = ref(false)  // 草稿表：越过限高后可展开全部
+const casesRows = computed(() => {
+  try { return JSON.parse(props.draft?.contentJson || '{}').items || [] } catch { return [] }
+})
+async function approveCases(force) {
+  if (!force && !await ask({
+    title: '采纳测试用例草稿并登记？',
+    body: 'sdlc-test 来源为全量替换语义：不在本次草稿中的 sdlc-test 用例将被同步删除（含评论）。',
+    confirmText: '采纳登记'
+  })) return
+  casesBusy.value = true
+  conflicts.value = null
+  try {
+    const r = await api.post(`/api/requirements/${props.draft.reqId}/drafts/cases/approve`)
+    emit('toast', `用例已登记：新增 ${r.inserted} / 更新 ${r.updated}` + (r.idWarnings?.length ? `；⚠ ${r.idWarnings.join('；')}` : ''))
+    emit('refresh')
+    await load()   // 用户就停在本页签——列表原地刷新（壳层 refresh 不触发本组件 load）
+  } catch (e) {
+    if (e.data?.conflicts) {
+      conflicts.value = e.data.conflicts
+      emit('toast', '用例版本冲突：平台上有人更新过，请裁决', 'err')
+    } else emit('toast', '登记失败：' + e.message, 'err')
+  }
+  finally { casesBusy.value = false }
+}
+async function forceCases() {
+  // 覆盖重推：剥掉 expectedVersion 后重写草稿再采纳
+  try {
+    const p = JSON.parse(props.draft.contentJson)
+    for (const it of p.items || []) delete it.expectedVersion
+    await api.put(`/api/requirements/${props.draft.reqId}/drafts/cases`, { contentJson: JSON.stringify(p) })
+    await approveCases(true)
+  } catch (e) { emit('toast', '覆盖失败：' + e.message, 'err') }
+}
+async function dropCases() {
+  if (!await ask({ title: '丢弃测试用例草稿？', body: '丢弃后如需该产物须重新生成对应任务。', danger: true, confirmText: '丢弃' })) return
+  try { await api.del(`/api/requirements/${props.draft.reqId}/drafts/cases`); conflicts.value = null; emit('toast', '草稿已丢弃'); emit('reload') }
+  catch (e) { emit('toast', '丢弃失败：' + e.message, 'err') }
+}
 const rows = ref([])
 const reqs = ref([])
 const cq = ref({ iter: '', req: props.fixedReqId || '', status: '', tool: '', q: '' })
@@ -254,6 +298,31 @@ async function submitForm() {
 
 <template>
   <div>
+    <!-- v5.x 批2：测试用例草稿卡（迁自 TaskPanel）——待登记时置顶；发布前后均可生成，内嵌模式专属 -->
+    <div class="draft-zone" v-if="props.fixedReqId && draft">
+      <div class="draftbar">
+        <span class="badge b-amber">待登记</span><b>测试用例草稿</b>
+        <span class="chip">{{ casesRows.length }} 条</span>
+        <span class="tp-act">
+          <button class="btn small danger" :disabled="casesBusy" @click="dropCases">丢弃</button>
+          <button class="btn primary" :disabled="casesBusy" @click="approveCases(false)"><AppIcon name="check-circle" :size="13" />采纳登记</button>
+        </span>
+      </div>
+      <div class="tablewrap tp-cases" :class="{ open: casesExpanded }">
+        <table class="table"><thead><tr><th style="width:90px">编号</th><th>标题</th><th style="width:200px">关联需求点</th><th style="width:180px">重点验证</th></tr></thead>
+          <tbody><tr v-for="c in casesRows" :key="c.id">
+            <td><code>{{ c.id }}</code></td><td>{{ c.title }}</td>
+            <td class="sub">{{ (c.points || []).join('、') || '—' }}</td>
+            <td class="sub">{{ (c.verifyRefs || []).join('、') || '—' }}</td>
+          </tr></tbody></table>
+      </div>
+      <div class="banner" v-if="conflicts">
+        <AppIcon name="alert-triangle" :size="14" />
+        <span style="flex:1">版本冲突：{{ conflicts.map(c => `${c.id}（平台 v${c.currentVersion} / 草稿 v${c.expectedVersion}）`).join('、') }}——平台上已有人更新。</span>
+        <button class="btn small" :disabled="casesBusy" @click="forceCases">覆盖平台版本</button>
+      </div>
+    </div>
+
     <details class="cl-note">
       <summary><AppIcon name="info" :size="13" />双来源登记说明</summary>
       <div class="banner blue" style="margin-top:6px">

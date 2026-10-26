@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#e70012" />
+  <title>迭代档案 — SDLC / Persona 5 视觉 Demo</title>
+  <style>
+    :root {
+      --red: #e70012;
+      --red-dark: #b9000e;
+      --ink: #111111;
+      --paper: #f3f0ea;
+      --white: #fffefa;
+      --gray: #8a8680;
+      --line: #d4cfc7;
+      --side: 226px;
+      --display: Impact, Haettenschweiler, "Arial Narrow Bold", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --sans: "Arial Black", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select, textarea { font: inherit; }
+    button, select { cursor: pointer; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+      outline: 3px solid var(--red);
+      outline-offset: 5px;
+    }
+    button { -webkit-tap-highlight-color: transparent; }
+    ::selection { color: var(--white); background: var(--red); }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+    }
+    .icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; flex: 0 0 auto; }
+    .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .skip-link { position: fixed; z-index: 100; top: -60px; left: 16px; background: var(--white); padding: 12px 20px; color: var(--ink); font-weight: 800; }
+    .skip-link:focus { top: 12px; }
+
+    /* 应用壳：像一张被钉在页面上的黑色档案夹。 */
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0; z-index: 20;
+      width: var(--side); padding: 30px 22px 24px;
+      color: var(--white); background: var(--ink);
+      display: flex; flex-direction: column;
+      clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 43%, 100% 66%, calc(100% - 8px) 100%, 0 100%);
+    }
+    .sidebar::before {
+      content: ""; position: absolute; inset: 0; opacity: .09; pointer-events: none;
+      background: repeating-linear-gradient(128deg, transparent 0 13px, #fff 13px 14px, transparent 14px 26px);
+    }
+    .brand { position: relative; display: flex; align-items: center; gap: 11px; margin-bottom: 59px; }
+    .brand-mark {
+      width: 39px; height: 42px; display: grid; place-items: center;
+      background: var(--red); clip-path: polygon(7% 10%, 94% 0, 100% 83%, 22% 100%, 0 75%);
+      transform: rotate(-9deg);
+    }
+    .brand-mark .icon { width: 22px; height: 22px; stroke-width: 2.2; transform: rotate(9deg); }
+    .brand-name { font-family: var(--sans); font-size: 18px; font-weight: 950; line-height: 1; letter-spacing: -.8px; }
+    .brand-name small { display: block; margin-top: 7px; font: 8px/1 var(--mono); letter-spacing: 1.4px; color: #aaa; }
+    .nav-kicker { position: relative; margin: 0 0 16px 7px; font: 9px/1 var(--mono); letter-spacing: 2px; color: #777; }
+    .nav { position: relative; display: grid; gap: 12px; }
+    .nav-item {
+      position: relative; display: flex; align-items: center; gap: 13px;
+      width: calc(100% + 11px); min-height: 48px; padding: 0 13px;
+      border: 0; background: transparent; color: #a7a7a7;
+      font-size: 13px; font-weight: 800; text-align: left;
+      transition: color .16s, transform .16s, background .16s;
+    }
+    .nav-item:hover { color: var(--white); transform: translateX(4px); }
+    .nav-item.active {
+      color: var(--white); background: var(--red);
+      clip-path: polygon(0 8%, 96% 0, 100% 84%, 92% 100%, 3% 91%);
+      transform: rotate(-2deg);
+    }
+    .nav-item.active::before { content: ""; position: absolute; left: -22px; top: 7px; border-top: 17px solid transparent; border-bottom: 17px solid transparent; border-left: 13px solid var(--red); }
+    .nav-item .icon { width: 19px; height: 19px; }
+    .nav-count { margin-left: auto; font: 12px var(--mono); color: #777; }
+    .active .nav-count { color: var(--white); }
+    .sidebar-foot { position: relative; margin-top: auto; padding: 26px 7px 0; }
+    .side-stamp {
+      display: inline-block; padding: 8px 9px 6px; border: 1px solid #4c4c4c;
+      color: #999; font: 9px/1.55 var(--mono); letter-spacing: 1px; transform: rotate(-5deg);
+    }
+    .side-stamp b { color: var(--red); font-size: 13px; }
+    .side-meta { margin: 22px 0 0; font: 9px/1.9 var(--mono); color: #666; letter-spacing: .5px; }
+    .side-meta span { color: #aaa; }
+
+    .page { margin-left: var(--side); min-height: 100vh; overflow: hidden; }
+    .texture {
+      position: fixed; z-index: -1; inset: 0 0 0 var(--side); pointer-events: none;
+      background-image: radial-gradient(#bdb7ae 0.65px, transparent .65px);
+      background-size: 5px 5px; opacity: .38;
+    }
+    .topbar {
+      min-height: 66px; padding: 0 45px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--line); font: 10px var(--mono); letter-spacing: 1px;
+    }
+    .breadcrumb { display: flex; align-items: center; gap: 13px; }
+    .breadcrumb .slash { color: var(--red); font-size: 19px; font-weight: 900; }
+    .breadcrumb strong { font-size: 11px; letter-spacing: 1.4px; }
+    .top-right { display: flex; align-items: center; gap: 25px; }
+    .demo-tag { padding: 5px 8px; background: var(--ink); color: var(--white); font-size: 9px; transform: rotate(1.5deg); }
+    .live { display: flex; align-items: center; gap: 7px; color: #625e58; font-size: 9px; }
+    .live::before { content: ""; width: 6px; height: 6px; background: var(--red); border-radius: 50%; }
+    .top-date { font-size: 10px; }
+    .content { width: min(100%, 1510px); margin: 0 auto; padding: 29px 45px 34px; }
+
+    /* 标题：不做居中卡片，让字形、数字与装饰互相冲撞。 */
+    .hero { position: relative; display: flex; align-items: center; justify-content: space-between; min-height: 137px; margin-bottom: 22px; }
+    .hero-copy { position: relative; z-index: 2; }
+    .eyebrow { display: flex; align-items: center; gap: 10px; font: 10px var(--mono); font-weight: 700; letter-spacing: 2.8px; }
+    .eyebrow::before { content: ""; width: 24px; height: 7px; background: var(--red); transform: skewX(-25deg); }
+    .title-wrap { position: relative; display: inline-block; margin-top: 6px; }
+    h1 {
+      position: relative; z-index: 1; margin: 0; font-family: var(--sans);
+      font-size: clamp(43px, 4.1vw, 63px); font-weight: 950; line-height: 1.18;
+      letter-spacing: -3px; transform: skewX(-7deg);
+    }
+    .title-wrap::after {
+      content: ""; position: absolute; z-index: 0; height: 17px; left: -11px; right: -29px; bottom: -1px;
+      background: var(--red); clip-path: polygon(0 24%, 98% 0, 100% 58%, 89% 68%, 100% 84%, 3% 100%);
+      transform: rotate(-2deg);
+    }
+    .hero-en { position: absolute; left: calc(100% + 19px); bottom: 2px; width: 160px; font: 22px/.92 var(--display); letter-spacing: .7px; transform: rotate(-5deg); }
+    .hero-en span { color: var(--red); }
+    .hero-note { margin: 17px 0 0; font-size: 11px; color: #767169; letter-spacing: .4px; }
+    .hero-note b { color: var(--ink); font-weight: 800; }
+    .hero-art { position: relative; width: 256px; height: 126px; margin-right: 5px; }
+    .hero-number {
+      position: absolute; z-index: 2; right: 47px; top: -16px;
+      font: 130px/.95 var(--display); letter-spacing: -6px; color: var(--red);
+      -webkit-text-stroke: 2px var(--ink); text-shadow: 5px 5px 0 var(--ink);
+      transform: rotate(6deg);
+    }
+    .hero-art-caption { position: absolute; z-index: 3; bottom: 5px; right: 45px; padding: 5px 9px; background: var(--ink); color: var(--white); font: 9px var(--mono); letter-spacing: 1.6px; transform: rotate(-4deg); }
+    .hero-burst { position: absolute; width: 143px; height: 143px; right: -8px; top: -7px; color: var(--ink); transform: rotate(13deg); }
+    .hero-slash { position: absolute; width: 185px; height: 21px; right: -30px; bottom: 3px; background: var(--red); transform: rotate(-30deg); clip-path: polygon(0 26%, 100% 0, 94% 74%, 6% 100%); }
+
+    .stats { display: grid; grid-template-columns: 1.18fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 28px; }
+    .stat {
+      position: relative; min-height: 96px; padding: 15px 20px; border: 0;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: var(--white); text-align: left;
+      clip-path: polygon(0 0, 97% 0, 100% 14%, 100% 100%, 3% 100%, 0 81%);
+      transition: transform .18s, background .18s, color .18s;
+    }
+    .stat::after { content: ""; position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: var(--ink); transform: skewX(-35deg); }
+    .stat:hover { transform: translateY(-4px) rotate(-.6deg); }
+    .stat.active { background: var(--red); color: var(--white); transform: rotate(-1.2deg); }
+    .stat.active::after { background: var(--ink); height: 7px; }
+    .stat.active .stat-label small, .stat.active .stat-icon { color: var(--white); }
+    .stat-label { display: grid; gap: 8px; font-size: 13px; font-weight: 900; }
+    .stat-label small { font: 9px var(--mono); letter-spacing: 1.4px; color: #8c867d; }
+    .stat-number { font: 56px/.85 var(--display); letter-spacing: -1px; }
+    .stat-icon { position: absolute; right: 14px; top: 12px; color: #aaa49b; opacity: .7; }
+    .stat-icon .icon { width: 14px; height: 14px; }
+    .stat.active .stat-number { text-shadow: 2px 2px 0 var(--ink); }
+
+    .toolbar { display: grid; grid-template-columns: minmax(200px, 1fr) auto auto auto; align-items: center; gap: 13px; margin-bottom: 31px; }
+    .search-box { position: relative; display: flex; align-items: center; height: 46px; background: var(--white); border-bottom: 3px solid var(--ink); }
+    .search-box > .icon { margin: 0 13px; width: 18px; height: 18px; }
+    .search-box input { min-width: 0; flex: 1; height: 100%; padding: 0 8px 0 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 12px; }
+    .search-box:focus-within { border-color: var(--red); box-shadow: 0 3px 0 var(--red); }
+    .search-box input:focus-visible { outline: 0; }
+    .search-box input::placeholder { color: #969087; }
+    .keycap { margin-right: 13px; padding: 3px 7px; border: 1px solid #c9c3b9; color: #8f8980; font: 11px var(--mono); }
+    .search-clear { display: none; border: 0; background: transparent; padding: 8px; }
+    .search-clear.visible { display: grid; }
+    .search-clear .icon { width: 15px; height: 15px; }
+    .select-wrap { position: relative; height: 43px; background: var(--white); border: 1px solid #c9c3b9; }
+    .select-wrap select { height: 100%; padding: 0 35px 0 15px; border: 0; appearance: none; background: transparent; font-size: 11px; font-weight: 700; outline-offset: 3px; }
+    .select-wrap > .icon { position: absolute; pointer-events: none; right: 10px; top: 13px; width: 14px; height: 14px; }
+    .create-btn {
+      position: relative; height: 45px; padding: 0 23px; border: 0;
+      display: flex; align-items: center; gap: 10px;
+      background: var(--red); color: var(--white); font-size: 12px; font-weight: 900;
+      clip-path: polygon(4% 0, 100% 6%, 96% 100%, 0 89%);
+      transition: transform .16s, background .16s;
+    }
+    .create-btn:hover { transform: rotate(-2deg) scale(1.035); background: var(--ink); }
+    .create-btn .icon { width: 17px; height: 17px; stroke-width: 2.5; }
+    .toolbar-rule { grid-column: 1 / -1; height: 1px; margin-top: 4px; background: linear-gradient(90deg, var(--ink) 0 50px, var(--line) 50px 100%); }
+
+    .list-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 17px; }
+    .list-title { display: flex; align-items: center; gap: 14px; }
+    .list-title-tag { padding: 6px 9px; background: var(--red); color: var(--white); font: 10px var(--mono); letter-spacing: 1px; transform: rotate(-4deg); }
+    .list-title h2 { margin: 0; font-family: var(--sans); font-size: 21px; letter-spacing: -.6px; }
+    .list-title-count { color: #89837a; font: 11px var(--mono); }
+    .list-heading-note { display: flex; align-items: center; gap: 10px; color: #8a847b; font: 9px var(--mono); letter-spacing: 1px; }
+    .list-heading-note::before { content: ""; width: 37px; height: 1px; background: #aba59b; }
+    .iteration-list { display: grid; gap: 17px; padding: 4px 4px 8px 0; }
+
+    /* 每个迭代都是一张行动卡：信息水平排布，斜切只留在轮廓。 */
+    .iteration-card {
+      --card-bg: var(--white); --card-fg: var(--ink); --card-muted: #817b73;
+      position: relative; width: 100%; min-height: 132px; padding: 21px 23px 18px 0;
+      display: grid; grid-template-columns: 71px minmax(230px, 1.35fr) minmax(255px, 1fr) 135px 23px;
+      align-items: center; gap: 20px; border: 0;
+      background: var(--card-bg); color: var(--card-fg); text-align: left;
+      clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 11px, 100% 100%, 13px 100%, 0 calc(100% - 12px));
+      filter: drop-shadow(3px 3px 0 #c7c0b6);
+      transition: transform .18s, filter .18s;
+      animation: card-in .5s both; animation-delay: calc(var(--order) * 55ms + 120ms);
+    }
+    .iteration-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 7px; background: var(--red); }
+    .iteration-card:hover { transform: translate(-4px, -3px) rotate(-.25deg); filter: drop-shadow(7px 7px 0 var(--ink)); }
+    .iteration-card:focus-visible { outline-offset: 4px; }
+    .iteration-card.featured { --card-bg: var(--ink); --card-fg: var(--white); --card-muted: #aaa; filter: drop-shadow(4px 4px 0 var(--red)); }
+    .iteration-card.featured:hover { filter: drop-shadow(7px 7px 0 var(--red)); }
+    .card-index { position: relative; align-self: stretch; display: flex; align-items: center; justify-content: center; }
+    .card-index::after { content: ""; position: absolute; right: -4px; height: 62%; width: 1px; background: var(--line); transform: skewY(-23deg); }
+    .featured .card-index::after { background: #444; }
+    .index-number { font: 39px/.9 var(--display); color: var(--red); transform: rotate(-7deg); }
+    .card-main { min-width: 0; }
+    .card-overline { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+    .card-status { padding: 3px 6px; background: var(--red); color: var(--white); font-size: 9px; font-weight: 900; line-height: 1.1; transform: skewX(-7deg); }
+    .card-status.neutral { background: #ded9d0; color: var(--ink); }
+    .card-risk { font: 9px var(--mono); font-weight: 700; letter-spacing: .7px; color: var(--card-muted); }
+    .card-risk b { color: var(--red); font-size: 11px; }
+    .card-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--sans); font-size: 21px; font-weight: 950; letter-spacing: -.5px; line-height: 1.25; }
+    .card-requirement { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 8px; color: var(--card-muted); font-size: 11px; line-height: 1.4; }
+    .card-meta { display: flex; align-items: center; gap: 9px; margin-top: 10px; font: 9px var(--mono); color: var(--card-muted); }
+    .card-meta .req-id { color: var(--card-fg); }
+    .meta-dot { width: 3px; height: 3px; background: var(--red); transform: rotate(45deg); }
+    .card-pipeline { min-width: 0; padding: 0 3px; }
+    .pipeline-label { display: block; margin-bottom: 13px; font: 8px var(--mono); letter-spacing: 1.5px; color: var(--card-muted); }
+    .pipeline { display: flex; align-items: flex-start; justify-content: space-between; }
+    .pipeline-step { position: relative; display: grid; justify-items: center; gap: 7px; flex: 1; min-width: 0; color: var(--card-muted); }
+    .pipeline-step:not(:last-child)::after { content: ""; position: absolute; left: calc(50% + 6px); top: 3px; width: calc(100% - 12px); height: 2px; background: #d8d3cc; }
+    .featured .pipeline-step:not(:last-child)::after { background: #4c4c4c; }
+    .pipeline-step.done:not(:last-child)::after, .pipeline-step.current:not(:last-child)::after { background: var(--red); }
+    .pipeline-dot { position: relative; z-index: 1; width: 8px; height: 8px; border: 2px solid #c2bcb2; background: var(--card-bg); transform: rotate(45deg); }
+    .pipeline-step.done .pipeline-dot { background: var(--red); border-color: var(--red); }
+    .pipeline-step.current .pipeline-dot { width: 11px; height: 11px; margin-top: -2px; border: 3px solid var(--red); background: var(--card-bg); box-shadow: 0 0 0 3px var(--card-bg), 0 0 0 4px var(--red); }
+    .pipeline-step.current { color: var(--card-fg); font-weight: 800; }
+    .pipeline-step > span:last-child { font-size: 8px; white-space: nowrap; }
+    .pipeline-status { display: flex; align-items: center; gap: 6px; margin-top: 15px; font-size: 10px; font-weight: 800; }
+    .pipeline-status::before { content: ""; width: 11px; height: 4px; background: var(--red); transform: skewX(-25deg); }
+    .pipeline-status.muted { color: var(--card-muted); font-weight: 400; }
+    .pipeline-status.muted::before { background: #a7a198; }
+    .card-progress { padding-left: 17px; border-left: 1px solid var(--line); }
+    .featured .card-progress { border-color: #444; }
+    .progress-label { display: block; font: 8px var(--mono); letter-spacing: 1.4px; color: var(--card-muted); }
+    .progress-number { display: flex; align-items: baseline; gap: 4px; margin-top: 5px; font-family: var(--display); }
+    .progress-number strong { font-size: 39px; line-height: 1; font-weight: 400; }
+    .progress-number span { font: 13px var(--mono); color: var(--card-muted); }
+    .progress-action { display: block; margin-top: 9px; font-size: 10px; font-weight: 800; }
+    .progress-action b { color: var(--red); margin-left: 5px; }
+    .progress-track { display: block; height: 4px; margin-top: 10px; background: #ded8cf; transform: skewX(-25deg); overflow: hidden; }
+    .featured .progress-track { background: #414141; }
+    .progress-track > span { display: block; height: 100%; background: var(--red); }
+    .card-arrow { justify-self: end; transition: transform .18s; }
+    .card-arrow .icon { width: 24px; height: 24px; stroke-width: 1.4; }
+    .iteration-card:hover .card-arrow { color: var(--red); transform: translate(3px, -3px); }
+    .action-flag {
+      position: absolute; top: -5px; right: 24px; padding: 4px 11px;
+      background: var(--red); color: var(--white); font: 8px var(--mono); letter-spacing: 1px;
+      transform: rotate(2deg); z-index: 2;
+    }
+    .action-flag::after { content: ""; position: absolute; right: -7px; top: 0; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 8px solid var(--red); }
+
+    .list-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 25px; padding-top: 18px; border-top: 1px solid var(--line); color: #827c73; font: 9px var(--mono); letter-spacing: 1px; }
+    .list-footer b { color: var(--ink); }
+    .footer-motto { display: flex; align-items: center; gap: 9px; font-family: var(--sans); font-size: 10px; color: var(--ink); }
+    .footer-motto .icon { width: 16px; height: 16px; color: var(--red); fill: var(--red); }
+    .empty-state { display: none; position: relative; padding: 57px 20px; text-align: center; background: var(--white); clip-path: polygon(0 0, 98% 2%, 100% 95%, 2% 100%); }
+    .empty-state.visible { display: block; }
+    .empty-state .icon { width: 38px; height: 38px; color: var(--red); }
+    .empty-state h3 { margin: 14px 0 8px; font: 22px var(--sans); }
+    .empty-state p { color: #817b72; font-size: 12px; }
+    .empty-state button { margin-top: 12px; border: 0; border-bottom: 2px solid var(--red); background: none; padding: 8px 2px; font-size: 12px; font-weight: 800; }
+
+    /* 演示用新建弹窗与详情抽屉；没有后端写入。 */
+    dialog { color: var(--ink); }
+    dialog::backdrop { background: rgb(0 0 0 / 72%); backdrop-filter: blur(3px); }
+    .form-dialog { width: min(520px, calc(100% - 32px)); padding: 0; border: 0; background: transparent; overflow: visible; }
+    .dialog-cut { position: relative; padding: 33px; background: var(--paper); clip-path: polygon(0 0, 95% 0, 100% 6%, 100% 100%, 5% 100%, 0 94%); }
+    .dialog-cut::before { content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 8px; background: var(--red); }
+    .dialog-close { position: absolute; right: 20px; top: 20px; display: grid; place-items: center; width: 30px; height: 30px; border: 0; background: var(--ink); color: var(--white); transform: rotate(4deg); }
+    .dialog-close .icon { width: 16px; height: 16px; }
+    .dialog-kicker { color: var(--red); font: 10px var(--mono); letter-spacing: 2px; }
+    .dialog-cut h2 { margin: 10px 0 9px; font: 29px var(--sans); letter-spacing: -1px; }
+    .dialog-desc { margin: 0 0 25px; color: #777168; font-size: 11px; line-height: 1.8; }
+    .form-field { display: grid; gap: 8px; margin-top: 18px; }
+    .form-field label { font-size: 11px; font-weight: 900; }
+    .form-field label span { margin-right: 5px; color: var(--red); }
+    .form-field input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid #c9c2b8; background: var(--white); font-size: 12px; }
+    .form-field small { color: #888178; font-size: 10px; }
+    .form-error { min-height: 17px; margin: 12px 0 0; color: var(--red); font-size: 11px; font-weight: 700; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 15px; }
+    .btn { min-height: 40px; padding: 0 19px; border: 1px solid var(--ink); background: transparent; font-size: 11px; font-weight: 800; }
+    .btn.primary { border-color: var(--red); background: var(--red); color: var(--white); }
+    .btn.primary:hover { background: var(--ink); border-color: var(--ink); }
+    .detail-dialog { width: min(530px, 100%); max-width: none; height: 100%; max-height: none; margin: 0 0 0 auto; padding: 0; border: 0; background: var(--paper); }
+    .detail-dialog[open] { animation: drawer-in .25s both; }
+    .detail-inner { position: relative; min-height: 100%; padding: 42px 35px; overflow: hidden; }
+    .detail-inner::after { content: "ITERATION"; position: absolute; bottom: 85px; right: -24px; color: #e3ded5; font: 98px var(--display); transform: rotate(-90deg) translateX(100%); transform-origin: right bottom; pointer-events: none; }
+    .detail-head { position: relative; z-index: 1; padding-bottom: 25px; border-bottom: 3px solid var(--ink); }
+    .detail-head h2 { margin: 14px 35px 10px 0; font: 31px/1.25 var(--sans); letter-spacing: -1px; overflow-wrap: anywhere; }
+    .detail-head .req-id { font: 11px var(--mono); color: #777067; }
+    .detail-section { position: relative; z-index: 1; margin-top: 27px; }
+    .detail-section h3 { margin: 0 0 14px; font: 10px var(--mono); letter-spacing: 1.8px; color: var(--red); }
+    .detail-section p { margin: 0; font-size: 13px; line-height: 1.9; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--ink); border: 1px solid var(--ink); }
+    .detail-stat { padding: 18px; background: var(--white); }
+    .detail-stat small { display: block; margin-bottom: 9px; font-size: 10px; color: #7f786e; }
+    .detail-stat strong { font: 24px var(--display); }
+    .detail-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+    .detail-step { padding: 12px 5px; background: #dfdad1; text-align: center; font-size: 10px; }
+    .detail-step.done { background: var(--ink); color: var(--white); }
+    .detail-step.current { background: var(--red); color: var(--white); font-weight: 800; transform: rotate(-2deg); }
+    .detail-foot { position: relative; z-index: 1; margin-top: 34px; }
+    .detail-foot .btn { width: 100%; height: 48px; }
+    .demo-disclaimer { margin-top: 14px; text-align: center; color: #8c857b; font: 9px/1.6 var(--mono); }
+    .toast { position: fixed; z-index: 80; left: 50%; bottom: 28px; max-width: calc(100% - 32px); padding: 14px 22px; background: var(--ink); color: var(--white); border-left: 5px solid var(--red); font-size: 12px; font-weight: 700; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @keyframes card-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    @media (min-width: 1600px) {
+      :root { --side: 250px; }
+      .sidebar { padding-left: 28px; padding-right: 28px; }
+      .content { padding-top: 40px; }
+      .hero { min-height: 155px; }
+      .iteration-card { min-height: 145px; }
+    }
+    @media (max-width: 1180px) {
+      :root { --side: 188px; }
+      .sidebar { padding: 27px 16px 22px; }
+      .brand { gap: 8px; }
+      .brand-name { font-size: 15px; }
+      .brand-mark { width: 33px; height: 37px; }
+      .topbar, .content { padding-left: 30px; padding-right: 30px; }
+      .hero-en { font-size: 18px; width: 134px; }
+      .hero-art { width: 185px; }
+      .hero-number { right: 26px; font-size: 110px; }
+      .hero-burst { width: 120px; right: -15px; }
+      .iteration-card { grid-template-columns: 53px minmax(190px, 1.3fr) minmax(180px, 1fr) 104px 15px; gap: 13px; padding-right: 16px; }
+      .card-title { font-size: 17px; }
+      .card-progress { padding-left: 11px; }
+      .card-requirement { font-size: 10px; }
+      .pipeline-step > span:last-child { font-size: 7px; }
+      .index-number { font-size: 34px; }
+      .progress-number strong { font-size: 33px; }
+      .toolbar { gap: 9px; }
+      .select-wrap select { padding-left: 10px; }
+      .create-btn { padding: 0 16px; }
+    }
+    @media (max-width: 960px) {
+      .top-right .live { display: none; }
+      .hero-en { display: none; }
+      .stats { gap: 10px; }
+      .stat { padding: 13px; min-height: 87px; }
+      .stat-number { font-size: 45px; }
+      .stat-label { font-size: 11px; }
+      .stat-label small { font-size: 8px; letter-spacing: .6px; }
+      .toolbar { grid-template-columns: 1fr auto auto; }
+      .search-box { grid-column: 1 / -1; }
+      .toolbar-rule { margin-top: 8px; }
+      .iteration-card { grid-template-columns: 46px minmax(180px, 1fr) 110px 17px; gap: 15px; min-height: 120px; }
+      .card-pipeline { grid-column: 2 / 4; grid-row: 2; padding: 2px 0 4px; }
+      .pipeline-label { display: none; }
+      .pipeline-status { display: none; }
+      .card-progress { grid-column: 3; grid-row: 1; }
+      .card-arrow { grid-column: 4; grid-row: 1 / 3; }
+      .card-index { grid-row: 1 / 3; }
+      .card-index::after { height: 78%; }
+    }
+    @media (max-width: 720px) {
+      :root { --side: 0px; }
+      .sidebar { position: relative; width: 100%; height: 67px; padding: 12px 19px; flex-direction: row; align-items: center; clip-path: polygon(0 0, 100% 0, 100% 88%, 70% 100%, 0 92%); }
+      .brand { margin: 0; }
+      .brand-name { font-size: 15px; }
+      .brand-name small { font-size: 7px; margin-top: 5px; }
+      .brand-mark { width: 30px; height: 34px; }
+      .nav-kicker, .sidebar-foot, .nav-count { display: none; }
+      .nav { display: flex; margin-left: auto; gap: 6px; }
+      .nav-item { width: auto; min-height: 36px; padding: 0 10px; gap: 6px; font-size: 10px; }
+      .nav-item .icon { width: 15px; height: 15px; }
+      .nav-item.active::before { display: none; }
+      .page { margin-left: 0; }
+      .texture { inset: 0; }
+      .topbar { min-height: 48px; padding: 0 20px; }
+      .top-date { display: none; }
+      .top-right { gap: 0; }
+      .breadcrumb { font-size: 8px; gap: 8px; }
+      .breadcrumb strong { font-size: 9px; }
+      .demo-tag { font-size: 8px; }
+      .content { padding: 23px 20px 27px; }
+      .hero { min-height: 127px; margin-bottom: 14px; }
+      .hero-art { width: 110px; height: 95px; margin-right: -7px; }
+      .hero-number { right: 5px; top: -3px; font-size: 84px; -webkit-text-stroke: 1px var(--ink); text-shadow: 3px 3px 0 var(--ink); }
+      .hero-burst { width: 89px; height: 89px; top: 0; right: -17px; }
+      .hero-art-caption { right: 0; bottom: 4px; font-size: 7px; padding: 4px 6px; letter-spacing: .8px; }
+      .hero-slash { width: 115px; height: 14px; right: -26px; bottom: 3px; }
+      h1 { font-size: 42px; letter-spacing: -2px; }
+      .eyebrow { font-size: 8px; letter-spacing: 1.8px; }
+      .hero-note { max-width: 225px; font-size: 10px; line-height: 1.7; margin-top: 14px; }
+      .title-wrap::after { height: 12px; right: -14px; }
+      .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 23px; }
+      .stat { min-height: 75px; padding: 12px 16px; }
+      .stat-label { font-size: 11px; gap: 6px; }
+      .stat-number { font-size: 42px; }
+      .stat-label small { font-size: 8px; }
+      .toolbar { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 25px; }
+      .create-btn { grid-column: 2; grid-row: 2; justify-content: center; padding: 0 12px; }
+      .select-wrap { grid-column: 1; grid-row: 2; }
+      .select-wrap select { width: 100%; }
+      .list-heading-note { display: none; }
+      .list-title { gap: 10px; }
+      .list-title h2 { font-size: 19px; }
+      .list-title-tag { font-size: 8px; padding: 5px 7px; }
+      .iteration-list { gap: 15px; }
+      .iteration-card { grid-template-columns: 37px minmax(0, 1fr) 18px; gap: 12px; min-height: 0; padding: 18px 14px 16px 0; }
+      .card-index { grid-row: 1 / 4; }
+      .index-number { font-size: 30px; }
+      .card-main { grid-column: 2; }
+      .card-title { font-size: 18px; }
+      .card-requirement { margin-top: 6px; }
+      .card-meta { font-size: 8px; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+      .card-pipeline { grid-column: 2 / 4; grid-row: 2; margin-top: 5px; }
+      .card-progress { grid-column: 2 / 4; grid-row: 3; border: 0; padding: 0; display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 9px; }
+      .progress-label { font-size: 7px; }
+      .progress-number { margin: 0; gap: 3px; }
+      .progress-number strong { font-size: 24px; }
+      .progress-number span { font-size: 10px; }
+      .progress-action { margin: 0; text-align: right; font-size: 9px; }
+      .progress-track { grid-column: 1 / -1; margin-top: 2px; height: 3px; }
+      .card-arrow { grid-column: 3; grid-row: 1; }
+      .card-arrow .icon { width: 19px; height: 19px; }
+      .card-overline { margin-bottom: 6px; }
+      .card-risk { font-size: 8px; }
+      .action-flag { right: 22px; font-size: 7px; }
+      .list-footer { font-size: 8px; gap: 16px; letter-spacing: .2px; }
+      .footer-motto { font-size: 8px; text-align: right; }
+      .detail-inner { padding: 34px 25px; }
+      .dialog-cut { padding: 29px 24px; }
+    }
+    @media (max-width: 390px) {
+      .brand-name small { display: none; }
+      .nav-item { padding: 0 7px; }
+      .nav-item .icon { display: none; }
+      .hero-art { width: 82px; }
+      .hero-number { font-size: 70px; }
+      .hero-art-caption { display: none; }
+      h1 { font-size: 37px; }
+      .hero-note { max-width: 205px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到迭代列表</a>
+  <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5Z"/><path d="M14 3v5h5M8 12h8M8 16h6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-8l1-7Z"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 14h5l2 3h2l2-3h5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M5 5h14v14"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7L12 2Z"/></symbol>
+  </svg>
+
+  <aside class="sidebar" aria-label="主导航">
+    <div class="brand">
+      <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg></span>
+      <div class="brand-name">SDLC 产物平台<small>DELIVERY / CONTROL</small></div>
+    </div>
+    <p class="nav-kicker">// MAIN MENU</p>
+    <nav class="nav">
+      <button class="nav-item active" type="button" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg><span>迭代</span><span class="nav-count" id="nav-count">08</span></button>
+      <button class="nav-item" type="button" data-demo-nav="需求"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg><span>需求</span><span class="nav-count">200</span></button>
+      <button class="nav-item" type="button" data-demo-nav="用例"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>用例</span><span class="nav-count">357</span></button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="side-stamp"><b>ONE ITERATION.</b><br>ONE MISSION.<br>NO LOOSE ENDS.</div>
+      <p class="side-meta">ITERATION × REQUIREMENT <span>1:1</span><br>TRACE EVERY MOVE. / V5.4</p>
+    </div>
+  </aside>
+
+  <div class="page">
+    <div class="texture" aria-hidden="true"></div>
+    <header class="topbar">
+      <div class="breadcrumb"><span>SDLC PLATFORM</span><span class="slash">/</span><strong>迭代档案</strong></div>
+      <div class="top-right"><span class="demo-tag">VISUAL CONCEPT / 01</span><span class="live">LOCAL DEMO DATA</span><time class="top-date" datetime="2026-10-24">2026.10.24</time></div>
+    </header>
+
+    <main class="content" id="main-content">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <div class="eyebrow">THE NEXT MOVE IS YOURS</div>
+          <div class="title-wrap">
+            <h1 id="page-title">迭代列表</h1>
+            <div class="hero-en" aria-hidden="true">ITERATION<br><span>ARCHIVE.</span></div>
+          </div>
+          <p class="hero-note">从提交到放行，让每一步都有回响。<b>一个迭代，一场全力交付。</b></p>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <svg class="hero-burst" viewBox="0 0 160 160"><path fill="currentColor" d="m79 0 13 30 20-25 2 35 34-16-15 31 27-3-25 25 25 12-34 9 23 25-35-8 4 35-25-25-12 30-11-34-27 23 10-34-35 7 25-25L0 65l35-10L13 29l34 13-2-35 24 27L79 0Z"/><path fill="#f3f0ea" d="m82 32 10 27 28 6-24 17 5 29-24-17-27 12 11-27-19-22 30 1 10-26Z"/></svg>
+          <div class="hero-slash"></div>
+          <span class="hero-number" id="hero-number">08</span>
+          <span class="hero-art-caption">MISSIONS ON RECORD</span>
+        </div>
+      </section>
+
+      <section class="stats" aria-label="按迭代概况筛选">
+        <button class="stat active" type="button" data-stat="all" aria-pressed="true">
+          <span class="stat-label"><small>ALL MISSIONS</small>迭代总数</span><strong class="stat-number" id="count-all">08</strong><span class="stat-icon"><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg></span>
+        </button>
+        <button class="stat" type="button" data-stat="active" aria-pressed="false">
+          <span class="stat-label"><small>IN PROGRESS</small>进行中</span><strong class="stat-number" id="count-active">07</strong><span class="stat-icon"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg></span>
+        </button>
+        <button class="stat" type="button" data-stat="released" aria-pressed="false">
+          <span class="stat-label"><small>RELEASED</small>已放行</span><strong class="stat-number" id="count-released">00</strong><span class="stat-icon"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>
+        </button>
+        <button class="stat" type="button" data-stat="empty" aria-pressed="false">
+          <span class="stat-label"><small>UNASSIGNED</small>空迭代</span><strong class="stat-number" id="count-empty">01</strong><span class="stat-icon"><svg class="icon" aria-hidden="true"><use href="#i-inbox"/></svg></span>
+        </button>
+      </section>
+
+      <section class="toolbar" aria-label="迭代搜索与操作">
+        <div class="search-box">
+          <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <label class="sr-only" for="search">搜索迭代</label>
+          <input id="search" type="search" autocomplete="off" placeholder="搜索迭代名 / 需求名 / 需求编号" />
+          <button class="search-clear" id="search-clear" type="button" aria-label="清空搜索"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+          <kbd class="keycap" aria-hidden="true">/</kbd>
+        </div>
+        <div class="select-wrap">
+          <label class="sr-only" for="status-filter">按状态筛选</label>
+          <select id="status-filter"><option value="all">全部状态</option><option value="clarifying">待澄清</option><option value="submitted">已提交</option><option value="reviewing">质检中</option><option value="published">已发布</option><option value="empty">空迭代</option></select>
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </div>
+        <div class="select-wrap">
+          <label class="sr-only" for="sort">迭代排序</label>
+          <select id="sort"><option value="desc">最新创建</option><option value="asc">最早创建</option><option value="name">按名称</option></select>
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </div>
+        <button class="create-btn" id="open-create" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>新建迭代</button>
+        <div class="toolbar-rule" aria-hidden="true"></div>
+      </section>
+
+      <section aria-labelledby="list-heading">
+        <div class="list-heading">
+          <div class="list-title"><span class="list-title-tag">MISSION LIST</span><h2 id="list-heading">迭代档案</h2><span class="list-title-count" id="result-count">08 RECORDS</span></div>
+          <span class="list-heading-note">CLICK A CARD TO VIEW THE MISSION</span>
+        </div>
+        <div class="iteration-list" id="iteration-list"></div>
+        <div class="empty-state" id="empty-state">
+          <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <h3>没有命中的迭代</h3><p>换个关键词，或者清除当前筛选条件。</p><button type="button" id="reset-filter">重置所有筛选 ↗</button>
+        </div>
+        <footer class="list-footer"><span>SHOWING <b id="footer-count">08 / 08</b> ITERATIONS</span><span class="footer-motto"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg>MAKE EVERY RELEASE COUNT.</span></footer>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="form-dialog" id="create-dialog" aria-labelledby="create-title">
+    <form class="dialog-cut" id="create-form" novalidate>
+      <button class="dialog-close" type="button" data-close="create-dialog" aria-label="关闭新建迭代"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      <span class="dialog-kicker">NEW MISSION / 01</span>
+      <h2 id="create-title">新建迭代</h2>
+      <p class="dialog-desc">迭代与需求 1:1 绑定。先创建任务档案，再进入迭代提交需求，开启完整交付流程。</p>
+      <div class="form-field"><label for="iter-name"><span>*</span>迭代名</label><input id="iter-name" name="name" maxlength="60" placeholder="如 v3.9.0 / 2026-I11" required /><small>迭代名将作为全生命周期的工作上下文</small></div>
+      <div class="form-field"><label for="iter-note">本期目标</label><input id="iter-note" name="note" maxlength="100" placeholder="可选：用一句话定义这次交付" /></div>
+      <p class="form-error" id="form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="btn" type="button" data-close="create-dialog">取消</button><button class="btn primary" type="submit">创建迭代 ↗</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="detail-dialog" id="detail-dialog" aria-labelledby="detail-title">
+    <div class="detail-inner">
+      <button class="dialog-close" type="button" data-close="detail-dialog" aria-label="关闭迭代详情"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      <div id="detail-content"></div>
+      <div class="detail-foot"><button class="btn primary" id="enter-workspace" type="button">进入迭代工作台 ↗</button><p class="demo-disclaimer">VISUAL DEMO ONLY — NO DATA IS SENT TO THE SERVER.</p></div>
+    </div>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // 2026-10-24 页面接口快照；独立静态 Demo，无网络请求、无持久化写入。
+    const seed = [
+      { name: 'v3.8.0 AI会议纪要', note: 'AI 能力进入教研协作新阶段', createdAt: '2026-10-21 14:03:53', reqId: 'REQ-2026-1165', reqName: '本期迭代要做文档中除AI教研报告以外的所有内容', status: 'clarifying', risk: 'B', total: 30, answered: 29, cases: 0, design: 'none', gate: 'none' },
+      { name: '演示-可删除迭代', note: '尚未绑定需求的空迭代', createdAt: '2026-10-21 00:11:27', reqId: null, reqName: null, status: null, risk: '', total: 0, answered: 0, cases: 0, design: 'none', gate: 'none' },
+      { name: 'v0.1-1019', note: '区域成绩分析', createdAt: '2026-10-19 20:32:18', reqId: 'REQ-2026-1164', reqName: '区域成绩分析', status: 'clarifying', risk: 'A', total: 46, answered: 5, cases: 0, design: 'none', gate: 'none' },
+      { name: 'v0.1', note: '区域成绩分析', createdAt: '2026-10-15 09:31:21', reqId: 'REQ-2026-1064', reqName: '区域成绩分析', status: 'submitted', risk: '', total: 0, answered: 0, cases: 0, design: 'none', gate: 'none' },
+      { name: 'v3.7.2-2', note: '教师自评及统一评课模板', createdAt: '2026-10-14 23:32:58', reqId: 'REQ-2026-1063', reqName: 'v3.7.2 支持教师自评及统一评课模板', status: 'submitted', risk: '', total: 0, answered: 0, cases: 0, design: 'none', gate: 'none' },
+      { name: 'v3.7.1', note: '跨校区教研与移动端集备优化', createdAt: '2026-10-14 11:00:24', reqId: 'REQ-2026-1062', reqName: 'V3.7.3 跨校区教研活动及手机端集备优化', status: 'clarifying', risk: 'A', total: 26, answered: 0, cases: 0, design: 'none', gate: 'none' },
+      { name: 'AGENT-E2E', note: '自动化冒烟验证', createdAt: '2026-10-13 22:48:15', reqId: 'REQ-2026-552', reqName: 'AGENT冒烟-144815', status: 'clarifying', risk: 'B', total: 13, answered: 0, cases: 0, design: 'none', gate: 'none' },
+      { name: 'v3.7.2', note: '鸿儒迭代', createdAt: '2026-10-02 12:42:37', reqId: 'REQ-2026-001', reqName: '测试需求', status: 'clarifying', risk: 'B', total: 34, answered: 1, cases: 0, design: 'none', gate: 'none' }
+    ];
+    const statusNames = { submitted: '已提交', reviewing: '质检中', clarifying: '待澄清', published: '已发布' };
+    const steps = ['质检', '澄清', '发布', '设计', '用例', '门禁', '放行'];
+    // 与项目 nodesFromRow 同口径：节点完成度，不混用提问作答进度。
+    function nodeStates(row) {
+      const s = row.status;
+      if (!row.reqId) return steps.map(() => 'todo');
+      return [
+        s === 'submitted' ? 'todo' : s === 'reviewing' ? 'doing' : 'done',
+        s === 'published' ? 'done' : ['clarifying', 'changed'].includes(s) ? 'doing' : 'todo',
+        s === 'published' ? 'done' : 'todo',
+        ['final', 'skipped'].includes(row.design) ? 'done' : row.design === 'draft' ? 'doing' : 'todo',
+        row.cases > 0 ? 'done' : s === 'published' ? 'doing' : 'todo',
+        row.gate === 'released' ? 'done' : row.gate === 'active' ? 'doing' : 'todo',
+        row.gate === 'released' ? 'done' : 'todo'
+      ];
+    }
+    const state = { rows: structuredClone(seed), query: '', stat: 'all', status: 'all', sort: 'desc', selected: null };
+    const $ = id => document.getElementById(id);
+    const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+    const pad = n => String(n).padStart(2, '0');
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+    const stageIndex = row => nodeStates(row).findIndex(stage => stage !== 'done');
+    const blocker = row => {
+      if (!row.reqId) return '等待提交需求';
+      if (row.status === 'submitted') return '已提交 · 启动质检';
+      if (row.status === 'reviewing') return '质检进行中';
+      if (row.status === 'clarifying') return `继续澄清 ${row.answered}/${row.total}`;
+      if (row.status === 'changed') return '变更处理中 · 待增量合并';
+      if (row.status !== 'published') return '—';
+      if (row.gate === 'released') return '已放行归档';
+      if (row.gate === 'active') return '评审处理中';
+      if (row.design === 'draft') return '设计草稿待定稿';
+      if (['final', 'skipped'].includes(row.design)) return '可开评审';
+      return row.cases === 0 ? '生成测试用例' : '生成技术设计';
+    };
+
+    function filteredRows() {
+      const query = state.query.trim().toLocaleLowerCase();
+      return state.rows.filter(row => {
+        if (state.stat === 'active' && (!row.reqId || row.gate === 'released')) return false;
+        if (state.stat === 'released' && row.gate !== 'released') return false;
+        if (state.stat === 'empty' && row.reqId) return false;
+        if (state.status === 'empty' && row.reqId) return false;
+        if (state.status !== 'all' && state.status !== 'empty' && row.status !== state.status) return false;
+        return !query || [row.name, row.reqName, row.reqId, row.note].some(value => (value || '').toLocaleLowerCase().includes(query));
+      }).sort((a, b) => state.sort === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : (Date.parse(a.createdAt.replace(' ', 'T')) - Date.parse(b.createdAt.replace(' ', 'T'))) * (state.sort === 'asc' ? 1 : -1));
+    }
+
+    function cardTemplate(row, index) {
+      const nodeState = nodeStates(row);
+      const stage = nodeState.findIndex(stage => stage !== 'done');
+      const doneCount = nodeState.filter(stage => stage === 'done').length;
+      const progress = Math.round(doneCount / steps.length * 100);
+      const stageLabel = row.reqId && stage >= 0 ? `当前 ${steps[stage]}` : row.gate === 'released' ? '交付完成' : '等待开始';
+      const title = row.reqId ? row.reqName : '尚未提交需求——进入后开启 1:1 绑定';
+      const pipeline = steps.map((step, i) => `<span class="pipeline-step ${nodeState[i] === 'done' ? 'done' : nodeState[i] === 'doing' ? 'current' : ''}"><span class="pipeline-dot"></span><span>${step}</span></span>`).join('');
+      return `<button class="iteration-card ${index === 0 && !state.query && state.stat === 'all' && state.status === 'all' ? 'featured' : ''}" style="--order:${index}" type="button" data-name="${esc(row.name)}" aria-label="打开迭代 ${esc(row.name)}">
+        ${index === 0 && !state.query && state.stat === 'all' && state.status === 'all' ? '<span class="action-flag">NEXT ACTION ↗</span>' : ''}
+        <span class="card-index"><span class="index-number">${pad(index + 1)}</span></span>
+        <span class="card-main">
+          <span class="card-overline"><span class="card-status ${!row.reqId || row.status === 'submitted' ? 'neutral' : ''}">${row.reqId ? statusNames[row.status] || row.status : '空迭代'}</span>${row.risk ? `<span class="card-risk">RISK <b>${row.risk}</b></span>` : ''}</span>
+          <span class="card-title">${esc(row.name)}</span>
+          <span class="card-requirement" title="${esc(title)}">${esc(title)}</span>
+          <span class="card-meta"><span class="req-id">${esc(row.reqId || 'AWAITING REQUIREMENT')}</span><span class="meta-dot"></span><span>${esc(row.createdAt.slice(5, 16))}</span></span>
+        </span>
+        <span class="card-pipeline"><span class="pipeline-label">DELIVERY PIPELINE / ${pad(doneCount)}—07 DONE · ${stageLabel}</span><span class="pipeline">${pipeline}</span><span class="pipeline-status ${!row.reqId ? 'muted' : ''}">${blocker(row)}</span></span>
+        <span class="card-progress"><span class="progress-label">${row.reqId ? 'MISSION PROGRESS' : 'READY TO START'}</span><span class="progress-number"><strong>${row.reqId ? pad(progress) : '00'}</strong><span>%</span></span><span class="progress-action">${row.reqId ? '查看进度' : '提交需求'}<b>↗</b></span><span class="progress-track"><span style="width:${progress}%"></span></span></span>
+        <span class="card-arrow">${icon('arrow')}</span>
+      </button>`;
+    }
+
+    function render() {
+      const rows = filteredRows();
+      $('iteration-list').innerHTML = rows.map(cardTemplate).join('');
+      $('empty-state').classList.toggle('visible', !rows.length);
+      $('result-count').textContent = `${pad(rows.length)} RECORDS`;
+      $('footer-count').textContent = `${pad(rows.length)} / ${pad(state.rows.length)}`;
+      const counts = { all: state.rows.length, active: state.rows.filter(r => r.reqId && r.gate !== 'released').length, released: state.rows.filter(r => r.gate === 'released').length, empty: state.rows.filter(r => !r.reqId).length };
+      Object.entries(counts).forEach(([key, value]) => { $(`count-${key}`).textContent = pad(value); });
+      $('nav-count').textContent = pad(counts.all);
+      $('hero-number').textContent = pad(counts.all);
+      $('search-clear').classList.toggle('visible', !!state.query);
+      document.querySelectorAll('[data-stat]').forEach(button => {
+        const active = button.dataset.stat === state.stat;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+    }
+
+    function resetFilters() {
+      state.query = ''; state.stat = 'all'; state.status = 'all';
+      $('search').value = ''; $('status-filter').value = 'all';
+      render();
+    }
+
+    let toastTimer;
+    function toast(message) {
+      clearTimeout(toastTimer);
+      $('toast').textContent = message;
+      $('toast').classList.add('show');
+      toastTimer = setTimeout(() => $('toast').classList.remove('show'), 3200);
+    }
+
+    function openDetail(name) {
+      const row = state.rows.find(item => item.name === name);
+      if (!row) return;
+      state.selected = row;
+      const stage = stageIndex(row);
+      $('detail-content').innerHTML = `<div class="detail-head"><span class="dialog-kicker">MISSION FILE / ${row.reqId ? 'ACTIVE' : 'UNASSIGNED'}</span><h2 id="detail-title">${esc(row.name)}</h2><span class="req-id">${esc(row.reqId || 'NO REQUIREMENT BOUND')}</span></div>
+        <section class="detail-section"><h3>01 / THE MISSION</h3><p>${esc(row.reqName || row.note || '等待提交需求')}</p></section>
+        <section class="detail-section"><h3>02 / MISSION DATA</h3><div class="detail-grid"><div class="detail-stat"><small>当前状态</small><strong>${row.reqId ? statusNames[row.status] || row.status : '空迭代'}</strong></div><div class="detail-stat"><small>澄清进度</small><strong>${row.answered} / ${row.total}</strong></div><div class="detail-stat"><small>风险等级</small><strong>${row.risk || '—'}</strong></div><div class="detail-stat"><small>用例登记</small><strong>${pad(row.cases)}</strong></div></div></section>
+        <section class="detail-section"><h3>03 / DELIVERY PIPELINE</h3><div class="detail-steps">${steps.map((step, i) => `<span class="detail-step ${i < stage ? 'done' : i === stage ? 'current' : ''}">${pad(i + 1)} ${step}</span>`).join('')}</div></section>
+        <section class="detail-section"><h3>04 / NEXT ACTION</h3><p>${blocker(row)}。${row.reqId ? '打开工作台，继续推进当前环节。' : '绑定一条需求，开启这次交付。'}</p></section>`;
+      $('detail-dialog').showModal();
+    }
+
+    document.querySelectorAll('[data-stat]').forEach(button => button.addEventListener('click', () => {
+      state.stat = state.stat === button.dataset.stat ? 'all' : button.dataset.stat;
+      render();
+    }));
+    $('search').addEventListener('input', event => { state.query = event.target.value; render(); });
+    $('search-clear').addEventListener('click', () => { $('search').value = ''; state.query = ''; render(); $('search').focus(); });
+    $('status-filter').addEventListener('change', event => { state.status = event.target.value; render(); });
+    $('sort').addEventListener('change', event => { state.sort = event.target.value; render(); });
+    $('reset-filter').addEventListener('click', resetFilters);
+    $('iteration-list').addEventListener('click', event => {
+      const card = event.target.closest('[data-name]');
+      if (card) openDetail(card.dataset.name);
+    });
+    $('open-create').addEventListener('click', () => { $('form-error').textContent = ''; $('create-dialog').showModal(); });
+    document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $(button.dataset.close).close()));
+    document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => {
+      if (event.target === dialog) {
+        const rect = dialog.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+      }
+    }));
+    $('create-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const name = $('iter-name').value.trim();
+      const note = $('iter-note').value.trim();
+      if (!name) { $('form-error').textContent = '请填写迭代名。'; $('iter-name').focus(); return; }
+      if (state.rows.some(row => row.name === name)) { $('form-error').textContent = '这个迭代名已存在，请换一个。'; $('iter-name').focus(); return; }
+      const now = new Date();
+      const createdAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+      state.rows.unshift({ name, note, createdAt, reqId: null, reqName: null, status: null, risk: '', total: 0, answered: 0, cases: 0, design: 'none', gate: 'none' });
+      resetFilters();
+      state.sort = 'desc'; $('sort').value = 'desc'; render();
+      event.target.reset(); $('create-dialog').close();
+      toast(`迭代「${name}」已加入本地 Demo`);
+    });
+    $('enter-workspace').addEventListener('click', () => { $('detail-dialog').close(); toast('视觉 Demo：迭代工作台跳转未接入'); });
+    document.querySelectorAll('[data-demo-nav]').forEach(button => button.addEventListener('click', () => toast(`视觉 Demo：「${button.dataset.demoNav}」页面未接入`)));
+    document.addEventListener('keydown', event => {
+      if (event.key === '/' && !document.querySelector('dialog[open]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+        event.preventDefault(); $('search').focus();
+      }
+      if (event.key === 'Escape' && document.activeElement === $('search') && state.query) {
+        $('search').value = ''; state.query = ''; render();
+      }
+    });
+    render();
+  </script>
+</body>
+</html>

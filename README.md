@@ -3,13 +3,13 @@
 需求质检 + 用例登记 + 设计/门禁工作台的 Vue 3 单页应用。零运行时新依赖
 （无 vue-router/状态库/UI 库；跨页跳转内核 `src/trace.js`；markdown 渲染 marked + DOMPurify，唯一例外 mermaid）。
 
-后端在姊妹仓 `sdlc-platform-server`（FastAPI，8080）。
+后端在姊妹仓 `sdlc-platform-server`（FastAPI，8888）。
 
 ## 命令
 
 ```bash
 npm install
-npm run dev      # 5173，/api 代理到 http://127.0.0.1:8080（需后端已启动）
+npm run dev      # 5173，/api 代理到 http://127.0.0.1:8888（需后端已启动）
 npm run build    # 产物 dist/
 ```
 

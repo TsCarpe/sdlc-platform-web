@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>草稿归 tab · 流水线面板专心化 demo</title>
+<style>
+/* ===== 项目 token（src/style.css :root 原样） ===== */
+:root{
+  --canvas:#ffffff; --bg:#f6f7f9; --bg-soft:#fafbfc; --bg-active:#eef0f4;
+  --line:#e4e7ec; --line-soft:#eef0f3; --line-strong:#cfd4dd;
+  --ink-deep:#0f1320; --text:#191c24; --charcoal:#344054;
+  --slate:#475467; --muted:#5d6b81; --stone:#667085; --faint:#8a94a6;
+  --primary:#4f46e5; --primary-pressed:#4338ca;
+  --blue:#4f46e5; --blue-pressed:#4338ca; --blue-light:#eef2ff; --blue-border:#d9ddfc;
+  --green:#067647; --green-vivid:#12b76a; --green-soft:#e5f4ee;
+  --red:#d92d20; --red-deep:#b42318; --red-soft:#fdecea;
+  --amber:#d97706; --amber-deep:#b54708; --amber-soft:#fcf1df;
+  --amber-border:#f3e3c2;
+  --shadow-card:rgba(16,24,40,.05) 0 1px 2px 0;
+  --shadow-pop:rgba(16,24,40,.1) 0 4px 14px -2px;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --z-tabs:40; --z-pop:90; --topbar-h:54px;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,
+  "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:var(--bg); color:var(--text); font-size:14px; line-height:1.6;
+  -webkit-font-smoothing:antialiased}
+button{cursor:pointer; font-family:inherit}
+svg{flex:none; vertical-align:-2px}
+
+/* ===== demo 控制栏（非方案内容） ===== */
+.demo-bar{position:sticky; top:0; z-index:200; background:#0f1320; color:#fff;
+  padding:10px 20px; display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+.demo-bar b{font-size:13.5px}
+.demo-bar .hint{font-size:12px; color:#98a2b3}
+.demo-scenarios{display:flex; gap:6px; flex-wrap:wrap; margin-left:auto}
+.demo-scenarios button{border:1px solid #344054; background:transparent; color:#d0d5dd;
+  border-radius:9999px; padding:3px 12px; font-size:12px}
+.demo-scenarios button.on{background:#4f46e5; border-color:#4f46e5; color:#fff}
+
+/* ===== 页面骨架 ===== */
+.topbar{height:var(--topbar-h); background:var(--bg); border-bottom:1px solid var(--line-soft);
+  display:flex; align-items:center; padding:0 24px; gap:10px}
+.topbar .crumb{color:var(--muted); font-size:13.5px}
+.topbar h1{font-size:15px; font-weight:650}
+.page{max-width:1138px; margin:0 auto; padding:18px 24px 60px}
+
+.card{background:var(--canvas); border:1px solid var(--line-soft); border-radius:12px;
+  padding:16px 20px; margin-bottom:14px; box-shadow:var(--shadow-card)}
+.btn{border:1px solid var(--line-strong); background:var(--canvas); color:var(--text); border-radius:8px;
+  padding:6px 14px; font-size:13px; font-weight:500; display:inline-flex; align-items:center; gap:6px;
+  transition:background .13s ease, border-color .13s ease}
+.btn:hover{border-color:var(--faint); background:var(--bg-soft)}
+.btn.primary{background:var(--primary); border-color:var(--primary); color:#fff}
+.btn.primary:hover{background:var(--primary-pressed); border-color:var(--primary-pressed)}
+.btn.small{padding:3px 10px; font-size:12px}
+.btn.link{border:none; background:none; color:var(--blue); padding:3px 6px; font-weight:500; border-radius:6px}
+.btn.link:hover{background:var(--blue-light); color:var(--blue-pressed)}
+.btn.danger{color:var(--red); border-color:#f2b8b3; background:var(--canvas)}
+.btn.danger:hover{background:var(--red-soft); border-color:var(--red)}
+.badge{font-size:11.5px; font-weight:600; padding:2px 9px 2px 7px; border-radius:9999px; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:5px; line-height:1.6}
+.badge::before{content:""; width:5px; height:5px; border-radius:50%; background:currentColor; flex:none}
+.b-gray{background:var(--bg-active); color:var(--slate)}
+.b-blue{background:var(--blue-light); color:var(--blue)}
+.b-amber{background:var(--amber-soft); color:var(--amber-deep)}
+.b-green{background:var(--green-soft); color:var(--green)}
+.b-red{background:var(--red-soft); color:var(--red-deep)}
+.chip{font-size:11.5px; background:var(--canvas); border:1px solid var(--line); color:var(--slate);
+  padding:1px 9px; border-radius:9999px; margin-right:5px; display:inline-block; line-height:1.7; white-space:nowrap}
+.chip.warn{background:var(--red-soft); border-color:transparent; color:var(--red-deep)}
+.sub{font-size:12px; color:var(--muted)}
+.detail-h{display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap}
+.detail-h h2{font-size:19px; font-weight:650; letter-spacing:-.2px; color:var(--ink-deep)}
+.meta{font-size:12.5px; color:var(--muted); margin-bottom:4px; display:flex; gap:18px; flex-wrap:wrap}
+.meta span{display:inline-flex; align-items:center; gap:5px}
+.tabs{display:flex; gap:2px; margin:14px 0 18px; border-bottom:1px solid var(--line); overflow-x:auto}
+.tab{padding:8px 14px 9px; background:none; border:none; color:var(--muted); font-size:13.5px; font-weight:500;
+  position:relative; white-space:nowrap; transition:color .13s ease}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--text); font-weight:600}
+.tab.on::after{content:""; position:absolute; left:8px; right:8px; bottom:-1px; height:2px;
+  background:var(--blue); border-radius:2px}
+.tab .n{font-size:11px; font-weight:600; background:var(--bg-active); color:var(--muted);
+  border-radius:9999px; padding:0 6px; margin-left:5px; line-height:17px; display:inline-block}
+.tab .n.warn{background:var(--red-soft); color:var(--red-deep)}
+.tab .n.num{background:var(--blue-light); color:var(--blue)}
+/* 草稿待处理角标：琥珀点（本方案新增） */
+.tab .n.draft{background:var(--amber-soft); color:var(--amber-deep)}
+.spin{width:12px; height:12px; border:2px solid var(--line); border-top-color:var(--blue);
+  border-radius:50%; display:inline-block; animation:tpspin .9s linear infinite; flex:none}
+@keyframes tpspin{to{transform:rotate(360deg)}}
+.tablewrap{overflow-x:auto}
+.table{width:100%; border-collapse:separate; border-spacing:0; background:var(--canvas);
+  border:1px solid var(--line-soft); border-radius:11px; overflow:hidden}
+.table th{background:var(--bg-soft); text-align:left; font-size:12px; color:var(--muted); font-weight:600;
+  padding:8px 14px; border-bottom:1px solid var(--line-soft)}
+.table td{padding:10px 14px; border-bottom:1px solid var(--line-soft); vertical-align:middle; font-size:13.5px}
+.table tbody tr:last-child td{border-bottom:none}
+code{font-family:var(--font-mono); font-size:12px; background:var(--bg-soft);
+  border:1px solid var(--line-soft); border-radius:5px; padding:0 5px}
+.banner{display:flex; align-items:center; gap:10px; border:1px solid var(--blue-border);
+  background:var(--blue-light); color:var(--blue); border-radius:10px; padding:9px 14px;
+  font-size:13px; margin-bottom:14px}
+/* 空态（EmptyState 简版） */
+.empty{text-align:center; padding:46px 20px; color:var(--muted)}
+.empty .e-ico{font-size:22px; opacity:.6}
+.empty .e-t{font-size:13.5px; font-weight:600; color:var(--charcoal); margin-top:8px}
+.empty .e-d{font-size:12.5px; margin-top:4px}
+
+/* ============================================================
+   ① 流水线面板（专心版：无草稿内容，只管任务）
+   ============================================================ */
+.taskpanel{margin:14px 0; border-left:3px solid var(--blue)}
+.tp-bar{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.tp-title{font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:6px}
+.tp-stages{display:flex; gap:12px; flex-wrap:wrap; font-size:12.5px; color:var(--slate)}
+.tp-stage{display:inline-flex; align-items:center; gap:5px}
+.st-dot{width:7px; height:7px; border-radius:50%; background:var(--line-strong); flex:none}
+.st-dot.done{background:var(--green-vivid)}
+.st-dot.failed{background:var(--red)}
+.st-dot.running{background:var(--blue); animation:tpspin 1.1s linear infinite}
+.tp-actions{margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.tp-more{position:relative; display:inline-flex}
+.tp-more summary{list-style:none; display:inline-flex; align-items:center; justify-content:center;
+  width:29px; height:29px; border-radius:8px; color:var(--slate); transition:background .13s}
+.tp-more summary::-webkit-details-marker{display:none}
+.tp-more summary:hover{background:var(--bg-active); color:var(--text)}
+.tp-more[open] summary{background:var(--blue-light); color:var(--blue)}
+.tp-more-panel{position:absolute; top:calc(100% + 6px); right:0; z-index:var(--z-pop); min-width:220px;
+  background:var(--canvas); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow-pop);
+  padding:5px; display:flex; flex-direction:column}
+.tp-more-item{display:flex; align-items:center; gap:8px; width:100%; text-align:left; border:none;
+  background:none; color:var(--text); font-size:13px; font-weight:500; padding:7px 10px; border-radius:7px}
+.tp-more-item:hover{background:var(--bg-soft)}
+.tp-more-item:disabled{color:var(--faint); cursor:not-allowed; background:none}
+.tp-more-item .sub{display:block; font-weight:400}
+.tp-task{display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; flex-wrap:wrap}
+.tp-task .sub{max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.tp-task .sub.err{color:var(--red)}
+.tp-hist{margin-top:8px; border-top:1px dashed var(--line); padding-top:6px}
+.tp-hist summary{display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:12px;
+  color:var(--stone); user-select:none; white-space:nowrap}
+.tp-hist summary:hover{color:var(--blue)}
+.tp-hist .tp-task:first-of-type{margin-top:8px}
+
+/* ============================================================
+   ② tab 内草稿态（决策条置顶 + 内容区）
+   ============================================================ */
+.draftbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px;
+  border:1px solid var(--amber-border); background:var(--amber-soft); border-radius:10px;
+  padding:10px 14px; margin-bottom:14px}
+.draftbar.blue{border-color:var(--blue-border); background:var(--blue-light); color:var(--blue)}
+.draftbar b{font-size:13.5px; color:inherit}
+.draftbar .tp-act{margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.tp-modes{display:flex; gap:6px; align-items:center; margin:0 0 10px; flex-wrap:wrap}
+.tp-modes .tp-on{background:var(--blue-light); border-color:var(--blue)}
+.tp-editor{width:100%; min-height:340px; max-height:60vh; overflow-y:auto; font-family:var(--font-mono);
+  font-size:12.5px; line-height:1.7; padding:12px 14px; border:1px solid var(--line); border-radius:8px;
+  resize:vertical; background:var(--canvas); color:var(--text); tab-size:2}
+.tp-editor:focus{border-color:var(--blue); box-shadow:0 0 0 3px rgba(79,70,229,.12); outline:none}
+.doc{background:var(--canvas); border:1px solid var(--line); border-radius:10px; padding:14px 20px;
+  font-size:13.5px; line-height:1.75; color:var(--charcoal)}
+.doc h3{font-size:14px; margin:14px 0 6px; color:var(--ink-deep)}
+.doc h4{font-size:13px; margin:12px 0 4px; color:var(--charcoal)}
+.doc p{margin:6px 0}
+.doc li{margin:3px 0 3px 20px}
+.tp-cases{max-height:48vh; overflow:auto}
+details.tp-peek summary{cursor:pointer; font-size:12px; color:var(--stone); user-select:none;
+  display:inline-flex; align-items:center; gap:5px; margin-bottom:8px}
+details.tp-peek summary:hover{color:var(--blue)}
+
+/* 摘要正式态示意（简化） */
+.mini-cards{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px}
+.mini{border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:12.5px; color:var(--slate)}
+.mini b{display:block; font-size:13px; color:var(--charcoal); margin-bottom:4px}
+
+/* ===== 场景/形态切换 ===== */
+.scenario{display:none}
+.scenario.on{display:block}
+.phase-b{display:none}
+.scenario.adopted .phase-a{display:none}
+.scenario.adopted .phase-b{display:block}
+/* 场景内多 tab：面板按 data-panel 显隐 */
+.tabpanel > [data-panel]{display:none}
+.tabpanel > [data-panel].on{display:block}
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <b>demo · 草稿归 tab，流水线面板专心化</b>
+  <span class="hint">草稿态在对应 tab 内完成「预览→采纳/发布」转换 · tab 琥珀角标提示待处理 · 面板只管任务</span>
+  <div class="demo-scenarios" id="scn">
+    <button data-s="A" class="on">A 质检三件套待采纳</button>
+    <button data-s="B">B 标准文档待发布</button>
+    <button data-s="C">C 变更·增量待采纳</button>
+    <button data-s="D">D 用例待登记</button>
+  </div>
+</div>
+
+<div class="topbar">
+  <span class="crumb">迭代列表 /</span>
+  <h1>v3.8.0-1</h1>
+</div>
+
+<div class="page">
+  <button class="btn link" style="margin-bottom:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>返回列表</button>
+
+  <div class="detail-h">
+    <h2>v3.8.0-1 数据面板升级需求</h2>
+    <span class="chip">REQ-2026-0801</span>
+    <span class="chip">v3.8.0-1</span>
+    <span class="badge b-amber" data-cls="A:reviewing,B:clarifying,C:changed,D:clarifying" data-adopted-cls="A:clarifying,B:published,C:changed,D:clarifying" id="st-badge">质检中</span>
+    <span class="badge b-red">A级</span>
+  </div>
+  <div class="meta">
+    <span>来源：飞书文档</span>
+    <span>张三 · 3 天前</span>
+    <span>同步 2 小时前</span>
+  </div>
+
+  <!-- ============================================================
+       流水线面板（专心版 · 四场景共用骨架，阶段点/CTA 由 JS 驱动）
+       ============================================================ -->
+  <div class="card taskpanel">
+    <div class="tp-bar">
+      <div class="tp-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 4.9-9 4.9-9-4.9Z"/><path d="m3 11.9 9 4.9 9-4.9M3 16.9l9 4.9 9-4.9"/></svg>线上流水线</div>
+      <div class="tp-stages" id="stages"></div>
+      <div class="tp-actions">
+        <button class="btn small primary" id="cta"></button>
+        <button class="btn small" title="基于质检产物生成测试用例（发布前后均可）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></svg>生成用例</button>
+        <details class="tp-more">
+          <summary title="低频流水线任务"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></summary>
+          <div class="tp-more-panel">
+            <button class="tp-more-item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>重新质检</button>
+            <button class="tp-more-item" disabled><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>生成标准文档<span class="sub" id="more-std-note">（18 问未答）</span></button>
+            <button class="tp-more-item" data-changed-only style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>增量质检</button>
+          </div>
+        </details>
+      </div>
+    </div>
+    <details class="tp-hist" id="hist"></details>
+  </div>
+
+  <!-- ============================================================
+       Tabs（角标随场景/形态变）
+       ============================================================ -->
+  <div class="tabs" role="tablist" aria-label="需求页签" id="tabs">
+    <button class="tab" data-tab="origin">原始需求</button>
+    <button class="tab" data-tab="digest">需求摘要<span class="n" id="n-digest"></span></button>
+    <button class="tab" data-tab="checklist">澄清工作台<span class="n warn" id="n-check">18</span></button>
+    <button class="tab" data-tab="std">标准需求文档<span class="n" id="n-std"></span></button>
+    <button class="tab" data-tab="changes">变更<span class="n" id="n-chg"></span></button>
+    <button class="tab" data-tab="cases">用例<span class="n" id="n-cases"></span></button>
+  </div>
+
+  <div class="tabpanel">
+
+    <!-- 原始需求（通用示意） -->
+    <div data-panel="origin">
+      <div class="card doc">
+        <h3>数据面板升级需求</h3>
+        <p>当前数据面板仅支持 T+1 离线指标，运营侧无法在活动期间实时观察转化漏斗……</p>
+        <h4>详述 1. 实时指标</h4>
+        <ul><li>1.1 覆盖转化漏斗 / 留存 / 活跃三类指标</li><li>1.2 冷备通道：实时链路故障时降级回 T+1</li></ul>
+      </div>
+    </div>
+
+    <!-- 需求摘要 -->
+    <div data-panel="digest">
+      <!-- 场景 A · 草稿态 -->
+      <div class="phase-a" data-scn="A">
+        <div class="draftbar">
+          <span class="badge b-amber">待确认</span><b style="color:var(--amber-deep)">质检三件套草稿</b>
+          <span class="chip">澄清问题 18</span><span class="chip">需求点 14</span>
+          <span class="chip">原文块 96</span><span class="chip">体检问题 7</span>
+          <span class="tp-act">
+            <button class="btn danger small">丢弃</button>
+            <button class="btn primary" id="adopt-digest"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>采纳（进入待澄清）</button>
+          </span>
+        </div>
+        <details class="tp-peek" open>
+          <summary>预览摘要正文（采纳前可展开核对）</summary>
+          <div class="card doc">
+            <h3>需求理解卡</h3>
+            <p>本需求旨在为运营团队提供实时数据看板能力，核心角色为运营专员与数据分析师……</p>
+            <h4>FR-01 实时指标接入</h4>
+            <p>覆盖转化漏斗 / 留存 / 活跃三类指标（出处：详述1.1）</p>
+            <h4>FR-02 冷备降级</h4>
+            <p>实时链路故障时自动降级回 T+1 链路（出处：详述1.2）</p>
+          </div>
+        </details>
+      </div>
+      <!-- 已采纳正式态（A 采纳后 / B C D 场景通用） -->
+      <div class="phase-b" data-scn="A">
+      </div>
+      <div data-scn="BCD" class="digest-final">
+        <div class="mini-cards">
+          <div class="mini"><b>AI 理解摘要</b>为运营团队提供实时数据看板：实时链路 + 冷备降级，核心指标延迟 24h → 5min</div>
+          <div class="mini"><b>就绪度</b>14 需求点 · 18 待澄清 · 体检 7 项（2 阻断 / 5 建议）</div>
+        </div>
+        <div class="card doc">
+          <h3>功能点地图</h3>
+          <p><b>⭐ 实时指标</b>：FR-01 指标接入 · FR-02 冷备降级　<b>告警通知</b>：FR-09 延迟告警 · FR-10 口径统一</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 澄清工作台（通用示意） -->
+    <div data-panel="checklist">
+      <div class="empty"><div class="e-ico">✎</div><div class="e-t">18 问待答 · 按文档章节分组</div><div class="e-d">（正式态示意，略）</div></div>
+    </div>
+
+    <!-- 标准需求文档 -->
+    <div data-panel="std">
+      <!-- 场景 B · 草稿编辑态 -->
+      <div class="phase-a" data-scn="B">
+        <div class="draftbar">
+          <span class="badge b-amber">待发布</span><b style="color:var(--amber-deep)">标准需求文档草稿</b>
+          <span class="chip">6 章 · 14 需求点</span>
+          <span class="tp-act">
+            <button class="btn danger small">丢弃</button>
+            <button class="btn primary" id="publish-std"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>发布（终态锁定）</button>
+          </span>
+        </div>
+        <div class="tp-modes">
+          <button class="btn small tp-on" data-mode="edit">编辑</button>
+          <button class="btn small" data-mode="preview">渲染预览</button>
+          <span class="sub" style="flex:1"></span>
+          <button class="btn small"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>保存草稿</button>
+        </div>
+        <textarea class="tp-editor" data-mode-box="edit" spellcheck="false"># 数据面板升级需求（标准文档）
+
+## 1. 背景与目标
+当前数据面板仅支持 T+1 离线指标，运营侧无法在活动期间实时观察转化漏斗。
+本次升级引入实时链路，目标将核心指标延迟从 24h 降至 5min 以内。
+
+## 2. 术语定义
+- **实时指标**：写入后 5 分钟内可在面板查询的指标
+- **冷备通道**：实时链路故障时降级回 T+1 的兜底链路
+
+## 3. 功能需求
+### FR-01 实时指标接入
+面板接入 flink 实时计算结果，覆盖转化漏斗 / 留存 / 活跃三类指标。
+
+（此处省略约 400 行……tab 内不限高，编辑器自身可滚）</textarea>
+        <div class="card doc" data-mode-box="preview" style="display:none">
+          <h3>数据面板升级需求（标准文档）</h3>
+          <h4>1. 背景与目标</h4>
+          <p>当前数据面板仅支持 T+1 离线指标……本次升级引入实时链路，目标将核心指标延迟从 24h 降至 5min 以内。</p>
+        </div>
+      </div>
+      <!-- B 发布后正式态 -->
+      <div class="phase-b" data-scn="B">
+        <div class="banner"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+          <span>重写版定稿：以原始需求全文为底稿，整合体检定论与澄清答复——开发 / AI 读这一份即可获得需求全貌。全文 <b>FR / 体检.P</b> 引用可点击跳转。</span></div>
+        <div class="card doc">
+          <h3>数据面板升级需求（标准文档）</h3>
+          <h4>1. 背景与目标</h4>
+          <p>当前数据面板仅支持 T+1 离线指标……本次升级引入实时链路，目标将核心指标延迟从 24h 降至 5min 以内。</p>
+          <h4>3. 功能需求</h4>
+          <ul><li>FR-01 实时指标接入（详述1.1）</li><li>FR-09 延迟告警推送（详述2.1）</li></ul>
+        </div>
+      </div>
+      <!-- 场景 C · changed 只读预览（增量采纳前后都是它） -->
+      <div data-scn="C">
+        <div class="draftbar blue">
+          <span class="badge b-blue">待重新发布</span><b>标准需求文档草稿</b>
+          <span class="tp-act">
+            <button class="btn danger small">丢弃</button>
+            <button class="btn primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>从草稿预览发布（终态）</button>
+          </span>
+        </div>
+        <div class="sub" style="margin-bottom:8px">变更中发布以草稿为唯一内容源（逐字节一致），不可手改</div>
+        <div class="card doc">
+          <h3>数据面板升级需求（标准文档）</h3>
+          <p>（变更后草稿预览——按新口径重写第一节，新增实时链路降级条款……）</p>
+        </div>
+      </div>
+      <!-- 场景 A / D：尚未生成 -->
+      <div data-scn="AD">
+        <div class="empty"><div class="e-ico">📄</div><div class="e-t">标准需求文档尚未生成</div><div class="e-d">澄清全部答完后，在流水线面板「生成标准文档」，草稿会回到本页签编辑与发布</div></div>
+      </div>
+    </div>
+
+    <!-- 变更 -->
+    <div data-panel="changes">
+      <!-- 场景 C · 增量草稿待采纳 -->
+      <div class="phase-a" data-scn="C">
+        <div class="draftbar">
+          <span class="badge b-amber">待确认</span><b style="color:var(--amber-deep)">增量合并草稿</b>
+          <span class="chip">变更单 #162</span><span class="chip">章节 2</span><span class="chip">FR +2/-1</span><span class="chip">作废 3</span><span class="chip">风险 C</span>
+          <span class="tp-act">
+            <button class="btn danger small">丢弃</button>
+            <button class="btn primary" id="adopt-inc"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>采纳（服务端机械合并）</button>
+          </span>
+        </div>
+        <div style="font-size:12.5px; color:var(--slate); margin-bottom:8px">
+          <span style="font-weight:600; color:var(--charcoal)">受影响章节</span>
+          <span class="chip">背景与边界</span><span class="chip">功能需求</span>
+          <span style="font-weight:600; color:var(--charcoal); margin-left:10px">摘要</span>按新口径重写第一节
+        </div>
+        <div class="tablewrap tp-cases">
+          <table class="table">
+            <thead><tr><th style="width:88px">类别</th><th>新增行</th><th style="width:150px">锚点</th></tr></thead>
+            <tbody>
+              <tr><td><span class="chip">功能点</span></td><td>实时指标冷备通道</td><td class="sub"><code>详述1.2</code></td></tr>
+              <tr><td><span class="chip">需求点</span></td><td>FR-09 延迟告警推送</td><td class="sub"><code>详述2.1</code></td></tr>
+              <tr><td><span class="chip">体检</span></td><td>P9 降级条款缺验收口径</td><td class="sub"><code>详述1.2</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:8px; font-size:12.5px; color:var(--slate)">
+          <span style="font-weight:600; color:var(--charcoal)">移除 / 作废</span>
+          <span class="chip warn">FR 需求.FR-02</span><span class="chip warn"><code>旧锚点-a</code></span>
+        </div>
+      </div>
+      <!-- C 采纳后 / 通用：变更单列表 -->
+      <div class="phase-b" data-scn="C">
+        <div class="card" style="padding:0">
+          <table class="table">
+            <thead><tr><th style="width:70px">#</th><th>标题</th><th style="width:100px">类型</th><th style="width:90px">状态</th><th style="width:110px">确认时间</th></tr></thead>
+            <tbody>
+              <tr><td><code>162</code></td><td>新增冷备通道条款</td><td><span class="badge b-blue">人工变更</span></td><td><span class="badge b-blue">已确认</span></td><td class="sub">5 分钟前</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div data-scn="ABD">
+        <div class="empty"><div class="e-ico">±</div><div class="e-t">暂无变更单</div><div class="e-d">需求发布后可发起变更；增量合并草稿也会回到本页签处理</div></div>
+      </div>
+    </div>
+
+    <!-- 用例 -->
+    <div data-panel="cases">
+      <!-- 场景 D · 草稿待登记 -->
+      <div class="phase-a" data-scn="D">
+        <div class="draftbar">
+          <span class="badge b-amber">待登记</span><b style="color:var(--amber-deep)">测试用例草稿</b>
+          <span class="chip">12 条 · sdlc-test 生成</span>
+          <span class="tp-act">
+            <button class="btn danger small">丢弃</button>
+            <button class="btn primary" id="adopt-cases"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>采纳登记</button>
+          </span>
+        </div>
+        <div class="card" style="padding:0">
+          <table class="table">
+            <thead><tr><th style="width:90px">编号</th><th>标题</th><th style="width:190px">关联需求点</th><th style="width:120px">重点验证</th><th style="width:80px">优先级</th></tr></thead>
+            <tbody>
+              <tr><td><code>TC-001</code></td><td>实时指标 5min 内可查</td><td class="sub">FR-01</td><td class="sub">详述1.1</td><td><span class="badge b-red">P0</span></td></tr>
+              <tr><td><code>TC-002</code></td><td>延迟超阈值触发告警</td><td class="sub">FR-09</td><td class="sub">详述2.1</td><td><span class="badge b-red">P0</span></td></tr>
+              <tr><td><code>TC-003</code></td><td>冷备通道降级兜底</td><td class="sub">FR-01、FR-02</td><td class="sub">详述1.2</td><td><span class="badge b-amber">P1</span></td></tr>
+              <tr><td><code>TC-004</code></td><td>指标口径跨端一致</td><td class="sub">FR-10</td><td class="sub">—</td><td><span class="badge b-gray">P2</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- D 登记后 / 通用：已登记列表 -->
+      <div class="phase-b" data-scn="D">
+      </div>
+      <div data-scn="ABC" class="cases-final">
+        <div class="card" style="padding:0">
+          <table class="table">
+            <thead><tr><th style="width:90px">编号</th><th>标题</th><th style="width:120px">来源</th><th style="width:90px">状态</th></tr></thead>
+            <tbody>
+              <tr><td><code>TC-001</code></td><td>实时指标 5min 内可查</td><td class="sub">sdlc-test</td><td><span class="badge b-amber">待审核</span></td></tr>
+              <tr><td><code>TC-002</code></td><td>延迟超阈值触发告警</td><td class="sub">sdlc-test</td><td><span class="badge b-amber">待审核</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tabpanel -->
+</div>
+
+<script>
+/* ============ demo 状态机：场景 → (草稿态 → 采纳态) ============ */
+const SCN = {
+  A: { defaultTab: 'digest', tabBadge: 'digest',
+       stages: [['需求质检','done'],['标准文档合成',''],['用例生成','']],
+       ctaDraft: ['去需求摘要采纳三件套', 'digest'], ctaAdopted: ['继续澄清 0/18', 'checklist'],
+       hist: [['done','需求质检','items=18 · frPoints=14 · stars=4']] },
+  B: { defaultTab: 'std', tabBadge: 'std',
+       stages: [['需求质检','done'],['标准文档合成','done'],['用例生成','']],
+       ctaDraft: ['去标准文档发布', 'std'], ctaAdopted: ['生成技术设计', ''],
+       hist: [['done','标准文档合成','sections=6 · fr=14'],['done','需求质检','items=18 · frPoints=14']] },
+  C: { defaultTab: 'changes', tabBadge: 'changes', changed: true,
+       stages: [['需求质检','done'],['增量质检','done'],['用例生成','']],
+       ctaDraft: ['去变更采纳增量合并', 'changes'], ctaAdopted: ['去标准文档重新发布', 'std'],
+       hist: [['done','增量质检','sections=2 · rows=+6/-2'],['failed','用例生成','FR-07 锚点缺失，无法定位详述行']] },
+  D: { defaultTab: 'cases', tabBadge: 'cases',
+       stages: [['需求质检','done'],['标准文档合成',''],['用例生成','done']],
+       ctaDraft: ['去用例登记草稿', 'cases'], ctaAdopted: null,
+       hist: [['done','用例生成','inserted=12 · updated=3'],['done','需求质检','items=18 · frPoints=14']] }
+}
+const ST_LABEL = { reviewing:'质检中', clarifying:'待澄清', published:'已发布', changed:'变更中' }
+const ST_CLS   = { reviewing:'b-blue', clarifying:'b-amber', published:'b-green', changed:'b-amber' }
+const ST_BY_SCN = { A: ['reviewing','clarifying'], B: ['clarifying','published'], C: ['changed','changed'], D: ['clarifying','clarifying'] }
+/* 通用块（非 phase-a/b）的显隐规则：key = data-scn 值 */
+const GENERIC = {
+  'BCD': () => cur !== 'A' || adopted,          // 摘要正式态：A 采纳后也显示
+  'AD':  () => cur === 'A' || cur === 'D',      // std 空态：A/D 场景尚未生成（A 采纳后仍在澄清期）
+  'ABD': () => cur !== 'C',                     // 变更空态
+  'ABC': () => cur !== 'D' || adopted,          // 用例正式列表：D 登记后显示
+  'C':   () => cur === 'C'                      // std 只读预览（changed）
+}
+let cur = 'A', adopted = false, activeTab = 'digest'
+const $ = s => document.querySelector(s)
+
+function setScenario(s){
+  cur = s; adopted = false
+  document.querySelectorAll('#scn button').forEach(b => b.classList.toggle('on', b.dataset.s === s))
+  activeTab = SCN[s].defaultTab
+  render()
+}
+function adopt(){ adopted = true; render() }
+function switchTab(t){ activeTab = t; renderTabs() }
+
+function render(){
+  const cfg = SCN[cur]
+  // 形态块：phase-a = 草稿态（本场景未采纳）；phase-b = 采纳后形态
+  document.querySelectorAll('.tabpanel .phase-a, .tabpanel .phase-b').forEach(el => {
+    const mine = el.dataset.scn === cur
+    const want = el.classList.contains('phase-a') ? (mine && !adopted) : (mine && adopted)
+    el.style.display = want ? '' : 'none'
+  })
+  // 通用块（正式态/空态）
+  document.querySelectorAll('.tabpanel [data-scn]').forEach(el => {
+    if (el.classList.contains('phase-a') || el.classList.contains('phase-b')) return
+    el.style.display = (GENERIC[el.dataset.scn] || (() => false))() ? '' : 'none'
+  })
+  // 需求状态徽章
+  const [stDraft, stDone] = ST_BY_SCN[cur]
+  const stKey = adopted ? stDone : stDraft
+  const badge = $('#st-badge')
+  badge.className = 'badge ' + ST_CLS[stKey]; badge.textContent = ST_LABEL[stKey]
+  // 流水线：阶段点 / CTA（导航型：把用户带到草稿所在 tab）
+  $('#stages').innerHTML = cfg.stages.map(([n, s]) =>
+    `<span class="tp-stage"><i class="st-dot ${s}"></i>${n}</span>`).join('')
+  const ctaEl = $('#cta')
+  const cta = adopted ? cfg.ctaAdopted : cfg.ctaDraft
+  ctaEl.style.display = cta ? '' : 'none'
+  if (cta) ctaEl.onclick = () => cta[1] && switchTab(cta[1])
+  // 流水线：任务历史 + ⋯菜单场景差异
+  $('#hist').innerHTML = `<summary>任务历史 ${cfg.hist.length} · 最近 5 分钟前</summary>` +
+    cfg.hist.map(([st, name, sub]) =>
+      `<div class="tp-task"><span class="badge ${st === 'done' ? 'b-green' : 'b-red'}">${st === 'done' ? '已完成' : '失败'}</span><b>${name}</b>` +
+      `<span class="sub ${st === 'done' ? '' : 'err'}">${sub}</span>` +
+      (st === 'failed' ? '<button class="btn small">重试</button>' : '') + '</div>').join('')
+  document.querySelectorAll('[data-changed-only]').forEach(b => b.style.display = cfg.changed ? '' : 'none')
+  $('#more-std-note').textContent = (cur === 'A' || cur === 'D') ? '（18 问未答）' : ''
+  renderTabs()
+}
+function renderTabs(){
+  document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', t.dataset.tab === activeTab))
+  document.querySelectorAll('.tabpanel > [data-panel]').forEach(p => p.classList.toggle('on', p.dataset.panel === activeTab))
+  // 角标：草稿待处理 = 琥珀 ！；其余为常规数字角标（按场景有无）
+  const cfg = SCN[cur]
+  const badgeFor = k => {
+    if (!adopted && cfg.tabBadge === k) return ['draft', '!']
+    if (k === 'digest') return (cur !== 'A' || adopted) ? ['num', '14'] : null
+    if (k === 'check')  return ['warn', '18']
+    if (k === 'chg')    return cur === 'C' ? ['num', '1'] : null
+    if (k === 'cases')  return (cur === 'D' && adopted) ? ['num', '12'] : null
+    return null
+  }
+  for (const k of ['digest','check','std','chg','cases']) {
+    const el = document.getElementById('n-' + k)
+    const b = badgeFor(k)
+    el.style.display = b ? '' : 'none'
+    if (b) { el.className = 'n ' + b[0]; el.textContent = b[1] }
+  }
+}
+
+/* 事件绑定 */
+document.querySelectorAll('#scn button').forEach(b => b.addEventListener('click', () => setScenario(b.dataset.s)))
+document.querySelectorAll('#tabs .tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)))
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('tp-on', x === b))
+  document.querySelectorAll('[data-mode-box]').forEach(x => x.style.display = x.dataset.modeBox === b.dataset.mode ? '' : 'none')
+}))
+for (const id of ['adopt-digest','publish-std','adopt-inc','adopt-cases']) {
+  const el = document.getElementById(id)
+  if (el) el.addEventListener('click', adopt)
+}
+document.addEventListener('click', e => { if (!e.target.closest('.tp-more'))
+  document.querySelectorAll('.tp-more[open]').forEach(d => d.open = false) })
+
+setScenario('A')
+</script>
+</body>
+</html>

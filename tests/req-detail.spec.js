@@ -182,20 +182,47 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     expect(grpAfter.classes()).toContain('closed')               // 折叠状态保留
   })
 
-  // ===== P1-12（方案2）：原折叠/展开面板保留在页签之前，展开时限高内部滚动 =====
-  it('P1-12 流水线完整面板保留在页签之前（不再另造摘要条），正文容器在页签之后', async () => {
+  // ===== v5.x 批3：流水线面板专心化（状态条常显单行）保留在页签之前，草稿归产物页签 =====
+  it('v5.x 流水线面板=状态条常显（无展开限高形态、无草稿区），正文容器在页签之后', async () => {
     wrapper = await mountDetail()
     const panel = wrapper.find('.taskpanel')
     const tabs = wrapper.find('.tabs')
     const content = wrapper.find('.tabpanel')
-    expect(wrapper.find('.tp-mini').exists()).toBe(false)      // 原折叠/展开/收起已够用
     expect(panel.exists()).toBe(true)
     expect(panel.text()).toContain('线上流水线')
-    expect(panel.find('.tp-summary').exists()).toBe(true)      // 摘要态由 TaskPanel 自身提供
+    expect(panel.find('.tp-bar').exists()).toBe(true)          // 状态条常显（v5.x 专职流水线）
+    expect(panel.find('.tp-summary').exists()).toBe(false)     // 旧摘要/展开形态已移除
+    expect(panel.classes()).not.toContain('tp-expanded')       // 无 280px 限高内部滚动形态
+    expect(panel.find('.draftbar').exists()).toBe(false)       // 草稿展示已归产物页签
 
-    // DOM 顺序：完整面板 → tablist → 页签内容
+    // DOM 顺序：面板 → tablist → 页签内容
     expect(panel.element.compareDocumentPosition(tabs.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(tabs.element.compareDocumentPosition(content.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('v5.x 待审草稿 → 对应 tab 琥珀 ! 角标 + 面板 CTA 导航（草稿归 tab 发现性）', async () => {
+    const { api } = await import('../src/api.js')
+    api.get.mockImplementation(async (url) => {
+      if (String(url).includes('/drafts')) {
+        return [{ reqId: 'REQ-2026-001', type: 'standard', md: '# 草稿', updatedAt: '2026-10-02 10:00:00', contentJson: '' },
+                { reqId: 'REQ-2026-001', type: 'cases', contentJson: '{"items":[]}', updatedAt: '2026-10-02 10:00:00' }]
+      }
+      if (url.includes('/gate')) return gateViewFixture()
+      if (url.includes('/design')) return { reqId: 'REQ-2026-001', tier: 'B', phase: 'none' }
+      if (url.includes('/tasks')) return []
+      return detailFixture()
+    })
+    wrapper = await mountDetail()
+    expect(wrapper.find('#tab-std .n.draft').exists()).toBe(true)     // 标准文档草稿待发布
+    expect(wrapper.find('#tab-cases .n.draft').exists()).toBe(true)   // 用例草稿待登记
+    expect(wrapper.find('#tab-digest .n.draft').exists()).toBe(false) // 无 digest 草稿
+    // 面板 CTA：标准文档发布引导优先于用例登记（依赖排序）
+    const cta = wrapper.find('.taskpanel .tp-actions .btn.primary')
+    expect(cta.text()).toContain('去标准文档发布')
+    // 标准文档页签内即草稿编辑现场（决策条动作置顶）
+    await wrapper.find('#tab-std').trigger('click')
+    expect(wrapper.find('.tabpanel .draftbar').exists()).toBe(true)
+    expect(wrapper.text()).toContain('发布（终态锁定）')
   })
 
   // ===== U-10：页签 ARIA + 方向键 roving tabindex =====

@@ -17,9 +17,82 @@ const props = defineProps({
   card: { type: Object, default: () => ({}) },     // status 门控（confirm/abort 可用性）
   operator: { type: String, default: '' },
   blocks: { type: Array, default: () => [] },      // doc.json 当前块（新建 draft 的编辑基线）
-  focusId: { type: Number, default: null }         // GR-3 横幅点入直达单详情
+  focusId: { type: Number, default: null },        // GR-3 横幅点入直达单详情
+  draft: { type: Object, default: null }           // v5.x 批2：增量合并草稿行（迁自 TaskPanel）
 })
-const emit = defineEmits(['toast', 'refresh'])
+const emit = defineEmits(['toast', 'refresh', 'reload'])
+
+// ===== v5.x 批2：增量合并草稿域（迁自 TaskPanel，确认文案原样；采纳 = 服务端机械合并） =====
+const incBusy = ref(false)   // 与变更单 busy 分离——互不置灰
+const incBundle = computed(() => {
+  if (!props.draft) return null
+  try { return JSON.parse(props.draft.contentJson || '{}') } catch { return null }
+})
+/** 章节区块 heading 文本解析（sections 存 heading blockId，禁 seq——§7 注意事项 6） */
+function headingText(id) {
+  const b = props.blocks.find(x => x.id === id)
+  return b ? (b.text || id) : id
+}
+const incStats = computed(() => {
+  const p = incBundle.value
+  if (!p) return []
+  const r = p.digestRows || {}
+  const inv = p.invalidate || {}
+  return [
+    ['章节', (p.sections || []).length],
+    ['摘要行', (r.features || []).length + (r.flows || []).length + (r.states || []).length],
+    ['体检条目', (r.auditItems || []).length],
+    ['FR', `+${(r.frUpserts || []).length}/-${(r.frRemoves || []).length}`],
+    ['新澄清', (p.clarify?.items || []).length],
+    ['作废', (inv.digestAnchors || []).length + (inv.auditIds || []).length]
+  ]
+})
+/** 增量行展示文本（行形状随产物而异，取惯用键回退） */
+function rowText(r) {
+  return r.name || r.title || r.text || r.summary || r.question || JSON.stringify(r).slice(0, 60)
+}
+const ROW_KIND_LABEL = { features: '功能点', flows: '流程', states: '状态', auditItems: '体检', frUpserts: '需求点' }
+const incRows = computed(() => {
+  const r = incBundle.value?.digestRows || {}
+  const out = []
+  for (const [key, label] of Object.entries(ROW_KIND_LABEL)) {
+    for (const row of r[key] || []) {
+      if (key === 'frUpserts') continue   // FR upsert 展示为 id+name 单列（含 anchor）
+      out.push({ kindLabel: label, text: rowText(row), anchor: row.anchor || '' })
+    }
+  }
+  return out
+})
+const frRemoves = computed(() => incBundle.value?.digestRows?.frRemoves || [])
+const invalidates = computed(() => [
+  ...(incBundle.value?.invalidate?.digestAnchors || []),
+  ...(incBundle.value?.invalidate?.auditIds || [])
+])
+const incClarify = computed(() => incBundle.value?.clarify?.items || [])
+async function approveInc() {
+  if (!await ask({
+    title: '采纳增量合并草稿？',
+    body: '服务端机械合并（受影响章节区间整组替换）：digest/体检/FR/机器澄清按区间更新，本地澄清（L 系）永不动；合并完成即可重新发布。',
+    confirmText: '采纳（合并）'
+  })) return
+  incBusy.value = true
+  try {
+    const r = await api.post(`/api/requirements/${props.reqId}/drafts/incremental_bundle/approve`,
+      { by: props.operator || '增量采纳' })
+    emit('toast', `增量合并完成：移除 ${r.removedRows} 行 / 写入 ${r.newRows} 行，digest 已刷新——去标准文档页签重新发布`)
+    emit('refresh')
+  } catch (e) { emit('toast', '采纳失败：' + e.message, 'err') }
+  finally { incBusy.value = false }
+}
+async function dropInc() {
+  // 丢弃后果说明（P1 修复配套）：changed 卡丢弃后无自动重排——影响面未消化堵发布，须手动重排
+  const warn = props.card.status === 'changed'
+    ? '变更中丢弃增量草稿后影响面仍未消化——须在流水线重排「增量质检」重新生成，否则无法重新发布。'
+    : ''
+  if (!await ask({ title: '丢弃增量合并草稿？', body: `丢弃后如需该产物须重新生成对应任务。${warn}`, danger: true, confirmText: '丢弃' })) return
+  try { await api.del(`/api/requirements/${props.reqId}/drafts/incremental_bundle`); emit('toast', '草稿已丢弃'); emit('reload') }
+  catch (e) { emit('toast', '丢弃失败：' + e.message, 'err') }
+}
 
 const list = ref([])
 const loading = ref(true)
@@ -213,7 +286,7 @@ async function doConfirm() {
     // §6 关键词分流：未消化 → 指引增量通道；基线漂移 → 指引重编草稿
     const msg = String(e.message || '')
     if (msg.includes('未消化')) {
-      emit('toast', msg + '——先到流水线面板采纳增量合并草稿（草稿已丢弃则用「增量质检」按钮重排）', 'err')
+      emit('toast', msg + '——先在本页签顶部采纳增量合并草稿（草稿已丢弃则用流水线 ⋯ 菜单重排）', 'err')
     } else if (msg.includes('已被后续修改')) {
       emit('toast', msg + '——块基线已漂移：请返回编辑，以最新块态重编本变更单草稿后再确认', 'err')
     } else {
@@ -293,6 +366,50 @@ function fmtCounts(c) {
 </script>
 
 <template>
+  <!-- v5.x 批2：增量合并草稿卡（迁自 TaskPanel；changed 流）——放根部全 mode 常渲染：
+       detail/confirm/create 态不显示列表，卡不能跟着藏（用户从任何变更单视图都能回到采纳现场） -->
+  <div class="draft-zone" v-if="draft">
+    <div class="draftbar">
+      <span class="badge b-amber">待确认</span><b>增量合并草稿</b>
+      <span class="chip" v-if="incBundle?.changeId">变更单 #{{ incBundle.changeId }}</span>
+      <span class="chip" v-for="[k, v] in incStats" :key="k">{{ k }} {{ v }}</span>
+      <span class="chip" v-if="incBundle?.riskTier">风险 {{ incBundle.riskTier }}</span>
+      <span class="tp-act">
+        <button class="btn small danger" :disabled="incBusy" @click="dropInc">丢弃</button>
+        <button class="btn primary" :disabled="incBusy" @click="approveInc"><AppIcon name="check-circle" :size="13" />采纳（服务端机械合并）</button>
+      </span>
+    </div>
+    <div class="inc-preview" v-if="incBundle">
+      <div class="inc-sec" v-if="(incBundle.sections || []).length">
+        <span class="lb">受影响章节</span>
+        <span class="chip" v-for="s in incBundle.sections" :key="s">{{ headingText(s) }}</span>
+      </div>
+      <div class="inc-sec" v-if="incBundle.summary">
+        <span class="lb">增量摘要</span><span>{{ incBundle.summary }}</span>
+      </div>
+      <table class="table inc-table" v-if="incRows.length">
+        <thead><tr><th style="width:88px">类别</th><th>新增行</th><th style="width:150px">锚点</th></tr></thead>
+        <tbody><tr v-for="(r, i) in incRows" :key="i">
+          <td><span class="chip">{{ r.kindLabel }}</span></td>
+          <td>{{ r.text }}</td>
+          <td class="sub"><code>{{ r.anchor || '—' }}</code></td>
+        </tr></tbody>
+      </table>
+      <div class="inc-sec" v-if="frRemoves.length || invalidates.length">
+        <span class="lb">移除 / 作废</span>
+        <span class="chip warn" v-for="x in frRemoves" :key="'fr' + x">FR {{ x }}</span>
+        <span class="chip warn" v-for="x in invalidates" :key="x"><code>{{ x }}</code></span>
+      </div>
+      <div class="inc-sec" v-if="incClarify.length">
+        <span class="lb">新增澄清（机器行，可作答处置）</span>
+        <div class="inc-clr" v-for="(c, i) in incClarify" :key="i">
+          <span class="chip">{{ c.anchor || '卡' }}</span>{{ c.question || rowText(c) }}
+        </div>
+      </div>
+    </div>
+    <div class="sub" v-else style="padding:4px 0">增量包内容不可解析（contentJson 非法）。</div>
+  </div>
+
   <!-- 列表 -->
   <div v-if="mode === 'list'">
     <div class="card">
@@ -386,7 +503,7 @@ function fmtCounts(c) {
       </div>
       <div class="banner" v-else-if="cur.status === 'confirmed' && card.status === 'changed'" style="margin-top:10px">
         <AppIcon name="clock" :size="14" />
-        <span>已生效：等增量质检任务完成并在流水线采纳合并后，即可从草稿预览重新发布。</span>
+        <span>已生效：等增量质检任务完成并在本页签顶部采纳合并后，即可去标准文档页签从草稿预览重新发布。</span>
       </div>
     </div>
   </div>

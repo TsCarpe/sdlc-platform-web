@@ -10,6 +10,8 @@ import AppIcon from './AppIcon.vue'
 import ClampText from './ClampText.vue'
 import ChipList from './ChipList.vue'
 import EmptyState from './EmptyState.vue'
+import { api } from '../api.js'
+import { ask } from '../confirm.js'
 import { render } from '../render.js'
 import { covP, groupByFirstAppearance } from '../trace.js'
 import { useGrpCollapse } from '../composables/group-collapse.js'
@@ -21,9 +23,51 @@ const props = defineProps({
   frGroups: { type: Array, default: () => [] },        // 壳层按出处分组（revealGrpFor 共用）
   digestMdOpen: { type: Boolean, default: false },     // 摘要原文折叠（asm 跳入时壳层自动展开）
   items: { type: Array, default: () => [] },           // v5 澄清 items（模块待澄清角标——v1.6 module 产出前降级隐藏）
-  commentAnchorMap: { type: Object, default: () => ({}) }  // v5.x 评论锚 → 面板定位目标（图标语义分流；点击分流在壳层 onLocate）
+  commentAnchorMap: { type: Object, default: () => ({}) },  // v5.x 评论锚 → 面板定位目标（图标语义分流；点击分流在壳层 onLocate）
+  draft: { type: Object, default: null }               // v5.x 批2：质检三件套草稿行（digest 采纳前本页签承载预览与采纳）
 })
-const emit = defineEmits(['locate', 'jump', 'update:digestMdOpen'])
+const emit = defineEmits(['locate', 'jump', 'update:digestMdOpen', 'toast', 'refresh', 'reload'])
+
+// ===== v5.x 批2：质检三件套草稿域（迁自 TaskPanel，确认文案原样） =====
+const busy = ref(false)
+const showDigestDraft = ref(true)   // 草稿预览默认展开——草稿态本页签的主内容就是它
+/** 草稿统计：解析 contentJson（原 TaskPanel 逻辑；坏值静默无统计） */
+const draftStats = computed(() => {
+  const out = []
+  try {
+    const p = JSON.parse(props.draft?.contentJson || '{}')
+    out.push(['澄清问题', (p.items || []).length], ['需求点', (p.digest?.fr_points || []).length])
+    if (p.snapshot?.md) out.push(['快照', Math.round(p.snapshot.md.length / 1024) + 'KB'])
+    if (p.doc) out.push(['原文块', (p.doc.blocks || []).length], ['媒体', (p.doc.media || []).length])
+    if (p.audit) out.push(['体检问题', (p.audit.items || []).length])
+  } catch { /* contentJson 坏值 → 无统计 */ }
+  return out
+})
+const draftHtml = computed(() => {
+  try {
+    const p = JSON.parse(props.draft?.contentJson || '{}')
+    return render(p.digest?.md || props.draft?.md || '')
+  } catch { return '' }
+})
+async function approveDigest() {
+  if (!await ask({
+    title: '采纳质检三件套草稿？',
+    body: '采纳后进入「待澄清」，PM 可在平台上作答。（重推将按 P 编号保留已答内容）',
+    confirmText: '采纳'
+  })) return
+  busy.value = true
+  try {
+    const r = await api.post(`/api/requirements/${props.draft.reqId}/drafts/digest_bundle/approve`)
+    emit('toast', `已采纳：${r.items} 问 / ${r.frPoints} 需求点${r.carriedAnswers ? `，保留答复 ${r.carriedAnswers} 条` : ''}`)
+    emit('refresh')
+  } catch (e) { emit('toast', '采纳失败：' + e.message, 'err') }
+  finally { busy.value = false }
+}
+async function dropDigest() {
+  if (!await ask({ title: '丢弃质检三件套草稿？', body: '丢弃后如需该产物须重新质检。', danger: true, confirmText: '丢弃' })) return
+  try { await api.del(`/api/requirements/${props.draft.reqId}/drafts/digest_bundle`); emit('toast', '草稿已丢弃'); emit('reload') }
+  catch (e) { emit('toast', '丢弃失败：' + e.message, 'err') }
+}
 
 /** v5.x 评论锚判定：fr/features/flows/states 出处可为评论区（resolve_anchors 产评论锚）——
  *  cite 图标换 message-square，点击经壳层 onLocate 分流开评论面板 */
@@ -83,8 +127,23 @@ const assumptions = computed(() => {
 </script>
 
 <template>
-  <EmptyState v-if="!digest" icon="inbox" title="质检产物尚未推送"
-              desc="本地运行 sdlc-intent 产出三件套后，由 sdlc-sync 推送至此" />
+  <!-- v5.x 批2：质检三件套草稿态（迁自 TaskPanel）——digest 采纳前本页签即预览与采纳现场 -->
+  <template v-if="draft && !digest">
+    <div class="draftbar">
+      <span class="badge b-amber">待确认</span><b>质检三件套草稿</b>
+      <span class="chip" v-for="[k, v] in draftStats" :key="k">{{ k }} {{ v }}</span>
+      <span class="tp-act">
+        <button class="btn small danger" :disabled="busy" @click="dropDigest">丢弃</button>
+        <button class="btn primary" :disabled="busy" @click="approveDigest"><AppIcon name="check-circle" :size="13" />采纳（进入待澄清）</button>
+      </span>
+    </div>
+    <details class="tp-peek" :open="showDigestDraft" @toggle="showDigestDraft = $event.target.open">
+      <summary>摘要正文预览（采纳前可核对）</summary>
+      <div class="doc tp-preview" v-html="draftHtml"></div>
+    </details>
+  </template>
+  <EmptyState v-else-if="!digest" icon="inbox" title="质检产物尚未推送"
+              desc="质检完成后草稿会回到本页签采纳；或本地 sdlc-intent 产出三件套后由 sdlc-sync 推送" />
   <template v-else>
     <!-- v5 AI 理解摘要卡（§3/D9）：先花 10 秒校验 AI 把需求理解成了什么样——偏了立刻能感知 -->
     <div class="card und-card">

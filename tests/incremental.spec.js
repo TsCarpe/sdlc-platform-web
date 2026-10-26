@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// v4.14 增量合并草稿采纳面冒烟：预览渲染（章节/新行/作废/澄清）+ approve 端点（携带采纳人）。
+// v4.14 增量合并草稿采纳面冒烟（v5.x 批2 起宿主为变更页签 ChangesTab）：预览渲染
+// （章节/新行/作废/澄清）+ approve 端点（携带采纳人）+ 坏 contentJson 降级。
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
@@ -25,37 +26,34 @@ const bundle = () => ({
   riskTier: 'C'
 })
 
-const detail = () => ({
-  card: { id: 'REQ-1', status: 'changed' },
-  items: [{ seq: 'L01', status: 'answered' }],
-  doc: { content: { blocks: [{ id: 'h-1', type: 'heading', level: 2, text: '背景与边界' }] } }
-})
-
 let api
 beforeEach(async () => {
   vi.clearAllMocks()
   api = (await import('../src/api.js')).api
   api.get.mockImplementation(async url => {
-    if (String(url).includes('/drafts')) {
-      return [{ reqId: 'REQ-1', type: 'incremental_bundle', md: '', contentJson: JSON.stringify(bundle()) }]
-    }
-    if (String(url).includes('/tasks')) return []
+    if (String(url).includes('/changes')) return []   // ChangesTab loadList
     return []
   })
   api.post.mockResolvedValue({ ok: true, changeId: 162, removedRows: 2, newRows: 3 })
 })
 
-const mountPanel = async () => {
-  const { default: TaskPanel } = await import('../src/components/TaskPanel.vue')
-  const w = mount(TaskPanel, { props: { reqId: 'REQ-1', detail: detail(), operator: '冒烟员' } })
+// v5.x 批2：增量草稿经 draft prop 下发（草稿归 tab），宿主 = 变更页签
+const draftRow = contentJson => ({ reqId: 'REQ-1', type: 'incremental_bundle', md: '', contentJson })
+const mountTab = async (contentJson = JSON.stringify(bundle())) => {
+  const { default: ChangesTab } = await import('../src/components/ChangesTab.vue')
+  const w = mount(ChangesTab, {
+    props: { reqId: 'REQ-1', card: { id: 'REQ-1', status: 'changed' }, operator: '冒烟员',
+             blocks: [{ id: 'h-1', type: 'heading', level: 2, text: '背景与边界' }],
+             draft: draftRow(contentJson) }
+  })
   await flushPromises()
   return w
 }
 
-describe('TaskPanel：增量合并草稿', () => {
+describe('变更页签：增量合并草稿（v5.x 批2 迁入）', () => {
   it('预览渲染：章节文本解析 / 新行表 / 移除作废 / 新澄清 / 统计', async () => {
-    const w = await mountPanel()
-    const draft = w.findAll('.tp-draft').find(d => d.text().includes('增量合并草稿'))
+    const w = await mountTab()
+    const draft = w.find('.draft-zone')
     expect(draft).toBeTruthy()
     expect(draft.text()).toContain('变更单 #162')
     expect(draft.text()).toContain('背景与边界')          // sections heading 文本解析
@@ -67,8 +65,8 @@ describe('TaskPanel：增量合并草稿', () => {
     expect(draft.text()).toContain('旧锚点-a')             // invalidate
   })
 
-  it('采纳：POST approve 携带采纳人；成功 toast 带合并统计', async () => {
-    const w = await mountPanel()
+  it('采纳：POST approve 携带采纳人；成功 toast 带合并统计与发布指路', async () => {
+    const w = await mountTab()
     const btn = w.findAll('button').find(b => b.text().includes('采纳（服务端机械合并）'))
     await btn.trigger('click')
     await flushPromises()
@@ -76,17 +74,12 @@ describe('TaskPanel：增量合并草稿', () => {
     const toast = w.emitted('toast')[0][0]
     expect(toast).toContain('移除 2 行')
     expect(toast).toContain('写入 3 行')
+    expect(toast).toContain('标准文档')                    // 发布指路（review P2-4）
     expect(w.emitted('refresh')).toBeTruthy()
   })
 
   it('contentJson 损坏：显示不可解析提示且不炸', async () => {
-    api.get.mockImplementation(async url => {
-      if (String(url).includes('/drafts')) {
-        return [{ reqId: 'REQ-1', type: 'incremental_bundle', md: '', contentJson: '{oops' }]
-      }
-      return []
-    })
-    const w = await mountPanel()
+    const w = await mountTab('{oops')
     expect(w.text()).toContain('不可解析')
   })
 })

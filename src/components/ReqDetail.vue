@@ -2,7 +2,7 @@
 // 需求详情壳（AUDIT D6-2 拆分后）：数据装载（load/loadExt）+ 全链主按钮 CTA + tab 分发 +
 // 三个跨 tab 协议 composable（分组折叠 / 追溯跳转 / 目录滚动）。五个内容 tab 为纯展示子组件
 // （Origin/Digest/Audit/Checklist/Std，props + emit + 局部 DOM expose），cases/design/gate 已有子组件。
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { api } from '../api.js'
 import AppIcon from './AppIcon.vue'
 import EmptyState from './EmptyState.vue'
@@ -40,6 +40,11 @@ async function switchTab(t) {
   if (tab.value === 'changes' && changesRef.value?.isEditingDirty?.()
       && !await ask({ title: '放弃未保存的编辑？',
                       body: '切换页签将丢弃当前变更单草稿编辑（已保存的草稿不受影响）。',
+                      danger: true, confirmText: '放弃并切换' })) return
+  // v5.x 批2：标准文档草稿编辑脏态同守卫（StdTab v-if 卸载即丢编辑，同 E3 模式）
+  if (tab.value === 'std' && stdTabRef.value?.isEditingDirty?.()
+      && !await ask({ title: '放弃未保存的编辑？',
+                      body: '切换页签将丢弃标准文档草稿的未保存编辑（已保存的草稿不受影响）。',
                       danger: true, confirmText: '放弃并切换' })) return
   tab.value = t
 }
@@ -165,6 +170,7 @@ async function load() {
     await loadExt()      // v2.4：设计/门禁读面（发布后），主按钮 CTA 与新 tab 的数据源
     loadComments()       // v4：评论面（不阻塞主装载；失败静默）
     loadChanges()        // v4：变更单计数（tab 角标）
+    loadTasks(); loadDrafts()   // v5.x：流水线面（tasks/drafts 壳层单一数据源）
   } catch (e) {
     error.value = e.message
   } finally {
@@ -270,6 +276,53 @@ async function loadChanges() {
 function openChange(id) { chgFocus.value = id; switchTab('changes') }
 defineExpose({ openChange })   // 跨组件跳转协议（GateTab GR-3 横幅点入直达变更单）
 
+// ===== v5.x 流水线域（草稿归 tab）：tasks/drafts 装载与轮询上提壳层单一数据源——面板与各
+// 产物 tab 共同消费；轮询/终态联动原 TaskPanel 逻辑迁此（组件 :key 按 reqId 重挂载，无需
+// 代次号防 reqId 切换竞态；KNOWN 状态机保留——终态翻转触发草稿刷新与 doc 重拉） =====
+const tasks = ref([])
+const drafts = ref({})
+const KNOWN = {}
+async function loadTasks() {
+  try { tasks.value = await api.get(`/api/tasks?req_id=${props.reqId}`) }
+  catch { /* 轮询失败保旧态，下次 tick 重试 */ }
+}
+async function loadDrafts() {
+  try {
+    const list = await api.get(`/api/requirements/${props.reqId}/drafts`)
+    const m = {}
+    for (const x of list) m[x.type] = x
+    drafts.value = m
+  } catch { /* 草稿拉取失败保持现状（轮询补齐） */ }
+}
+function reloadPipe() { loadTasks(); loadDrafts() }   // 排任务/草稿动作后的轻刷新（不动 detail）
+/** 轮询单次：页面不可见时跳过（省无效读放大），恢复可见由 visibilitychange 立即补一次 */
+async function tick() {
+  if (document.hidden) return
+  const before = { ...KNOWN }
+  try {
+    const list = await api.get(`/api/tasks?req_id=${props.reqId}`)
+    // 有任务从 queued/running 变为终态 → 刷新草稿；source_import 完成 → 块表已落库，重拉 doc.json
+    for (const t of list) {
+      if (before[t.id] && before[t.id] !== t.status && (t.status === 'done' || t.status === 'failed')) loadDrafts()
+      if (before[t.id] && before[t.id] !== t.status && t.type === 'source_import' && t.status === 'done') load()
+      KNOWN[t.id] = t.status
+    }
+    tasks.value = list
+  } catch { /* 轮询失败保旧态，下次 tick 重试 */ }
+}
+function onVis() { if (!document.hidden) tick() }
+let pollTimer = null
+onBeforeUnmount(() => {
+  clearInterval(pollTimer)
+  document.removeEventListener('visibilitychange', onVis)
+})
+// v5.x 派生迁此（原 TaskPanel）：草稿四类——草稿宿主 tab 的数据源
+const digestDraft = computed(() => drafts.value.digest_bundle || null)
+const stdDraft = computed(() => drafts.value.standard || null)
+const stdDraftVisible = computed(() => !!stdDraft.value && card.value.status !== 'published')   // published 终态无草稿动作
+const casesDraft = computed(() => drafts.value.cases || null)
+const incDraft = computed(() => drafts.value.incremental_bundle || null)
+
 async function loadExt() {
   if (card.value.status !== 'published') { dv.value = null; gv.value = null; return }
   const [a, b] = await Promise.all([
@@ -316,6 +369,8 @@ async function runCta() {
 onMounted(async () => {
   await load()
   applyJump()          // 跨页跳入：数据就绪后应用 pending 跳转
+  pollTimer = setInterval(tick, 4000)   // v5.x：流水线轮询（原 TaskPanel 迁此）
+  document.addEventListener('visibilitychange', onVis)
 })
 
 /** v1.2：原文出处路径（详述N[.N.*]）→ 原文块锚。行号定位表行，小节号/文本匹配行内条款；未命中返回 null */
@@ -410,12 +465,13 @@ function resolveDocPath(path) {
     <!-- v4 changed 态：顶部提示条（增量合并后重新发布） -->
     <div class="banner amber-t" v-if="card.status === 'changed'">
       <AppIcon name="alert-triangle" :size="14" />
-      <span style="flex:1"><b>变更处理中</b>：增量质检完成后在流水线采纳合并，再从标准文档草稿预览重新发布；期间直接编辑与全量重推已关闭。</span>
+      <span style="flex:1"><b>变更处理中</b>：增量质检完成后在变更页签采纳合并，再到标准文档页签从草稿预览重新发布；期间直接编辑与全量重推已关闭。</span>
       <button class="btn small" @click="switchTab('changes')">查看变更单</button>
     </div>
 
-    <!-- P1-12（方案2）：完整面板保留在页签之前；展开态由 CSS 限高 + 内部滚动，不把正文推离首屏 -->
+    <!-- v5.x 批3：流水线面板专心化（任务状态/低频任务/历史）——草稿在对应页签；CTA 经 go-tab 直达 -->
     <TaskPanel :req-id="card.id" :detail="d" :operator="operator"
+               :tasks="tasks" :drafts="drafts" @reload="reloadPipe" @go-tab="switchTab"
                @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
 
     <!-- v5（§1.1/D8）tab 分阶段分组：⁞ 前为发布前页签；置灰仅设计/门禁（变更承载 reconcile 通道、
@@ -429,7 +485,7 @@ function resolveDocPath(path) {
               aria-controls="tabpanel-digest" :tabindex="tab === 'digest' ? 0 : -1"
               :class="{ on: tab === 'digest' }" @click="switchTab('digest')"
               @keydown="onTabKey($event, 'digest')">
-        需求摘要<span class="n num" v-if="d.digest">{{ d.frPoints.length }}</span></button>
+        需求摘要<span class="n draft" v-if="digestDraft" title="质检三件套草稿待采纳">!</span><span class="n num" v-else-if="d.digest">{{ d.frPoints.length }}</span></button>
       <button class="tab" role="tab" id="tab-checklist" :aria-selected="tab === 'checklist' ? 'true' : 'false'"
               aria-controls="tabpanel-checklist" :tabindex="tab === 'checklist' ? 0 : -1"
               :class="{ on: tab === 'checklist' }" @click="switchTab('checklist')"
@@ -438,18 +494,18 @@ function resolveDocPath(path) {
       <button class="tab" role="tab" id="tab-std" :aria-selected="tab === 'std' ? 'true' : 'false'"
               aria-controls="tabpanel-std" :tabindex="tab === 'std' ? 0 : -1"
               :class="{ on: tab === 'std' }" @click="switchTab('std')"
-              @keydown="onTabKey($event, 'std')">标准需求文档</button>
+              @keydown="onTabKey($event, 'std')">标准需求文档<span class="n draft" v-if="stdDraftVisible" title="标准文档草稿待发布">!</span></button>
       <div class="tab-phase" title="以下页签在需求发布后开启" aria-hidden="true"></div>
       <button class="tab" role="tab" id="tab-changes" :aria-selected="tab === 'changes' ? 'true' : 'false'"
               aria-controls="tabpanel-changes" :tabindex="tab === 'changes' ? 0 : -1"
               :class="{ on: tab === 'changes' }" @click="switchTab('changes')"
               @keydown="onTabKey($event, 'changes')">
-        变更<span class="n num" v-if="chgCount">{{ chgCount }}</span></button>
+        变更<span class="n draft" v-if="incDraft" title="增量合并草稿待采纳">!</span><span class="n num" v-if="chgCount">{{ chgCount }}</span></button>
       <button class="tab" role="tab" id="tab-cases" :aria-selected="tab === 'cases' ? 'true' : 'false'"
               aria-controls="tabpanel-cases" :tabindex="tab === 'cases' ? 0 : -1"
               :class="{ on: tab === 'cases' }" @click="switchTab('cases')"
               @keydown="onTabKey($event, 'cases')">
-        用例<span class="n num" v-if="d.coverage && d.coverage.backward.total">{{ d.coverage.backward.total }}</span></button>
+        用例<span class="n draft" v-if="casesDraft" title="测试用例草稿待登记">!</span><span class="n num" v-else-if="d.coverage && d.coverage.backward.total">{{ d.coverage.backward.total }}</span></button>
       <button class="tab" role="tab" id="tab-design" :aria-selected="tab === 'design' ? 'true' : 'false'"
               aria-controls="tabpanel-design" :tabindex="tab === 'design' && !postLocked ? 0 : -1"
               :class="{ on: tab === 'design', locked: postLocked }" :disabled="postLocked"
@@ -480,12 +536,14 @@ function resolveDocPath(path) {
                @clarify="seq => onJump({ kind: 'check', id: seq })"
                @toast="(m, t) => emit('toast', m, t)" @reload="load" />
 
-    <!-- 结构化 Digest（v5 §3 重定位：AI 理解卡 + 泳道主流程 + 遗留假设独立卡） -->
+    <!-- 结构化 Digest（v5 §3 重定位：AI 理解卡 + 泳道主流程 + 遗留假设独立卡）；
+         v5.x 批2：质检三件套草稿态（预览+采纳）也归本页签 -->
     <DigestTab v-if="tab === 'digest'" ref="digestTabRef"
                :digest="d.digest" :fr-points="d.frPoints" :coverage="d.coverage" :fr-groups="frGroups"
-               :items="d.items" :comment-anchor-map="commentAnchorMap"
+               :items="d.items" :comment-anchor-map="commentAnchorMap" :draft="digestDraft"
                v-model:digest-md-open="digestMdOpen"
-               @locate="onLocate" @jump="onJump" />
+               @locate="onLocate" @jump="onJump"
+               @toast="(m, t) => emit('toast', m, t)" @refresh="load" @reload="reloadPipe" />
 
     <!-- v5 澄清工作台（audit 已并入，D1）：作答/处置/已定论卡/影响分析/孤儿提示 + 原文侧栏；出处=评论
          → 右栏评论出处卡（组件内分流）；open-comment=打开完整面板（卡上「打开评论区」）；
@@ -500,17 +558,22 @@ function resolveDocPath(path) {
                   @open-origin="switchTab('origin')"
                   @toast="(m, t) => emit('toast', m, t)" />
 
-    <!-- 标准需求文档：重写版（D6），四类引用可点击（D7） -->
+    <!-- 标准需求文档：重写版（D6），四类引用可点击（D7）；v5.x 批2：草稿编辑与发布归本页签 -->
     <StdTab v-if="tab === 'std'" ref="stdTabRef" :standard="d.standard" :active-head="activeHead"
-            @jump="onJump" @go-toc="goToc" @toast="(m, t) => emit('toast', m, t)" />
+            :draft="stdDraftVisible ? stdDraft : null" :status="card.status"
+            @jump="onJump" @go-toc="goToc" @toast="(m, t) => emit('toast', m, t)"
+            @refresh="load" @reload="reloadPipe" />
 
-    <!-- v4 变更单 tab：列表/draft（复用块编辑器）/confirm（diff+四类清单）/abort -->
+    <!-- v4 变更单 tab：列表/draft（复用块编辑器）/confirm（diff+四类清单）/abort；
+         v5.x 批2：增量合并草稿（采纳=机械合并）归本页签 -->
     <ChangesTab v-if="tab === 'changes'" ref="changesRef" :req-id="card.id" :card="card" :operator="operator"
-                :blocks="docBlocks" :focus-id="chgFocus"
-                @toast="(m, t) => emit('toast', m, t)" @refresh="load" />
+                :blocks="docBlocks" :focus-id="chgFocus" :draft="incDraft"
+                @toast="(m, t) => emit('toast', m, t)" @refresh="load" @reload="reloadPipe" />
 
-    <!-- v2.4 用例 tab：需求内嵌用例表（与独立用例页同一组件，reqId 固定） -->
-    <CaseList v-if="tab === 'cases'" :fixed-req-id="card.id" @toast="(m, t) => emit('toast', m, t)" />
+    <!-- v2.4 用例 tab：需求内嵌用例表（与独立用例页同一组件，reqId 固定）；
+         v5.x 批2：测试用例草稿（采纳登记）归本页签（draft 仅内嵌模式渲染） -->
+    <CaseList v-if="tab === 'cases'" :fixed-req-id="card.id" :draft="casesDraft"
+              @toast="(m, t) => emit('toast', m, t)" @refresh="load" @reload="reloadPipe" />
 
     <!-- v2.4 设计 lane（DESIGN-v2.4 D34） -->
     <template v-if="tab === 'design'">

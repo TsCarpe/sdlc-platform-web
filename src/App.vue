@@ -1,5 +1,6 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api, getToken, setToken } from './api.js'
 import { pendingJump } from './trace.js'
 import ReqList from './components/ReqList.vue'
@@ -11,11 +12,23 @@ import AppIcon from './components/AppIcon.vue'
 import ConfirmBox from './components/ConfirmBox.vue'
 import Chat from './components/Chat.vue'
 
-// v2.4：平台首页 = 迭代列表（DESIGN-v2.4 D37）；#/reqs 保留为跨迭代需求二级视图
-const page = ref('iters')
-const currentReqId = ref(null)
-const currentIter = ref(null)    // 迭代名（page='iters' 时的二级定位：null=列表，名字=迭代页）
+// v2.4：平台首页 = 迭代列表（DESIGN-v2.4 D37）；/reqs 保留为跨迭代需求二级视图
+const route = useRoute()
+const router = useRouter()
+const page = computed(() => {
+  if (route.name === 'cases') return 'cases'
+  if (route.name === 'iters' || route.name === 'iter') return 'iters'
+  return 'reqs'
+})
+const currentIter = computed(() => (route.name === 'iter' && route.params.name) ? String(route.params.name) : null)
+// 迭代页绑定的需求不进 URL（地址保持 /iters/:name）；跨迭代需求详情走 /reqs/:id
+const boundReqId = ref(null)
 const detailTitle = ref('')
+const currentReqId = computed(() => {
+  if (route.name === 'req' && route.params.id) return String(route.params.id)
+  if (route.name === 'iter') return boundReqId.value
+  return null
+})
 const toast = ref(null)          // { text, type: 'ok' | 'err' }
 let toastTimer = null
 const counts = ref({ reqs: null, cases: null, iters: null })
@@ -48,68 +61,49 @@ function toggleSide() {
 // 导航切换后收起浮层（移动端点击菜单即离开）
 watch([page, currentReqId, currentIter], () => { mobileSide.value = false })
 
-// ===== hash 路由（零依赖）：#/iters · #/iters/<name> · #/reqs · #/reqs/<id> · #/cases =====
-// 状态 → hash 产生历史条目；前进/后退经 hashchange 回写状态；幂等防循环
-function hashFor() {
-  if (page.value === 'cases') return '#/cases'
-  if (page.value === 'iters') return currentIter.value ? '#/iters/' + encodeURIComponent(currentIter.value) : '#/iters'
-  return currentReqId.value ? '#/reqs/' + encodeURIComponent(currentReqId.value) : '#/reqs'
-}
-function syncHash() {
-  const want = hashFor()
-  if (location.hash !== want) { lastHash = want; location.hash = want }
-}
-function resetWork() { currentReqId.value = null; detailTitle.value = '' }
-// 同一 hash 只应用一次：syncHash 写入后触发的 hashchange 是异步派发，事件到达时若 hash 未变
-// 属迟到重放（会把 openIter 刚设置的 currentReqId 清掉）——幂等跳过
-let lastHash = null
-function applyHash() {
-  const h = location.hash
-  if (h === lastHash) return
-  lastHash = h
-  if (h === '#/cases') {
-    page.value = 'cases'; currentIter.value = null; resetWork(); return
-  }
-  if (h.startsWith('#/iters')) {
-    page.value = 'iters'; resetWork()
-    currentIter.value = h.startsWith('#/iters/') ? (decodeURIComponent(h.slice(8)) || null) : null
-    if (currentIter.value) resolveIterBinding(currentIter.value)
-    return
-  }
-  if (h.startsWith('#/reqs')) {
-    page.value = 'reqs'; currentIter.value = null
-    const id = h.startsWith('#/reqs/') ? (decodeURIComponent(h.slice(7)) || null) : null
-    currentReqId.value = id
-    if (!id) detailTitle.value = ''
-    return
-  }
-  syncHash()   // 非法 hash 归位
-}
-watch([page, currentReqId, currentIter], syncHash)
-
 // 迭代定位：绑定需求 → 工作台；空迭代 → 迭代页（页内提交卡）。
-// 绑定关系以服务端为权威，异步幂等解析——直接刷新 / 后退进入 hash 同样走此路径（防刷新丢工作台）。
 function openIter(name) {
-  page.value = 'iters'
-  if (currentIter.value !== name) { resetWork(); currentIter.value = name }
-  resolveIterBinding(name)
+  if (route.name === 'iter' && route.params.name === name) {
+    resolveIterBinding(name)
+    return
+  }
+  router.push({ name: 'iter', params: { name } })
 }
+
+// 迭代绑定需求
 async function resolveIterBinding(name) {
   try {
     const row = await api.get('/api/iterations/detail?name=' + encodeURIComponent(name))
-    if (page.value === 'iters' && currentIter.value === name && row.reqId && currentReqId.value !== row.reqId) {
-      currentReqId.value = row.reqId
+    if (route.name === 'iter' && route.params.name === name && row.reqId && boundReqId.value !== row.reqId) {
+      boundReqId.value = row.reqId
       detailTitle.value = row.reqName || ''
     }
   } catch (e) { showToast('打开迭代失败：' + e.message, 'err') }
 }
+
+// 提交需求
 function onIterSubmitted(reqId) {
-  currentReqId.value = reqId   // 留在 #/iters/<name>，内容切换为工作台
+  boundReqId.value = reqId   // 留在 /iters/:name，内容切换为工作台
 }
+
+// 返回
 function backFromIter() {
-  currentIter.value = null
-  resetWork()
+  router.push({ name: 'iters' })
 }
+function backFromReq() {
+  detailTitle.value = ''
+  router.push({ name: 'reqs' })
+}
+function openReq(id) {
+  if (!id) { router.push({ name: 'reqs' }); return }
+  router.push({ name: 'req', params: { id } })
+}
+// 进入 /iters/:name 时按服务端绑定解析工作台；离开该地址则清掉绑定（前进/后退同一条路径）
+watch(() => (route.name === 'iter' ? String(route.params.name || '') : ''), (name, prev) => {
+  if (!name) { boundReqId.value = null; return }
+  if (name !== prev) { boundReqId.value = null; detailTitle.value = '' }
+  resolveIterBinding(name)
+}, { immediate: true })
 
 function showToast(msg, type = 'ok') {
   toast.value = { text: msg, type }
@@ -117,10 +111,11 @@ function showToast(msg, type = 'ok') {
   toastTimer = setTimeout(() => { toast.value = null }, type === 'err' ? 5000 : 2600)
 }
 
+// 导航切换
 function goPage(p) {
-  page.value = p
-  currentIter.value = null
-  resetWork()
+  const name = p === 'cases' ? 'cases' : p === 'reqs' ? 'reqs' : 'iters'
+  if (route.name === name) return
+  router.push({ name })
 }
 
 function onLoaded(name) { detailTitle.value = name || '' }
@@ -133,9 +128,6 @@ async function refreshCounts() {
 }
 
 onMounted(() => {
-  if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/iters')
-  applyHash()
-  window.addEventListener('hashchange', applyHash)
   refreshCounts()
   // 全局快捷键（C7 最小集）：/ 聚焦当前页搜索框（输入态不抢键）；无搜索框的页面 no-op
   window.addEventListener('keydown', e => {
@@ -150,10 +142,9 @@ onMounted(() => {
 // v1.1 追溯跳转：trace.js 发起，这里只负责切页/开卡；tab 内定位由目标组件消费 nonce 完成
 watch(() => pendingJump.nonce, n => {
   if (!n) return
-  page.value = pendingJump.page
-  currentIter.value = null
-  if (pendingJump.page === 'reqs') currentReqId.value = pendingJump.reqId
-  else resetWork()   // 跳出工作台（cases 页）：须清 currentReqId，否则 ReqDetail(v-else-if) 挡住目标页
+  if (pendingJump.page === 'reqs') openReq(pendingJump.reqId)
+  else if (pendingJump.page === 'cases') router.push({ name: 'cases' })
+  else router.push({ name: 'iters' })
 })
 </script>
 
@@ -227,11 +218,11 @@ watch(() => pendingJump.nonce, n => {
                   @open-iter="openIter($event.iter)" @open-empty="openIter($event)" @toast="showToast" />
         <IterEmpty v-else-if="page === 'iters' && currentIter && !currentReqId" key="iterempty"
                    :iter="currentIter" @back="backFromIter" @submitted="onIterSubmitted" @toast="showToast" />
-        <!-- key 绑定需求 id：跨需求导航（迭代绑定 → 直达 hash）时强制重挂载，防复用实例残留上一个需求的数据 -->
+        <!-- key 绑定需求 id：跨需求导航时强制重挂载，防复用实例残留上一个需求的数据 -->
         <ReqDetail v-else-if="currentReqId" :key="'reqdetail-' + currentReqId" :req-id="currentReqId"
-                   @back="page === 'iters' ? backFromIter() : (currentReqId = null, detailTitle = '')"
+                   @back="page === 'iters' ? backFromIter() : backFromReq()"
                    @toast="showToast" @loaded="onLoaded" />
-        <ReqList v-else-if="page === 'reqs'" key="reqlist" @open="currentReqId = $event" @toast="showToast" />
+        <ReqList v-else-if="page === 'reqs'" key="reqlist" @open="openReq" @toast="showToast" />
         <CaseList v-else key="cases" @toast="showToast" />
       </Transition>
     </div>

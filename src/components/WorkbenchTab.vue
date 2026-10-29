@@ -101,24 +101,56 @@ const concludedByRaw = computed(() => {
 const standaloneConcluded = computed(() =>
   props.concludedGroups.filter(g => !checkGroupNames.value.has(g.raw || g.name)))
 
-// ===== 问题卡「原稿附图」（v1.7 契约 figs）：质检产出 items[].figs=相关图片块 id 数组——
-// AI 在产出问题时就标好配图（题级选择，替代前端规则推导）；按 figs 序查块渲染缩略图，
-// 引用了缺失/非图块一律跳过（防御——契约宽松字段不做存在性强校验）。无 figs → 不渲染
-// （D12 降级不冒充）。点图开灯箱（复用 v4.20 ImgViewer，图源=媒体端点与 CtxPane 同源），
-// 图注行可右栏定位原块。
+// ===== 问题卡「原稿附图」（零契约，纯前端规则推导）：anchor→条款块（评论锚经
+// anchorBlockId 解引用）→沿 parent 上溯宿主 table-row→只放该行附图列的 image/
+// whiteboard 块（条款级归属，非同章节全收）；行内按 caption∩题干/摘引的汉字
+// bigram 重叠排序标蓝（near），无命中维持原序。无宿主行→不渲染（D12 降级不冒充）。
+// 点图开灯箱（复用 v4.20 ImgViewer，图源=媒体端点与 CtxPane 同源），图注行右栏定位原块。
 const docBlocksWb = computed(() => props.doc?.content?.blocks || [])
 const blkById = computed(() => {
   const m = {}
   for (const b of docBlocksWb.value) m[b.id] = b
   return m
 })
+/** anchor 解引用：评论锚的真正出处是被评论的条款块（comment.anchorBlockId） */
+function resolveBlock(it) {
+  const b = blkById.value[it.anchor]
+  if (!b) return null
+  if (b.type === 'comment' && b.anchorBlockId) return blkById.value[b.anchorBlockId] || b
+  return b
+}
+/** 沿 parent 链上溯宿主条款行（附图列的块直接挂在 row 下） */
+function hostRowOf(b) {
+  let cur = b, hop = 0
+  while (cur && cur.type !== 'table-row' && hop++ < 20) cur = blkById.value[cur.parent]
+  return cur?.type === 'table-row' ? cur : null
+}
+const _PIC_STOP = /[^一-鿿A-Za-z0-9]/g
+/** 汉字/字母数字连续串的 2-gram 集合（中文无空格分词的粗粒度相关度信号） */
+function bigrams(s) {
+  const t = (s || '').replace(_PIC_STOP, '')
+  const set = new Set()
+  if (t.length === 1) set.add(t)
+  for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2))
+  return set
+}
 function picsOf(it) {
-  return (Array.isArray(it.figs) ? it.figs : [])
-    .map(id => blkById.value[id])
-    .filter(b => b && (b.type === 'image' || b.type === 'whiteboard') && b.media)
-    .map(b => ({ id: b.id,
-                 url: `/api/requirements/${props.reqId}/media/${b.media}`,
-                 caption: (b.caption || b.alt || (b.type === 'whiteboard' ? '画板缩略图' : '原文图片')).trim() }))
+  const blk = resolveBlock(it)
+  const row = blk ? hostRowOf(blk) : null
+  if (!row) return []
+  const qb = bigrams(it.question), ab = bigrams(it.quote)
+  return docBlocksWb.value
+    .filter(b => b.parent === row.id && (b.type === 'image' || b.type === 'whiteboard') && b.media)
+    .map(b => {
+      const caption = (b.caption || b.alt || (b.type === 'whiteboard' ? '画板缩略图' : '原文图片')).trim()
+      const cb = bigrams(caption)
+      const near = [...cb].some(g => qb.has(g) || ab.has(g))
+      return { id: b.id, near,
+               url: `/api/requirements/${props.reqId}/media/${b.media}`,
+               caption }
+    })
+    .sort((a, b) => (b.near ? 1 : 0) - (a.near ? 1 : 0))
+    .slice(0, 6)
 }
 const picsBySeq = computed(() => {
   const m = {}
@@ -836,9 +868,9 @@ async function reopen(it) {
         <div class="q">{{ it.question }}</div>
         <!-- v5.4 原文摘引块取消（右栏已常驻高亮同段原文）：「在快照中定位」并入出处行，摘引全文进悬停提示 -->
         <div class="ctx" v-if="it.ctx || it.quote">出处：<a v-if="it.ctx" class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">{{ it.ctx }}<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><a v-if="it.quote" class="cite loc-snap" :class="{ anchored: it.anchor }" :title="'原文摘引：' + it.quote" @click="locateInCtx(it)">在快照中定位<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></div>
-        <!-- 原稿附图（v1.7 figs）：质检 AI 标注的相关图块——缩略图平铺，点开灯箱 -->
+        <!-- 原稿附图（零契约）：问题条款行附图列的图片/画板——缩略图平铺，点开灯箱；near=图注与问题文本相关 -->
         <div class="q-pics" v-if="picsBySeq[it.seq]?.length">
-          <div class="q-pic" v-for="(p, pi) in picsBySeq[it.seq]" :key="p.id">
+          <div class="q-pic" :class="{near: p.near}" v-for="(p, pi) in picsBySeq[it.seq]" :key="p.id">
             <button class="thumb" :title="'点击放大查看 · ' + p.caption"
                     @click.stop="openPic(picsBySeq[it.seq], pi)">
               <img :src="p.url" :alt="p.caption" loading="lazy" />

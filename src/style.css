@@ -1434,6 +1434,7 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .q-pics{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 8px}
 .q-pic{width:120px;flex:none}
 .q-pic .thumb{display:block;width:120px;height:68px;padding:0;border:1px solid var(--line-soft);border-radius:6px;overflow:hidden;background:var(--bg-soft);cursor:zoom-in}
+.q-pic.near .thumb{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue) inset}
 .q-pic .thumb img{width:100%;height:100%;object-fit:cover;object-position:top left;display:block}
 .q-pic .thumb:hover{border-color:var(--blue);filter:brightness(.98)}
 .q-pic .cap{display:block;font-size:10px;color:var(--faint);line-height:1.4;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}

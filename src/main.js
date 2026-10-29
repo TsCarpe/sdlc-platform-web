@@ -1,8 +1,16 @@
 import { createApp } from 'vue'
 import App from './App.vue'
+import router from './router.js'
 import './style.css'
 
-createApp(App).mount('#app')
+// 旧书签 #/iters 等：进路由前折成 History 路径，避免刷新后丢页
+if (location.hash.startsWith('#/')) {
+  history.replaceState(null, '', location.hash.slice(1) + location.search)
+}
+
+const app = createApp(App)
+app.use(router)
+router.isReady().then(() => app.mount('#app'))
 
 // ===== v2.3 mermaid 渲染（DESIGN-v2.3，红线豁免）=====
 // render() 是同步纯函数（marked→DOMPurify），mermaid.run() 需已挂载 DOM——此处全局监听

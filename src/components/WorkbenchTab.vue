@@ -12,6 +12,7 @@ import EmptyState from './EmptyState.vue'
 import CtxPane from './CtxPane.vue'
 import TocPane from './TocPane.vue'
 import { render } from '../render.js'
+import ImgViewer from './ImgViewer.vue'
 import { firstQuote, flashEl, settle, pidOf } from '../trace.js'
 import { isDone, isPending, dispLabel } from '../disposition.js'
 import { lvlLabel, lvlCls } from '../levels.js'
@@ -99,6 +100,40 @@ const concludedByRaw = computed(() => {
 })
 const standaloneConcluded = computed(() =>
   props.concludedGroups.filter(g => !checkGroupNames.value.has(g.raw || g.name)))
+
+// ===== 问题卡「原稿附图」（v1.7 契约 figs）：质检产出 items[].figs=相关图片块 id 数组——
+// AI 在产出问题时就标好配图（题级选择，替代前端规则推导）；按 figs 序查块渲染缩略图，
+// 引用了缺失/非图块一律跳过（防御——契约宽松字段不做存在性强校验）。无 figs → 不渲染
+// （D12 降级不冒充）。点图开灯箱（复用 v4.20 ImgViewer，图源=媒体端点与 CtxPane 同源），
+// 图注行可右栏定位原块。
+const docBlocksWb = computed(() => props.doc?.content?.blocks || [])
+const blkById = computed(() => {
+  const m = {}
+  for (const b of docBlocksWb.value) m[b.id] = b
+  return m
+})
+function picsOf(it) {
+  return (Array.isArray(it.figs) ? it.figs : [])
+    .map(id => blkById.value[id])
+    .filter(b => b && (b.type === 'image' || b.type === 'whiteboard') && b.media)
+    .map(b => ({ id: b.id,
+                 url: `/api/requirements/${props.reqId}/media/${b.media}`,
+                 caption: (b.caption || b.alt || (b.type === 'whiteboard' ? '画板缩略图' : '原文图片')).trim() }))
+}
+const picsBySeq = computed(() => {
+  const m = {}
+  for (const it of props.items) m[it.seq] = picsOf(it)
+  return m
+})
+/** 图注定位：块锚走右栏侧栏定位（不切 tab）；无块结构回退壳层 locate */
+function locatePic(p, it) {
+  if (!hasDoc.value) return emit('locate', '', p.id)
+  if (ctxCollapsed.value) ctxCollapsed.value = false
+  nextTick(() => ctxRef.value?.locateCtx({ seq: it.seq, src: '', anchor: p.id, ctxText: p.caption }))
+}
+// 灯箱：单实例按卡图源开关（ImgViewer 复用 v4.20；list=[{url,caption}]）
+const picViewer = ref({ list: [], idx: -1 })
+function openPic(pics, i) { picViewer.value = { list: pics, idx: i } }
 
 // ===== v5 双栏原文侧栏（§2.1）：拖宽 320-760 记忆 / 收起恢复 / 摘引联动定位 / 反向角标 =====
 const hasDoc = computed(() => !!(props.doc?.content?.blocks || []).length)
@@ -801,6 +836,16 @@ async function reopen(it) {
         <div class="q">{{ it.question }}</div>
         <!-- v5.4 原文摘引块取消（右栏已常驻高亮同段原文）：「在快照中定位」并入出处行，摘引全文进悬停提示 -->
         <div class="ctx" v-if="it.ctx || it.quote">出处：<a v-if="it.ctx" class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">{{ it.ctx }}<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><a v-if="it.quote" class="cite loc-snap" :class="{ anchored: it.anchor }" :title="'原文摘引：' + it.quote" @click="locateInCtx(it)">在快照中定位<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></div>
+        <!-- 原稿附图（v1.7 figs）：质检 AI 标注的相关图块——缩略图平铺，点开灯箱 -->
+        <div class="q-pics" v-if="picsBySeq[it.seq]?.length">
+          <div class="q-pic" v-for="(p, pi) in picsBySeq[it.seq]" :key="p.id">
+            <button class="thumb" :title="'点击放大查看 · ' + p.caption"
+                    @click.stop="openPic(picsBySeq[it.seq], pi)">
+              <img :src="p.url" :alt="p.caption" loading="lazy" />
+            </button>
+            <a class="cap" :title="p.caption + ' · 在原文中定位'" @click.stop="locatePic(p, it)">{{ p.caption }}</a>
+          </div>
+        </div>
         <!-- 影响分析折叠（audit 字段归宿 §1.2）：去向 + 关联用例，默认收起 -->
         <details class="impact" v-if="impactOf(it.seq) && (impactOf(it.seq).go || impactOf(it.seq).relatedCases.length)">
           <summary><AppIcon name="git-branch" :size="11" />影响分析（去向 / 关联用例）</summary>
@@ -958,4 +1003,8 @@ async function reopen(it) {
   <!-- P1-13：<1200px 右栏为抽屉——点遮罩收起（桌面端 CSS 隐藏） -->
   <button class="ctx-backdrop" v-if="hasDoc && !ctxCollapsed" @click="ctxCollapsed = true"
           aria-label="关闭原文上下文"></button>
+
+  <!-- 原稿附图灯箱（图源=问题卡关联图集；Teleport 至 body，z-index 不受布局影响） -->
+  <ImgViewer v-if="picViewer.idx >= 0" :list="picViewer.list" v-model:index="picViewer.idx"
+             @close="picViewer.idx = -1" />
 </template>

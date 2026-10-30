@@ -77,14 +77,14 @@ function runNext() {
 }
 
 const statusLabel = { queued: '排队中', running: '执行中', done: '已完成', failed: '失败' }
-const typeLabel = { source_import: '原文导入', quality_check: '需求质检', standard_doc: '标准文档合成', case_gen: '用例生成', design_gen: '技术设计生成', design_rev: '设计修订', gate_review: '门禁评审', incremental_check: '增量质检' }
+const typeLabel = { source_import: '原文导入', quality_check: '需求质检', standard_doc: '标准文档合成', case_gen: '用例生成', design_gen: '技术设计生成', design_rev: '设计修订', gate_review: '门禁评审', incremental_check: '增量质检', impact_eval: '影响点评估' }
 
 const moreRef = ref(null)
 function closeMore() { if (moreRef.value) moreRef.value.open = false }
 
 // 终态任务行（v5.x 批3 收进「任务历史」折叠区；进行中任务常显在状态条下方）
 const doneTasks = computed(() =>
-  [latestByType.value.source_import, latestByType.value.quality_check, latestByType.value.standard_doc, latestByType.value.case_gen]
+  [latestByType.value.source_import, latestByType.value.quality_check, latestByType.value.standard_doc, latestByType.value.case_gen, latestByType.value.impact_eval]
     .filter(x => x && x.status !== 'queued' && x.status !== 'running'))
 const failedCount = computed(() => doneTasks.value.filter(t => t.status === 'failed').length)
 

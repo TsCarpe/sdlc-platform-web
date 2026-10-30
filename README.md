@@ -13,20 +13,34 @@ npm run dev      # 5173，/api 代理到 http://127.0.0.1:8888（需后端已启
 npm run build    # 产物 dist/
 ```
 
-## 部署（独立镜像，nginx 自包含）
+## 部署（独立镜像 + 外部入口路由）
 
-两工程独立部署（2026-10-30 形态 A）：本仓出 nginx 镜像——静态托管 `dist/` + `/api` 同源反代到后端容器
-（后端纯 API 无 CORS 中间件，浏览器必须同源拿页面与接口）。后端地址三环境三镜像（对齐后端 baked
-模式）：`deploy/env.{dev,test,prod}` 的 `API_UPSTREAM` 构建期注入镜像，运行时仍可被环境变量覆盖兜底。
+两工程独立部署（2026-10-30 形态 C）：本仓出 nginx 镜像，**只托管静态资源**；`/api` 由外部入口
+（ingress / 外部 nginx）路由到后端服务。后端纯 API 无 CORS 中间件——页面与 `/api` 必须同源到达
+浏览器，这是入口层的硬约束。
 
 ```bash
 ENV=dev deploy/build.sh                                   # 只构建（附 local 便利 tag）
 ENV=prod REGISTRY=… ORG=… PUSH=1 deploy/build.sh          # 构建并推 SWR（Jenkins 流水线形态）
-docker run -p 8080:80 sdlc-platform-web:local             # 本地验证（上游已 baked，无需传 -e）
+docker run -p 8080:80 sdlc-platform-web:local             # 本地验证（/api 未路由 → 显式 502 提示）
 ```
 
-SPA fallback、`/assets` 长缓存、`index.html` no-cache、SSE 不缓冲（30min 读超时）均复刻自后端
-`_mount_static`/`static_cache`，见 `deploy/nginx.conf.template`。
+### 外部入口必配
+
+两条路由，同一 host（保证同源）：
+
+| 路径 | 指向 |
+|---|---|
+| `/`（含深链） | 前端服务 :80 |
+| `/api/` | 后端服务 :8888 |
+
+**SSE 必须配在入口层**，否则聊天流/任务进度会被默认 60s 读超时掐断（后端 SSE 生命周期上限 30min）：
+
+- nginx：`proxy_buffering off; proxy_read_timeout 1800s;`
+- ingress-nginx：`nginx.ingress.kubernetes.io/proxy-buffering: "off"` + `nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"`
+
+镜像内 `deploy/nginx.conf` 已承接 SPA fallback、`/assets` 长缓存、`index.html` no-cache（复刻后端
+`_mount_static`/`static_cache`）；未路由的 `/api` 返回显式 502 文案，便于排障。
 
 ## 结构
 

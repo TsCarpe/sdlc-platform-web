@@ -6,3 +6,5 @@ dist/
 .serena/
 .codegraph/
 .playwright-mcp/
+output/
+.playwright-cli/

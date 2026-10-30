@@ -1,0 +1,60 @@
+# SDLC 平台前端托管 + /api 同源反代（行为对齐后端 main._mount_static + static_cache 中间件，
+# 两工程独立部署后这三件事从后端搬到这里：SPA fallback / 缓存策略 / /api 转发）。
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    absolute_redirect off;   # 302 Location 保持相对 URI（默认 on 会拼绝对地址且丢端口——
+                             # 经域名+非80端口访问时 favicon 跳转会指错地方）
+
+    # dist 未预压缩（vite 无 gzip 插件），nginx 现压；woff2 等字体本身已压缩不重复压
+    gzip on;
+    gzip_types text/css application/javascript image/svg+xml application/json;
+    gzip_min_length 1024;
+
+    # 本容器健康端点（运维 probes 用；/api/health 打的是后端，不反映本容器状态）
+    location = /healthz {
+        access_log off;
+        return 200 "ok";
+    }
+
+    # hash 文件名长缓存 1 年（对齐后端：/assets max-age=31536000）
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000";
+        try_files $uri =404;
+    }
+
+    # 浏览器（缓存/历史书签）仍会请求 favicon.ico：302 转 svg，对齐后端 _mount_static
+    # （不做这条则 SPA fallback 会把 html 当 favicon 回，缓存层存脏）
+    location = /favicon.ico {
+        access_log off;
+        return 302 /favicon.svg;
+    }
+
+    # /api 同源反代（平台无 CORS 中间件，浏览器必须同源拿页面与接口）
+    location /api/ {
+        proxy_pass ${API_UPSTREAM};   # envsubst 启动期注入字面量；不带 URI 后缀 = 原样透传全路径
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";   # 上游 keepalive
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # SSE（聊天流/任务进度）：关缓冲即推；读超时 30min 对齐后端 SSE 生命周期上限
+        # （默认 60s 会把长流掐断——uvicorn 侧 graceful-shutdown 才是 30s，别混淆）
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1800s;
+    }
+
+    # index.html 永不缓存（重建后旧 HTML 引用已删 assets 会白屏）
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # SPA fallback：vue-router History 深链刷新必须回 index.html
+    #（try_files 末参是内部重定向，会再走 location = /index.html 拿到 no-cache 头）
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

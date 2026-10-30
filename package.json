@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "deploy": "vite build && rsync -a --delete dist/ \"${SDLC_SERVER_STATIC_DIR:-../sdlc-platform-server}/static/\"",
     "lint": "eslint src",
     "test": "vitest run"
   },

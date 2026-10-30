@@ -1,0 +1,9 @@
+# 构建上下文瘦身（node_modules 本地平台二进制与镜像内 node22 不兼容，绝不能 COPY 进去）
+node_modules
+dist
+design-mock
+tests
+.git
+.gitignore
+.dockerignore
+*.md

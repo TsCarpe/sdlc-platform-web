@@ -13,13 +13,20 @@ npm run dev      # 5173，/api 代理到 http://127.0.0.1:8888（需后端已启
 npm run build    # 产物 dist/
 ```
 
-## 部署（同源托管）
+## 部署（独立镜像，nginx 自包含）
 
-后端从 `static/` 直出构建产物（同源无 CORS）：
+两工程独立部署（2026-10-30 形态 A）：本仓出 nginx 镜像——静态托管 `dist/` + `/api` 同源反代到后端容器
+（后端纯 API 无 CORS 中间件，浏览器必须同源拿页面与接口）。后端地址三环境三镜像（对齐后端 baked
+模式）：`deploy/env.{dev,test,prod}` 的 `API_UPSTREAM` 构建期注入镜像，运行时仍可被环境变量覆盖兜底。
 
 ```bash
-npm run deploy    # = vite build + rsync 到 ../sdlc-platform-server/static/（SDLC_SERVER_STATIC_DIR 可覆盖目标）
+ENV=dev deploy/build.sh                                   # 只构建（附 local 便利 tag）
+ENV=prod REGISTRY=… ORG=… PUSH=1 deploy/build.sh          # 构建并推 SWR（Jenkins 流水线形态）
+docker run -p 8080:80 sdlc-platform-web:local             # 本地验证（上游已 baked，无需传 -e）
 ```
+
+SPA fallback、`/assets` 长缓存、`index.html` no-cache、SSE 不缓冲（30min 读超时）均复刻自后端
+`_mount_static`/`static_cache`，见 `deploy/nginx.conf.template`。
 
 ## 结构
 

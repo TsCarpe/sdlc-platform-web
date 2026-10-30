@@ -46,8 +46,9 @@ const totalQ = computed(() => props.items.length)
 const prog = computed(() => totalQ.value ? Math.round(answered.value / totalQ.value * 100) : 0)
 const allAnswered = computed(() => totalQ.value > 0 && answered.value === totalQ.value)
 
-/** 组头副标题：澄清组带已答进度（模板内联） */
+/** 组头副标题：澄清组带已答进度与待办数（模板内联） */
 function answeredIn(items) { return (items || []).filter(isDone).length }
+function pendingIn(items) { return (items || []).filter(isPending).length }
 
 // ===== 体检报告原文右栏目录（C7：复用 StdTab 的 TocPane / 壳层 toc-scroll 协议） =====
 const auditToc = ref([])
@@ -397,12 +398,15 @@ function expandCard(it) {
   expanded[it.seq] = true
   activateExplicit(it)
 }
-/** 处置成功后的推进：待处置筛选下暂留；开关开且仍停在该卡（用户未切走）→ 400ms 后到下一题 */
+/** 处置成功后的推进：待处置筛选下暂留；开关开且仍停在该卡（用户未切走）→ 400ms 后到下一题。
+ *  选项卡（pickOption）与无 options 文本卡（saveAnswer blur 提交）共用同一推进协议——
+ *  开关语义是「答完」而非「点完」，两条作答路径行为必须一致 */
 function afterDisposed(seq, wasPending) {
   delete expanded[seq]            // 再答一次 → 收起开关下重新收成摘要
   if (clfFilter.value === 'pending') linger.add(seq)
   if (!wasPending || !autoNext.value) return
   setTimeout(() => {
+    if (disposeDlg.value) return  // 处置弹窗打开中不抢跳（blur 触发的推进尊重模态）
     if (activeSeq.value && activeSeq.value !== seq) return
     const it = nextPendingAfter(seq)
     if (it) goToItem(it)
@@ -639,6 +643,7 @@ const savingSeqs = new Set()   // per-seq 在途/排队集：失焦重入去重�
 async function saveAnswer(it) {
   if (disposeDlg.value) return            // 处置互斥：弹窗打开期间抑制失焦保存（§2.3）
   if (!(it.seq in originAnswers.value)) originAnswers.value[it.seq] = seedOf(it)
+  const wasPending = isPending(it)        // 待→已处置转换判定（推进仅发生在答完，非改答）
   const draft = drafts[it.seq] ?? ''      // 比较与发送对象一律是 draft（非 it.answer 存储态）
   if (draft === (originAnswers.value[it.seq] ?? '')) return
   if (savingSeqs.has(it.seq)) return
@@ -656,6 +661,7 @@ async function saveAnswer(it) {
       it.status = sent.trim() ? 'answered' : 'pending'   // 后端同口径回写，本地即时反映
       ansState.value[it.seq] = 'saved'
       setTimeout(() => { if (ansState.value[it.seq] === 'saved') delete ansState.value[it.seq] }, 2500)
+      afterDisposed(it.seq, wasPending)   // 与点选路径同协议：自动下一题/暂留/再答重收
     }
   } catch (e) {
     delete ansState.value[it.seq]
@@ -734,25 +740,19 @@ async function reopen(it) {
     <button class="ctx-restore" v-if="hasDoc && ctxCollapsed" @click="ctxCollapsed = false">‹ 展开原文上下文</button>
   </div>
   <template v-else>
-    <!-- v5 工作台顶条（§2.1/§2.2）：就绪度覆盖地图（维度条，v1.6 layer 产出后点亮）+ 澄清进度 -->
+    <!-- v5 工作台顶条（§2.1/§2.2）：就绪度瘦身为单行维度 chips + 澄清进度。
+         原 7 行维度条与进度卡同分母同分子（13% = 6/46）重复占首屏——维度只保留过滤 chip 与待办数 -->
     <div class="wb-top" ref="wbTopEl" :class="{ duo: hasLayers }" v-if="status === 'clarifying' || status === 'changed'">
       <div class="readiness" v-if="hasLayers">
-        <h3>需求就绪度 <span class="sub">按缺陷维度看缺口，点维度过滤下方问题</span></h3>
-        <div class="rdy-body">
-          <div class="rdy-score">
-            <div class="n">{{ rdyPct }}%</div>
-            <div class="l">就绪度</div>
-          </div>
-          <div class="dims">
-            <button v-for="d in layerStats" :key="d.key" class="dim" :class="{ on: dimFilter === d.key }"
-                    :title="(d.layer ? layerFull(d.layer) : '未携带分层（v1.6 前存量）') + '｜点击过滤'"
-                    @click="dimFilter = dimFilter === d.key ? '' : d.key">
-              <span class="dim-name" v-if="d.layer"><span class="ln">L{{ d.layer }}</span>{{ layerShort(d.layer) }}</span>
-              <span class="dim-name" v-else>未分类</span>
-              <span class="dim-bar"><span class="dim-fill" :style="{ width: (d.total ? Math.round(d.done / d.total * 100) : 0) + '%' }"></span></span>
-              <span class="dim-cnt"><template v-if="d.total - d.done"><b>{{ d.total - d.done }}</b> 待澄清</template><template v-else><span class="ok">✓ 澄清完成</span></template></span>
-            </button>
-          </div>
+        <span class="rdy-num"><b>{{ rdyPct }}%</b><span class="l">就绪度</span></span>
+        <div class="dims">
+          <button v-for="d in layerStats" :key="d.key" class="dim" :class="{ on: dimFilter === d.key, clear: !(d.total - d.done) }"
+                  :title="(d.layer ? layerFull(d.layer) : '未携带分层（v1.6 前存量）') + '｜点击过滤下方问题'"
+                  @click="dimFilter = dimFilter === d.key ? '' : d.key">
+            <span class="dim-name"><span class="ln" v-if="d.layer">L{{ d.layer }}</span>{{ d.layer ? layerShort(d.layer) : '未分类' }}</span>
+            <span class="dim-bar"><span class="dim-fill" :style="{ width: (d.total ? Math.round(d.done / d.total * 100) : 0) + '%' }"></span></span>
+            <span class="dim-cnt"><template v-if="d.total - d.done"><b>{{ d.total - d.done }}</b> 待澄清</template><span class="ok" v-else>✓ 澄清完成</span></span>
+          </button>
         </div>
       </div>
       <div class="wb-prog" :class="{ amber: status === 'changed' }">
@@ -766,16 +766,22 @@ async function reopen(it) {
         </div>
         <div class="bar"><div class="bar-fill" :style="{ width: prog + '%' }"></div></div>
         <div class="btns">
-          <button class="btn small primary" v-if="hasPendingVisible" @click="jumpNextUnanswered">
-            <AppIcon name="arrow-up-right" :size="11" />跳到下一待处置</button>
-          <button class="btn small" :class="{ on: clfFilter !== 'all' }" @click="clfFilter = clfFilter === 'all' ? 'pending' : (clfFilter === 'pending' ? 'done' : 'all')">
-            {{ clfFilter === 'all' ? '只看待处置' : (clfFilter === 'pending' ? '只看已处置' : '显示全部') }}</button>
+          <!-- 三态筛选分段控件：直接呈现当前态与各态计数（原循环按钮只写下一步动作，看不出在哪个态） -->
+          <div class="clf-seg" role="group" aria-label="处置状态筛选">
+            <button :class="{ on: clfFilter === 'all' }" @click="clfFilter = 'all'">全部 {{ totalQ }}</button>
+            <button :class="{ on: clfFilter === 'pending' }" @click="clfFilter = 'pending'">待处置 {{ totalQ - answered }}</button>
+            <button :class="{ on: clfFilter === 'done' }" @click="clfFilter = 'done'">已处置 {{ answered }}</button>
+          </div>
           <span class="sub" v-if="allAnswered"><AppIcon name="check-circle" :size="12" style="color:var(--green)" />全部处置完成，可生成标准文档</span>
         </div>
-        <!-- v5.4 作答流开关（与吸顶细条同一状态） -->
-        <div class="wb-sw">
-          <label class="sw"><input type="checkbox" v-model="autoNext" />答完自动下一题</label>
-          <label class="sw"><input type="checkbox" v-model="autoCollapse" />答完自动收起</label>
+        <div class="btns">
+          <button class="btn small primary" v-if="hasPendingVisible" @click="jumpNextUnanswered">
+            <AppIcon name="arrow-up-right" :size="11" />跳到下一待处置</button>
+          <!-- v5.4 作答流开关（与吸顶细条同一状态）：与跳题按钮同排——都是「作答流」控制 -->
+          <span class="wb-sw">
+            <label class="sw"><input type="checkbox" v-model="autoNext" />答完自动下一题</label>
+            <label class="sw"><input type="checkbox" v-model="autoCollapse" />答完自动收起</label>
+          </span>
         </div>
       </div>
     </div>
@@ -809,11 +815,7 @@ async function reopen(it) {
     <div class="grp" v-for="g in visibleCheckGroups" :key="g.name" :class="{ closed: !openGrps.has(g.name) }">
       <div class="grp-t" @click="toggleGrp(g.name)">
         <AppIcon name="chevron-right" :size="13" class="grp-chev" />{{ g.title || g.name }}
-        <span class="cnt">{{ !g.items.length
-          ? `0 题 · 已定论 ${concludedByRaw[g.name].items.length} 条`   // #7：空组存活当且仅当有已定论块——直取安全
-          : clfFilter !== 'all'
-          ? `${g.items.length} 题（${clfFilter === 'pending' ? '待处置' : '已处置'}）`
-          : `${g.items.length} 题 · 已处置 ${answeredIn(g.items)}/${g.items.length}` }}</span>
+        <span class="cnt"><template v-if="!g.items.length">0 题 · 已定论 {{ concludedByRaw[g.name].items.length }} 条</template><template v-else-if="clfFilter !== 'all'">{{ g.items.length }} 题（{{ clfFilter === 'pending' ? '待处置' : '已处置' }}）</template><template v-else>{{ g.items.length }} 题<b class="pend" v-if="pendingIn(g.items)"> · {{ pendingIn(g.items) }} 待</b> · 已处置 {{ answeredIn(g.items) }}/{{ g.items.length }}</template></span>
       </div>
       <div class="grp-body"><div class="grp-inner">
       <!-- 已定论子折叠块（体检 ✅ 项只读卡；独立折叠键不与父组联动） -->
@@ -830,7 +832,7 @@ async function reopen(it) {
               <span class="jump-link" title="体检报告已定论条目（未生成澄清题）">来自体检.{{ pidOf(a.id) }}</span>
             </div>
             <div class="q">{{ a.title }}</div>
-            <div class="ctx" v-if="a.where || a.quote">出处：<a v-if="a.where" class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">{{ a.where }}<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><a v-if="a.quote" class="cite loc-snap" :class="{ anchored: a.anchor }" :title="'原文摘引：' + a.quote" @click="locateInCtx(a)">在快照中定位<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
+            <div class="ctx" v-if="a.where || a.quote">出处：<a class="cite" :class="{ anchored: a.anchor }" :title="a.quote ? '原文摘引：' + a.quote : ''" @click="locateInCtx(a)">{{ a.where || '在快照中定位' }}<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
             <div class="ctx" v-if="(a.relatedCases || []).length" style="margin-top:6px">
               关联用例：<a class="chip linklike real" v-for="c in a.relatedCases" :key="c" @click="emit('jump', { kind: 'case', id: c })">{{ c }}</a>
             </div>
@@ -866,8 +868,10 @@ async function reopen(it) {
           <span class="theme-tag" v-if="it.theme" :title="'需求域：' + it.theme">{{ it.theme }}</span>
         </div>
         <div class="q">{{ it.question }}</div>
-        <!-- v5.4 原文摘引块取消（右栏已常驻高亮同段原文）：「在快照中定位」并入出处行，摘引全文进悬停提示 -->
-        <div class="ctx" v-if="it.ctx || it.quote">出处：<a v-if="it.ctx" class="cite" :class="{ anchored: it.anchor }" @click="locateInCtx(it)">{{ it.ctx }}<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><a v-if="it.quote" class="cite loc-snap" :class="{ anchored: it.anchor }" :title="'原文摘引：' + it.quote" @click="locateInCtx(it)">在快照中定位<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a></div>
+        <!-- v5.4 原文摘引块取消（右栏已常驻高亮同段原文）；v5.x 出处合并为单链接——
+             原「出处文本」与「在快照中定位」两个并排链接同调 locateInCtx，是同一动作的两个入口，
+             合并后无出处文本时回落「在快照中定位」文案，摘引全文保留在悬停提示 -->
+        <div class="ctx" v-if="it.ctx || it.quote">出处：<a class="cite" :class="{ anchored: it.anchor }" :title="it.quote ? '原文摘引：' + it.quote : ''" @click="locateInCtx(it)">{{ it.ctx || '在快照中定位' }}<span v-if="isCmtAnchor(it.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="it.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a></div>
         <!-- 原稿附图（零契约）：问题条款行附图列的图片/画板——缩略图平铺，点开灯箱；near=图注与问题文本相关 -->
         <div class="q-pics" v-if="picsBySeq[it.seq]?.length">
           <div class="q-pic" :class="{near: p.near}" v-for="(p, pi) in picsBySeq[it.seq]" :key="p.id">
@@ -976,7 +980,7 @@ async function reopen(it) {
           <span class="jump-link" title="体检报告已定论条目（未生成澄清题）">来自体检.{{ pidOf(a.id) }}</span>
         </div>
         <div class="q">{{ a.title }}</div>
-        <div class="ctx" v-if="a.where || a.quote">出处：<a v-if="a.where" class="cite" :class="{ anchored: a.anchor }" @click="locateInCtx(a)">{{ a.where }}<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a><a v-if="a.quote" class="cite loc-snap" :class="{ anchored: a.anchor }" :title="'原文摘引：' + a.quote" @click="locateInCtx(a)">在快照中定位<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
+        <div class="ctx" v-if="a.where || a.quote">出处：<a class="cite" :class="{ anchored: a.anchor }" :title="a.quote ? '原文摘引：' + a.quote : ''" @click="locateInCtx(a)">{{ a.where || '在快照中定位' }}<span v-if="isCmtAnchor(a.anchor)" class="anchored-mark" title="出处为评论区——点击在评论面板查看"><AppIcon name="message-square" :size="10" /></span><span v-else-if="a.anchor" class="anchored-mark" title="块级锚点：点击直达原文条款"><AppIcon name="crosshair" :size="10" /></span></a> ｜ 去向：{{ a.go || '—' }}</div>
         <div class="ctx" v-if="(a.relatedCases || []).length" style="margin-top:6px">
           关联用例：<a class="chip linklike real" v-for="c in a.relatedCases" :key="c" @click="emit('jump', { kind: 'case', id: c })">{{ c }}</a>
         </div>

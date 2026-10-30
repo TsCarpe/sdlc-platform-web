@@ -1,7 +1,8 @@
 #!/bin/bash
-# 构建推送 SDLC 平台前端镜像（nginx 纯静态；形态 C——/api 由外部入口路由，见 README 部署段）。
+# 构建推送 SDLC 平台前端镜像（node + vite preview，端口 5174，对齐团队其他项目——方案 A）。
+# /api 由外部入口路由到后端（见 README 部署段）。
 # 与后端 deploy/build.sh 同约定：CI 暂跳过——本脚本是镜像唯一产出口；交付镜像由 Jenkins 流水线产
-# （本仓不放流水线定义）。构建在容器内完成（node:22 多阶段），本地只需 docker。
+# （本仓不放流水线定义）。构建在容器内完成（node:26），本地只需 docker。
 # 无环境配置：前端不存在环境差异（后端地址由外部入口持有），ENV 仅作 tag 前缀区分构建来源。
 # 用法：ENV=prod REGISTRY=… ORG=… PUSH=1 deploy/build.sh   # Jenkins 流水线形态（构建并推，需先 docker login SWR）
 #       ENV=dev deploy/build.sh                             # 只构建（附带 local 便利 tag）
@@ -21,10 +22,8 @@ for cmd in docker git; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "缺 $cmd 命令" >&2; exit 1; }
 done
 # SWR 代理可用性早失败：拉不到基础镜像构建必然红，早暴露好过 build 到一半才炸
-NODE_BASE="swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/node:22-alpine"
-NGINX_BASE="swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/nginx:1.27-alpine"
+NODE_BASE="swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/node:26-alpine"
 docker pull -q "$NODE_BASE" >/dev/null && echo "node 基础镜像代理 OK"
-docker pull -q "$NGINX_BASE" >/dev/null && echo "nginx 基础镜像代理 OK"
 
 echo "== docker build：$IMAGE =="
 docker build -f Dockerfile -t "$IMAGE" -t sdlc-platform-web:local .
@@ -37,4 +36,4 @@ fi
 echo
 echo "IMAGE_URL=$REGISTRY/$ORG/sdlc-platform-web"
 echo "IMAGE_TAG=$TAG"
-echo "本地验证：docker run -d -p 18080:80 sdlc-platform-web:local（/api 需外部入口路由，直连会得显式 502 提示）"
+echo "本地验证：docker run -d -p 18080:5174 sdlc-platform-web:local"

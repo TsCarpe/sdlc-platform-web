@@ -1,22 +1,21 @@
-# SDLC 平台前端镜像（nginx 纯静态托管 dist）。
-# 形态 C（2026-10-30 调整）：容器只发静态资源；/api 同源由外部入口承担——后端纯 API 无 CORS
-# 中间件，浏览器必须同源拿页面与接口，故外部 ingress/nginx 须两条路由：/ → 本服务、/api → 后端服务
-# （SSE 不缓冲与 1800s 读超时随之上移到入口层，见 README 部署段）。
+# SDLC 平台前端镜像（node + vite preview，对齐团队其他项目部署形态——2026-10-30 拍板方案 A）。
+# 单阶段：构建与运行同一镜像，容器内 `vite preview` 直出 dist；端口 5174。
+# 前端无环境差异、无容器内反代——/api 由外部入口路由到后端服务（同源约束在入口层，见 README）。
+# 已知取舍（相对 nginx 静态托管）：无 gzip / 无按路径缓存控制（index.html 若被中间层缓存，
+# 重建后旧 HTML 引用已删 assets 会白屏）/ /api 漏配时 SPA fallback 返回 HTML 而非明确错误。
 # 基础镜像走 SWR 的 docker.io 代理（公司内网拉取通路，与后端 Dockerfile 同款）。
 
-# ---------- 构建层 ----------
-FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/node:22-alpine AS build
-WORKDIR /app
-# 依赖层先装（保层缓存）：npm ci 按 package-lock 精确复现（vite5 要求 node>=18，22-alpine 满足；
-# 本地 node 24 与镜像 22 的 lock 互相兼容）
-COPY package.json package-lock.json ./
-RUN npm ci --registry=https://registry.npmmirror.com
-COPY . .
-RUN npm run build   # 产物 dist/（vite.config outDir，构建自带清空）
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/node:26-alpine
 
-# ---------- 运行层 ----------
-FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/nginx:1.27-alpine
-# 纯静态：无模板、无环境变量——前端不存在环境差异，一套配置处处一致
-COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+# Vite is a build and preview dependency, so include devDependencies.
+RUN npm ci --include=dev
+
+COPY . .
+RUN npm run build
+
+EXPOSE 5174
+
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5174", "--strictPort"]

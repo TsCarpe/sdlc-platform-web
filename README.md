@@ -13,16 +13,16 @@ npm run dev      # 5173，/api 代理到 http://127.0.0.1:8888（需后端已启
 npm run build    # 产物 dist/
 ```
 
-## 部署（独立镜像 + 外部入口路由）
+## 部署（node + vite preview，对齐团队形态）
 
-两工程独立部署（2026-10-30 形态 C）：本仓出 nginx 镜像，**只托管静态资源**；`/api` 由外部入口
-（ingress / 外部 nginx）路由到后端服务。后端纯 API 无 CORS 中间件——页面与 `/api` 必须同源到达
-浏览器，这是入口层的硬约束。
+两工程独立部署（2026-10-30 拍板方案 A）：与团队其他项目一致——单阶段 node 镜像，容器内
+`vite preview` 直出 `dist/`，端口 **5174**；`/api` 由外部入口（ingress / 外部 nginx）路由到后端
+服务。后端纯 API 无 CORS 中间件——页面与 `/api` 必须同源到达浏览器，这是入口层的硬约束。
 
 ```bash
 ENV=dev deploy/build.sh                                   # 只构建（附 local 便利 tag）
 ENV=prod REGISTRY=… ORG=… PUSH=1 deploy/build.sh          # 构建并推 SWR（Jenkins 流水线形态）
-docker run -p 8080:80 sdlc-platform-web:local             # 本地验证（/api 未路由 → 显式 502 提示）
+docker run -p 8080:5174 sdlc-platform-web:local           # 本地验证
 ```
 
 ### 外部入口必配
@@ -31,7 +31,7 @@ docker run -p 8080:80 sdlc-platform-web:local             # 本地验证（/api 
 
 | 路径 | 指向 |
 |---|---|
-| `/`（含深链） | 前端服务 :80 |
+| `/`（含深链） | 前端服务 :5174 |
 | `/api/` | 后端服务 :8888 |
 
 **SSE 必须配在入口层**，否则聊天流/任务进度会被默认 60s 读超时掐断（后端 SSE 生命周期上限 30min）：
@@ -39,8 +39,12 @@ docker run -p 8080:80 sdlc-platform-web:local             # 本地验证（/api 
 - nginx：`proxy_buffering off; proxy_read_timeout 1800s;`
 - ingress-nginx：`nginx.ingress.kubernetes.io/proxy-buffering: "off"` + `nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"`
 
-镜像内 `deploy/nginx.conf` 已承接 SPA fallback、`/assets` 长缓存、`index.html` no-cache（复刻后端
-`_mount_static`/`static_cache`）；未路由的 `/api` 返回显式 502 文案，便于排障。
+### vite preview 的已知取舍（入口层兜底）
+
+- **无 gzip**：js/css 未压缩直出（流量小可接受，在意则入口层开压缩）
+- **无按路径缓存头**：`index.html` 建议入口层对 `text/html` 加 `no-cache`——否则重建后旧 HTML 引用已删 assets 会白屏
+- **`/api` 漏配时回 `index.html`**：浏览器把 HTML 当 JSON 解析，报错不直观；上线首查入口路由
+- 无 `/healthz`：探针直接打 `/`（SPA 返回 200）
 
 ## 结构
 

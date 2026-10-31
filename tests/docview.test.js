@@ -6,8 +6,8 @@ import { partitionRows, splitRowScalars, groupRowChildren, mdPlain, docTocOf, to
 const row = (id, head, cells, extra = {}) =>
   ({ id, type: 'table-row', rowLabel: id, head, cells, ...extra })
 
-describe('partitionRows：全标量小表聚合', () => {
-  it('连续纯标量同 head 行聚合为 table run（head 随 run 携带），其余块照旧', () => {
+describe('partitionRows：同头行聚合真表格 + 媒体图廊（v4.2 语义）', () => {
+  it('连续同 head 无子块行聚合为 table run（head 随 run 携带），其余块照旧', () => {
     const parts = partitionRows([
       { id: 'p0', type: 'paragraph', text: '前言' },
       row('r1', ['版本', '日期'], ['V1', '2026年7月9日']),
@@ -22,6 +22,26 @@ describe('partitionRows：全标量小表聚合', () => {
     expect(parts[2].block.id).toBe('p1')
   })
 
+  it('长文本格聚合为表（REQ-003 功能清单场景：长格不再是行卡理由）', () => {
+    const long = '教师进入「我的任务」卡片后按规则展示任务列表，列表按优先级与时间排序，支持按角色过滤'
+    const parts = partitionRows([
+      row('r1', ['角色', '场景-触发条件', '文案要素'], ['教师', long, '标题+摘要']),
+      row('r2', ['角色', '场景-触发条件', '文案要素'], ['学校管理员', long, '标题'])
+    ])
+    expect(parts).toHaveLength(1)
+    expect(parts[0].rows.map(r => r.id)).toEqual(['r1', 'r2'])
+  })
+
+  it('cells 含空串不再断开聚合（全字符串即可）——空内容格同入一张表', () => {
+    const parts = partitionRows([
+      row('r1', ['a', 'b'], ['x', '']),
+      row('r2', ['a', 'b'], ['y', 'z'])
+    ])
+    expect(parts).toHaveLength(1)
+    expect(parts[0].kind).toBe('table')
+    expect(parts[0].rows.map(r => r.id)).toEqual(['r1', 'r2'])
+  })
+
   it('head 空数组（旧数据）不断聚合 → 单块回落行卡', () => {
     const parts = partitionRows([
       row('r1', [], ['旧长文本一']),
@@ -31,15 +51,14 @@ describe('partitionRows：全标量小表聚合', () => {
     expect(parts.map(p => p.block.id)).toEqual(['r1', 'r2'])
   })
 
-  it('cells 含空串（内容格）断开聚合 → 内容行回落行卡，后继行可独立成单行表', () => {
+  it('非字符串 cell 回落行卡（inlineHtml 抛错防御闸），后继行可独立成表', () => {
     const parts = partitionRows([
-      row('r1', ['a', 'b'], ['x', '']),
+      row('r1', ['a', 'b'], ['x', 123]),
       row('r2', ['a', 'b'], ['y', 'z'])
     ])
     expect(parts).toHaveLength(2)
-    expect(parts[0].kind).toBe('block')            // r1 有内容格 → 行卡
-    expect(parts[1].kind).toBe('table')            // r2 纯标量 → 单行表
-    expect(parts[1].rows.map(r => r.id)).toEqual(['r2'])
+    expect(parts[0].kind).toBe('block')            // r1 有非字符串格 → 行卡
+    expect(parts[1].kind).toBe('table')            // r2 全字符串 → 单行表
   })
 
   it('有行内子块断开聚合（childCountBy 计数）', () => {
@@ -65,6 +84,34 @@ describe('partitionRows：全标量小表聚合', () => {
   it('行块带评论引用不聚合（保持可锚定行卡）', () => {
     const parts = partitionRows([row('r1', ['a'], ['x'], { comments: 'c1 c2' })])
     expect(parts[0].kind).toBe('block')
+  })
+
+  it('excludeIds 锚点宿主行回落行卡且断开 run（待澄清/平台评论宿主不进矩阵表）', () => {
+    const parts = partitionRows(
+      [row('r1', ['a'], ['x']), row('r2', ['a'], ['y']), row('r3', ['a'], ['z'])],
+      new Map(), new Set(['r2'])
+    )
+    expect(parts).toHaveLength(3)
+    expect(parts[0]).toMatchObject({ kind: 'table' })   // r1 单行表（run 被 r2 断开）
+    expect(parts[1].block.id).toBe('r2')                // 锚点行 → 行卡
+    expect(parts[2]).toMatchObject({ kind: 'table' })   // r3 续新表
+  })
+
+  it('连续媒体 ≥2 聚合图廊（image/whiteboard/attachment 参与 run），单个回落独立块', () => {
+    const parts = partitionRows([
+      { id: 'img1', type: 'image', media: 'm1' },
+      { id: 'wb1', type: 'whiteboard', media: 'm2' },
+      { id: 'att1', type: 'attachment' },
+      { id: 'p1', type: 'paragraph', text: '段' },
+      { id: 'img2', type: 'image', media: 'm3' },
+      { id: 'p2', type: 'paragraph', text: '尾段' }
+    ])
+    expect(parts).toHaveLength(4)
+    expect(parts[0]).toMatchObject({ kind: 'gallery' })
+    expect(parts[0].blocks.map(b => b.id)).toEqual(['img1', 'wb1', 'att1'])
+    expect(parts[1].block.id).toBe('p1')
+    expect(parts[2]).toEqual({ kind: 'block', block: { id: 'img2', type: 'image', media: 'm3' } })  // 单媒体 → 独立卡（CSS 限高）
+    expect(parts[3].block.id).toBe('p2')
   })
 })
 

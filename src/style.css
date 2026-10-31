@@ -554,6 +554,25 @@ a.chip.linklike:hover{background:var(--blue-light); border-color:transparent; co
 .docstruct table.mini th:last-child, .docstruct table.mini td:last-child{border-right:none}
 .docstruct table.mini tbody tr:last-child td{border-bottom:none}
 
+/* ===== v4.2 阅读形态结构补偿（内容零改动，展示层结构还原） ===== */
+/* 嵌套条款树还原缩进：子条款相对父条款缩进（1.1.2 形态序号获得视觉层级）——
+   仅 DocBlock 递归子句命中（CtxPane 无 clause 结构；行卡内 leadgrp 另有自身规则） */
+.docstruct .clause > .docblk-child{margin-left:16px}
+/* 章节/行卡内容格直属单图限高：等比缩放居中，防整版长截图打断阅读（点击灯箱看原大）。
+   直接子选择器精确命中：图廊 .gal 内（另有 200px 封面规则）、BlockEditor 编辑态（figure 非直接子）均不受影响。
+   行卡内补限高——竖屏手机截图固有宽 < 内容宽（如 518×1134），max-width 不触发，曾按原尺寸整版放出 */
+.docstruct .docsec > .imgcard img, .docstruct > .imgcard img, .docstruct .rowgrp > .imgcard img{max-height:420px; width:auto; max-width:100%;
+  margin-inline:auto; object-fit:contain}
+/* mini 表格长格排版：表头不换行、单元格顶对齐、首列（行标识）加重 */
+.docstruct table.mini th{white-space:nowrap}
+.docstruct table.mini td{vertical-align:top; line-height:1.65}
+.docstruct table.mini td:first-child{font-weight:600; color:var(--ink-deep)}
+/* 表格行锚点滚动让位（tr 无 .docblk 类，与下方 data-blk 组同口径） */
+.docstruct table.mini tr[data-blk]{scroll-margin-top:104px}
+/* 矩阵行 hover 发评入口：默认隐形，行悬停显形（聚合净行保留块级发评写路径） */
+.docstruct table.mini .cmbadge.rowc{visibility:hidden; margin-left:6px; vertical-align:1px}
+.docstruct table.mini tr:hover .cmbadge.rowc{visibility:visible}
+
 /* v1.2 块锚点直达标识：⌖ → crosshair 图标徽标 */
 .cite .anchored-mark{display:inline-flex; align-items:center; color:var(--green); margin-left:3px; vertical-align:-1px}
 .cite.anchored{border-bottom-style:solid; border-bottom-color:rgba(6,118,71,.5)}

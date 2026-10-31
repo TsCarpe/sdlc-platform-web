@@ -14,7 +14,7 @@ import ImgViewer from './ImgViewer.vue'
 import { api } from '../api.js'
 import { ask } from '../confirm.js'
 import { isTerminalReason, taskFailReason } from '../task-reasons.js'
-import { render } from '../render.js'
+import { render, inlineHtml } from '../render.js'
 import { fmtRel } from '../time.js'
 import { useDocStructure } from '../composables/doc-structure.js'
 
@@ -35,8 +35,11 @@ const tocOpen = ref(false)
 const snapshotHtml = computed(() => render(props.snapshot?.md))
 
 // ===== v1.2 原文块结构（doc）：结构化渲染 + 锚点直达（v5 抽 useDocStructure，与工作台侧栏共享同源计算） =====
+// 第三参：待澄清 + 平台评论锚点宿主块 map——命中行回落行卡（pill/评论角标宿主不进矩阵表）；
+// spread 迭代两 map 的 key，评论异步装载换新对象时分区响应式重算
 const { docData, docBlocks, childrenByParent, partitionedSections, docToc, mediaList } =
-  useDocStructure(() => props.doc, () => props.card.id)
+  useDocStructure(() => props.doc, () => props.card.id,
+    () => ({ ...props.pendingByBlock, ...props.platformByBlock }))
 
 /** 当前目录标题元素序列（壳层 onScroll 高亮计算用） */
 function headEls() {
@@ -236,21 +239,34 @@ async function rerunCheck() {
           </div>
         </details>
         <!-- 章节分组渲染：heading 标题 + 直属块包裹进 .docsec 容器（缩进+引导线表达归属）；前言组平铺。
-             块序先过 partitionRows：纯标量表 run → mini 表格，其余块照旧 DocBlock（v4.1） -->
+             块序先过 partitionRows（v4.2 语义）：同 head 无子块无锚点行 → mini 表格（长格/空格不限，
+             单元格行内 md；首列 hover 发评），连续媒体 run ≥2 → 图廊；其余块照旧 DocBlock -->
         <template v-for="sec in partitionedSections" :key="sec.key">
           <section v-if="sec.heading" class="docsec" :class="sec.cls">
             <DocBlock :block="sec.heading" :children-by-parent="childrenByParent"
                       :req-id="card.id" :pending-by-block="pendingByBlock"
                       @clarify="seq => emit('clarify', seq)" />
-            <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.block.id">
+            <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.kind === 'gallery' ? 'gal-' + p.blocks[0].id : p.block.id">
               <table v-if="p.kind === 'table'" class="mini">
                 <thead><tr><th v-for="(h, hi) in p.head" :key="hi">{{ h }}</th></tr></thead>
                 <tbody>
                   <tr v-for="row in p.rows" :key="row.id" :data-blk="row.id">
-                    <td v-for="(c, ci) in row.cells" :key="ci">{{ c }}</td>
+                    <td v-for="(c, ci) in row.cells" :key="ci">
+                      <span v-html="inlineHtml(c)"></span>
+                      <button v-if="ci === 0" class="cmbadge ghost rowc" title="评论此行"
+                              @click.stop="emit('open-comments', row.id)"><AppIcon name="message-square" :size="11" /></button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
+              <!-- 连续媒体 run 图廊：封面缩略（.gal 定宽），点击灯箱；竖图 tall 高版封面 -->
+              <div v-else-if="p.kind === 'gallery'" class="gal">
+                <DocBlock v-for="m in p.blocks" :key="m.id" :block="m" :children-by-parent="childrenByParent"
+                          :req-id="card.id" :platform-by-block="platformByBlock" :pending-by-block="pendingByBlock"
+                          :class="{ tall: m.type === 'image' && m.height > m.width }"
+                          @comments="id => emit('open-comments', id)" @view-media="onDocMedia"
+                          @clarify="seq => emit('clarify', seq)" />
+              </div>
               <DocBlock v-else :block="p.block"
                         :children-by-parent="childrenByParent"
                         :req-id="card.id"
@@ -260,15 +276,27 @@ async function rerunCheck() {
             </template>
           </section>
           <template v-else>
-            <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.block.id">
+            <template v-for="p in sec.parts" :key="p.kind === 'table' ? 'tbl-' + p.rows[0].id : p.kind === 'gallery' ? 'gal-' + p.blocks[0].id : p.block.id">
               <table v-if="p.kind === 'table'" class="mini">
                 <thead><tr><th v-for="(h, hi) in p.head" :key="hi">{{ h }}</th></tr></thead>
                 <tbody>
                   <tr v-for="row in p.rows" :key="row.id" :data-blk="row.id">
-                    <td v-for="(c, ci) in row.cells" :key="ci">{{ c }}</td>
+                    <td v-for="(c, ci) in row.cells" :key="ci">
+                      <span v-html="inlineHtml(c)"></span>
+                      <button v-if="ci === 0" class="cmbadge ghost rowc" title="评论此行"
+                              @click.stop="emit('open-comments', row.id)"><AppIcon name="message-square" :size="11" /></button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
+              <!-- 连续媒体 run 图廊：封面缩略（.gal 定宽），点击灯箱；竖图 tall 高版封面 -->
+              <div v-else-if="p.kind === 'gallery'" class="gal">
+                <DocBlock v-for="m in p.blocks" :key="m.id" :block="m" :children-by-parent="childrenByParent"
+                          :req-id="card.id" :platform-by-block="platformByBlock" :pending-by-block="pendingByBlock"
+                          :class="{ tall: m.type === 'image' && m.height > m.width }"
+                          @comments="id => emit('open-comments', id)" @view-media="onDocMedia"
+                          @clarify="seq => emit('clarify', seq)" />
+              </div>
               <DocBlock v-else :block="p.block"
                         :children-by-parent="childrenByParent"
                         :req-id="card.id"

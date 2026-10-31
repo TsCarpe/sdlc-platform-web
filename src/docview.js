@@ -3,39 +3,56 @@
 // groupRowChildren（行内子块按 cell 戳分组 + 尾部图廊 + 列表视觉挂靠前导段）。
 // 全部结构特征驱动（标量性/长度/位置），不识别列名语义；旧数据（head 空 / 子块无 cell 锚）天然回落现状。
 
-/** 判断行块是否为「纯标量行」——可参与 mini 表格聚合的条件（head 非空、格满且非空、无子块无评论） */
-function isPureScalarRow(b, childCountBy) {
+/** 判断行块是否可聚合进真表格——head 非空、格数与列数一致、全格为字符串（长短/空串不限：
+ * 长文本格正是矩阵表的正文），且无行内子块、无飞书评论引用、不在锚点排除集。
+ * 带子块/评论/锚点的行回落行卡（树与图廊需纵向空间；评论与待澄清 pill 的宿主也是行卡）。 */
+function isAggregableRow(b, childCountBy, excludeIds) {
   if (!b || b.type !== 'table-row') return false
   const head = b.head || []
   const cells = b.cells || []
   if (!head.length || cells.length !== head.length) return false
-  if (!cells.every(c => typeof c === 'string' && c !== '')) return false
+  if (!cells.every(c => typeof c === 'string')) return false
   if (childCountBy.get(b.id)) return false                     // 有行内子块 → 行卡承载
   if (String(b.comments || '').trim()) return false            // 行上有评论引用 → 保持可锚定行卡
+  if (excludeIds?.has(b.id)) return false                      // 待澄清/平台评论锚点宿主 → 行卡
   return true
 }
 
+const MEDIA_TYPES = ['image', 'attachment', 'whiteboard']
+
 /**
- * 块序列 → [{kind:'block', block} | {kind:'table', head, rows:[…]}]。
- * 连续纯标量行且 head 逐项相等 → 聚合为一张 mini 表格（head 取 run 首行）；任一条件断开 → 单块回落行卡。
- * childCountBy：父块 id → 子块数（OriginTab 由 childrenByParent 统计传入；缺省空 Map = 全部视为无子块）。
+ * 块序列 → [{kind:'block', block} | {kind:'table', head, rows:[…]} | {kind:'gallery', blocks:[…]}]。
+ * 连续可聚合行且 head 逐项相等 → 聚合为一张 mini 表格（head 取 run 首行）；
+ * 连续媒体块（image/attachment/whiteboard）≥2 → 聚合图廊（封面缩略点击灯箱），单个 → 独立卡（CSS 限高）。
+ * childCountBy：父块 id → 子块数（OriginTab 由 childrenByParent 统计传入；缺省空 Map = 全部视为无子块）；
+ * excludeIds：锚点宿主块 id 集（OriginTab 传待澄清/平台评论两 map 的键；缺省空集）。
  */
-export function partitionRows(blocks, childCountBy = new Map()) {
+export function partitionRows(blocks, childCountBy = new Map(), excludeIds = new Set()) {
   const out = []
-  let run = null   // 当前聚合中的纯标量行 run
+  let run = null       // 当前聚合中的表格 run
+  let media = null     // 当前连续媒体 run
+  const flushMedia = () => {
+    if (!media) return
+    if (media.length > 1) out.push({ kind: 'gallery', blocks: media })
+    else media.forEach(b => out.push({ kind: 'block', block: b }))
+    media = null
+  }
   for (const b of blocks || []) {
-    const joinable = isPureScalarRow(b, childCountBy)
-      && run && run.head.length === (b.head || []).length
-      && run.head.every((h, i) => h === b.head[i])
-    if (joinable) { run.rows.push(b); continue }
-    run = null
-    if (isPureScalarRow(b, childCountBy)) {
+    if (isAggregableRow(b, childCountBy, excludeIds)) {
+      flushMedia()
+      const joinable = run && run.head.length === (b.head || []).length
+        && run.head.every((h, i) => h === b.head[i])
+      if (joinable) { run.rows.push(b); continue }
       run = { kind: 'table', head: [...b.head], rows: [b] }
       out.push(run)
-    } else {
-      out.push({ kind: 'block', block: b })
+      continue
     }
+    run = null
+    if (MEDIA_TYPES.includes(b?.type)) { media = [...(media || []), b]; continue }
+    flushMedia()
+    out.push({ kind: 'block', block: b })
   }
+  flushMedia()
   return out
 }
 

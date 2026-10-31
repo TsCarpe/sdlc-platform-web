@@ -7,8 +7,10 @@ import { partitionRows, docTocOf } from '../docview.js'
 /**
  * @param doc      detail.doc（块表权威视图：content.blocks + media）
  * @param reqId    媒体 URL 前缀用（() => string 或 string）
+ * @param getAnchoredBlockIds  () => {blockId: …} 锚点宿主块 map（OriginTab 传待澄清/平台评论
+ *                 两 map 合并；命中键的行回落行卡，保住 pill/评论角标宿主）。缺省空 = 无排除。
  */
-export function useDocStructure(getDoc, getReqId) {
+export function useDocStructure(getDoc, getReqId, getAnchoredBlockIds = () => ({})) {
   const docData = computed(() => getDoc()?.content || null)
   const docBlocks = computed(() => docData.value?.blocks || [])
   const childrenByParent = computed(() => {
@@ -41,7 +43,8 @@ export function useDocStructure(getDoc, getReqId) {
     }
     return preface ? [preface, ...secs] : secs
   })
-  // v4.1 全标量小表还原：章节块序过 partitionRows——连续纯标量同 head 行聚合为 mini 表格
+  // v4.1 小表还原 + v4.2 语义放宽：章节块序过 partitionRows——同 head 无子块行聚合为 mini 表格
+  //（长格/空格不限），锚点宿主行（getAnchoredBlockIds 键）回落行卡保住 pill/评论角标
   const childCountBy = computed(() => {
     const m = new Map()
     for (const b of docBlocks.value) {
@@ -50,8 +53,9 @@ export function useDocStructure(getDoc, getReqId) {
     }
     return m
   })
+  const anchoredIds = computed(() => new Set(Object.keys(getAnchoredBlockIds() || {})))
   const partitionedSections = computed(() =>
-    docSections.value.map(sec => ({ ...sec, parts: partitionRows(sec.blocks, childCountBy.value) })))
+    docSections.value.map(sec => ({ ...sec, parts: partitionRows(sec.blocks, childCountBy.value, anchoredIds.value) })))
   const commentByRef = computed(() => {
     const m = {}
     for (const b of docBlocks.value) if (b.type === 'comment') m[b.ref] = b

@@ -4,7 +4,27 @@
 // ①② 直调 linkifyRefs 喂裸 HTML 串——真实管线（render 之后）文本里的 " 已被前置转义为
 // &quot; 六字面字符，裸引号形态只有直调层可测（走全管线会「怎么改都红」）；③ 走全管线锁常规链接化不回归。
 import { describe, it, expect } from 'vitest'
-import { render, linkifyRefs } from '../src/render.js'
+import { render, linkifyRefs, inlineHtml } from '../src/render.js'
+
+describe('inlineHtml：行内 md + 非 string 防御（v4.2 mini 表格单元格用）', () => {
+  it('粗体/行内代码/链接行内渲染（无块级语法）', () => {
+    const out = inlineHtml('**加粗** 与 `code`')
+    expect(out).toContain('<strong>加粗</strong>')
+    expect(out).toContain('<code>code</code>')
+    expect(inlineHtml('见[说明](https://x.com)')).toContain('<a href="https://x.com"')
+  })
+
+  it('空值/非字符串入参不抛错（marked.parseInline 对非 string 直接 throw）', () => {
+    expect(inlineHtml('')).toBe('')
+    expect(inlineHtml(null)).toBe('')
+    expect(inlineHtml(undefined)).toBe('')
+    expect(inlineHtml(123)).toBe('123')
+  })
+
+  it('script 标签消毒剥除', () => {
+    expect(inlineHtml('<script>alert(1)</script>x')).not.toContain('<script')
+  })
+})
 
 describe('linkifyRefs：#22d XSS 面收口', () => {
   it('① 裸引号切断详述匹配：span 只包引号前段，引号滞留文本不入 data-ref', () => {

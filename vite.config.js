@@ -11,6 +11,6 @@ export default defineConfig({
     port: 5173,
     // 本机后端 sdlc-platform-server（8888，见 README）；切环境后端时改此行
     // proxy: { '/api': 'http://127.0.0.1:8888' }
-    proxy: { '/api': 'http://10.30.5.54:31491' }   // 远端后端
+    proxy: { '/api': 'http://10.30.5.54:31491' }   // 测试环境后端（NodePort，与 9cf956c 定真值一致）
   }
 })

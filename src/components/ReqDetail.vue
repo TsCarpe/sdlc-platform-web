@@ -14,6 +14,7 @@ import OriginTab from './OriginTab.vue'
 import DigestTab from './DigestTab.vue'
 import WorkbenchTab from './WorkbenchTab.vue'
 import StdTab from './StdTab.vue'
+import ImpactTab from './ImpactTab.vue'
 import ChangesTab from './ChangesTab.vue'
 import CommentsPanel from './CommentsPanel.vue'
 import { fmtRel } from '../time.js'
@@ -45,6 +46,11 @@ async function switchTab(t) {
   if (tab.value === 'std' && stdTabRef.value?.isEditingDirty?.()
       && !await ask({ title: '放弃未保存的编辑？',
                       body: '切换页签将丢弃标准文档草稿的未保存编辑（已保存的草稿不受影响）。',
+                      danger: true, confirmText: '放弃并切换' })) return
+  // v6：影响点评估人工矫正未保存同守卫（同 E3 模式）
+  if (tab.value === 'impact' && impactTabRef.value?.isEditingDirty?.()
+      && !await ask({ title: '放弃未保存的矫正？',
+                      body: '切换页签将丢弃影响点评估的未保存编辑。',
                       danger: true, confirmText: '放弃并切换' })) return
   tab.value = t
 }
@@ -99,6 +105,7 @@ const grp = provideGroupCollapse({ fr: frGroups, audit: concludedGroups, check: 
 const originTabRef = ref(null)
 const digestTabRef = ref(null)
 const stdTabRef = ref(null)
+const impactTabRef = ref(null)
 const workbenchTabRef = ref(null)
 
 // ===== 跨 tab 协议：追溯跳转（locate/applyJump 消费 pendingJump） =====
@@ -135,7 +142,8 @@ const { activeHead, showTop, goToc, toTop } = useTocScroll({
 })
 
 // v5（D19）：audit 并入工作台后 TABS 删 'audit'；'checklist' 键名保留（组件/文案已更名工作台）
-const TABS = ['origin', 'digest', 'checklist', 'std', 'changes', 'cases', 'design', 'gate']
+// v6：'impact'（影响点评估）插 std 后——属发布后页签（要求标准文档已发布），与阶段分隔线口径一致
+const TABS = ['origin', 'digest', 'checklist', 'std', 'impact', 'changes', 'cases', 'design', 'gate']
 
 // ===== U-10：页签 ARIA + roving tabindex + ←/→/Home/End =====
 const tabDisabled = key => (key === 'design' || key === 'gate') && postLocked.value
@@ -319,6 +327,8 @@ onBeforeUnmount(() => {
 // v5.x 派生迁此（原 TaskPanel）：草稿四类——草稿宿主 tab 的数据源
 const digestDraft = computed(() => drafts.value.digest_bundle || null)
 const stdDraft = computed(() => drafts.value.standard || null)
+const impactDraft = computed(() => drafts.value.impact_eval || null)   // v6：影响点评估草稿
+const impactTask = computed(() => tasks.value.find(t => t.type === 'impact_eval') || null)  // 列表 id 倒序首个=最新
 const stdDraftVisible = computed(() => !!stdDraft.value && card.value.status !== 'published')   // published 终态无草稿动作
 const casesDraft = computed(() => drafts.value.cases || null)
 const incDraft = computed(() => drafts.value.incremental_bundle || null)
@@ -459,7 +469,8 @@ function resolveDocPath(path) {
       <!-- v4 contentRev：变更确认次数展示（单调计数，放弃不回退） -->
       <span class="chip" v-if="card.contentRev > 0"
             title="变更单确认次数（content_rev 单调递增；放弃变更不回退此计数）">历史变更 ×{{ card.contentRev }}</span>
-      <button class="btn primary cta-btn" v-if="cta" :disabled="cta.disabled" @click="runCta">{{ cta.label }}</button>
+      <!-- CTA 目标页签即当前页签时隐藏（go=tab:X 在当前 tab 上是空操作，与工作台内跳题按钮重复） -->
+      <button class="btn primary cta-btn" v-if="cta && cta.go !== 'tab:' + tab" :disabled="cta.disabled" @click="runCta">{{ cta.label }}</button>
     </div>
 
     <!-- v4 changed 态：顶部提示条（增量合并后重新发布） -->
@@ -496,6 +507,11 @@ function resolveDocPath(path) {
               :class="{ on: tab === 'std' }" @click="switchTab('std')"
               @keydown="onTabKey($event, 'std')">标准需求文档<span class="n draft" v-if="stdDraftVisible" title="标准文档草稿待发布">!</span></button>
       <div class="tab-phase" title="以下页签在需求发布后开启" aria-hidden="true"></div>
+      <button class="tab" role="tab" id="tab-impact" :aria-selected="tab === 'impact' ? 'true' : 'false'"
+              aria-controls="tabpanel-impact" :tabindex="tab === 'impact' ? 0 : -1"
+              :class="{ on: tab === 'impact' }" @click="switchTab('impact')"
+              @keydown="onTabKey($event, 'impact')">
+        影响评估<span class="n draft" v-if="impactDraft" title="影响点评估草稿待采纳">!</span><span class="n num" v-else-if="d.impact?.content?.items">{{ d.impact.content.items.length }}</span></button>
       <button class="tab" role="tab" id="tab-changes" :aria-selected="tab === 'changes' ? 'true' : 'false'"
               aria-controls="tabpanel-changes" :tabindex="tab === 'changes' ? 0 : -1"
               :class="{ on: tab === 'changes' }" @click="switchTab('changes')"
@@ -563,6 +579,11 @@ function resolveDocPath(path) {
             :draft="stdDraftVisible ? stdDraft : null" :status="card.status"
             @jump="onJump" @go-toc="goToc" @toast="(m, t) => emit('toast', m, t)"
             @refresh="load" @reload="reloadPipe" />
+
+    <!-- v6 影响点评估（DESIGN-v6 §3.2）：触发（含补充指引）/草稿采纳/采纳后报告+人工矫正 -->
+    <ImpactTab v-if="tab === 'impact'" ref="impactTabRef" :req-id="card.id" :card="card"
+               :impact="d.impact" :draft="impactDraft" :impact-task="impactTask"
+               @toast="(m, t) => emit('toast', m, t)" @refresh="load" @reload="reloadPipe" />
 
     <!-- v4 变更单 tab：列表/draft（复用块编辑器）/confirm（diff+四类清单）/abort；
          v5.x 批2：增量合并草稿（采纳=机械合并）归本页签 -->

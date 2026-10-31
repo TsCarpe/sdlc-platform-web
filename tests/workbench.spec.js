@@ -360,7 +360,7 @@ describe('WorkbenchTab：V5 review 批3（#7 过滤空组 / #8 过滤联动 / #9
     const w = await mountWb(items)
     await w.setProps({ concludedGroups: [
       { name: '已定论·组', raw: '组', items: [{ id: '体检.P01', level: 'yellow', title: '已定论条目', go: '✅ 已明确', where: '', quote: '', anchor: '' }] }] })
-    await w.findAll('button').find(b => b.text() === '只看待处置').trigger('click')   // clfFilter: all → pending
+    await w.findAll('.clf-seg button').find(b => b.text().startsWith('待处置')).trigger('click')   // clfFilter: all → pending（分段控件）
     expect(w.find('.concluded-blk').exists()).toBe(true)          // 已定论块是只读参照，不随过滤消失
     expect(w.find('.grp-t').text()).toContain('0 题 · 已定论 1 条')
   })
@@ -588,17 +588,17 @@ describe('WorkbenchTab：v5.4 作答流（下一待处置口径 / 自动推进 /
     expect(w.find('[data-pid="P01"]').classes()).toContain('folded')
   })
 
-  it('「只看待处置」下刚答的卡暂留不消失；切换筛选后才按真实状态隐藏', async () => {
+  it('「待处置」筛选下刚答的卡暂留不消失；切换筛选后才按真实状态隐藏', async () => {
     const items = [opt('P01'), opt('P02'), opt('P03')]
     const w = await mountG(items)
-    const flt = () => w.find('.wb-prog .btns .btn:not(.primary)')   // 已处置筛选下无可见待处置，跳题按钮隐藏——不按下标取
-    await flt().trigger('click')                              // all → pending
+    const seg = t => w.findAll('.clf-seg button').find(b => b.text().startsWith(t))   // 分段控件按前缀取
+    await seg('待处置').trigger('click')                        // all → pending
     await w.find('[data-pid="P01"] .opt').trigger('click')
     await flushPromises()
     expect(w.find('[data-pid="P01"]').exists()).toBe(true)    // 暂留
-    await flt().trigger('click')                              // → done
-    await flt().trigger('click')                              // → all
-    await flt().trigger('click')                              // → pending（暂留集已清）
+    await seg('已处置').trigger('click')                      // → done
+    await seg('全部').trigger('click')                        // → all
+    await seg('待处置').trigger('click')                      // → pending（暂留集已清）
     expect(w.find('[data-pid="P01"]').exists()).toBe(false)
   })
 })

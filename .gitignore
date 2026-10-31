@@ -7,3 +7,5 @@ dist/
 .codegraph/
 .playwright-mcp/
 .diag/
+output/
+.playwright-cli/

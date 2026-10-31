@@ -67,13 +67,13 @@ beforeEach(() => { vi.clearAllMocks(); localStorage.clear() })
 afterEach(() => { wrapper?.unmount?.(); wrapper = null })
 
 describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
-  it('头部信息与 8 个 tab 齐全（v5：audit 并入工作台 + 分阶段分组置灰）', async () => {
+  it('头部信息与 9 个 tab 齐全（v5：audit 并入工作台 + 分阶段分组置灰；v6：std 后插影响评估）', async () => {
     wrapper = await mountDetail()
     expect(wrapper.text()).toContain('冒烟需求')
     expect(wrapper.text()).toContain('REQ-2026-001')
     const tabs = wrapper.findAll('[role="tab"]')
     expect(tabs.map(t => t.text())).toEqual([
-      '原始需求', '需求摘要1', '澄清工作台1', '标准需求文档', '变更', '用例', '设计', '门禁'])
+      '原始需求', '需求摘要1', '澄清工作台1', '标准需求文档', '影响评估', '变更', '用例', '设计', '门禁'])
     // 置灰仅设计/门禁（D8：变更承载 reconcile 通道、用例无守卫，不置灰）
     const byText = t => tabs.find(b => b.text().startsWith(t))
     expect(byText('变更').attributes('disabled')).toBeUndefined()
@@ -245,12 +245,12 @@ describe('ReqDetail 壳级冒烟（拆分行为基线）', () => {
     expect(document.activeElement.id).toBe('tab-std')
     expect(wrapper.find('[role="tabpanel"]').attributes('id')).toBe('tabpanel-std')   // 面板随页签更新
 
-    // 从 std 继续右移：发布前禁用的设计/门禁不参与 roving，前进落到变更
+    // 从 std 继续右移：v6 影响评估可用，前进先落到影响评估（发布前禁用的设计/门禁仍不参与 roving）
     await document.getElementById('tab-std').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
     await flushPromises()
-    expect(wrapper.find('[role="tab"].on').text()).toContain('变更')   // 设计/门禁禁用，前进落到变更
+    expect(wrapper.find('[role="tab"].on').text()).toContain('影响评估')   // std → impact（可用）；设计/门禁禁用，再前进才到变更
     // Home 回首页签
-    await document.getElementById('tab-changes').dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
+    await document.getElementById('tab-impact').dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
     await flushPromises()
     expect(wrapper.find('[role="tab"].on').text()).toContain('原始需求')
     expect(document.activeElement.id).toBe('tab-origin')

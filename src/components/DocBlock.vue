@@ -4,11 +4,12 @@
 // v1.3 UI 改版：长段落折叠（ClampText，DOM 常驻不影响 needle 定位）、emoji → SVG 图标
 // v5.x 评论入口合并：移除飞书源评论角标与内联 .cthread 展开（v1.2 残留），全部评论走右侧
 // 面板——角标点击 emit comments（壳层开面板并联动定位，见 src/comments.js 口径单点）
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
 import ClampText from './ClampText.vue'
+import HtmlViewer from './HtmlViewer.vue'
 import { splitRowScalars, groupRowChildren } from '../docview.js'
 
 const props = defineProps({
@@ -60,6 +61,27 @@ function chipCls(v) {
 
 /** 图廊竖图判定（figure.tall 高版封面）：宽高属性齐全且高>宽（H5 长截图） */
 function isPortrait(b) { return !!b.width && !!b.height && b.height > b.width }
+
+// v5.x HTML 附件内联预览 + 全屏体验（对齐飞书文档 HTML 卡片）：
+// 服务端红线不动——text/html 仍 attachment 下载（media.py 注释：内联即存储型 XSS）。
+// 预览改走前端 fetch 取文本 → iframe.srcdoc → sandbox（无 allow-same-origin → opaque origin，
+// 附件脚本读不到平台存储/写令牌）。srcdoc 而非 blob: URL——Safari/Firefox 对 sandboxed
+// blob 导航有已知限制会白屏，srcdoc 全浏览器可用且免 objectURL 生命周期管理。
+/** HTML 附件识别：mime 直判 + 扩展名兜底（个别导入件 mime 缺失） */
+const isHtml = computed(() =>
+  props.block.type === 'attachment' &&
+  ((props.block.mime || '').toLowerCase() === 'text/html' || /\.html?$/i.test(props.block.name || '')))
+const htmlView = ref(false)    // 全屏体验器开关
+const htmlSrc = ref('')        // 缩略图 srcdoc 文本（空串=加载中/未加载）
+const htmlErr = ref(false)     // 缩略图加载失败态
+async function loadHtml() {
+  try {
+    const r = await fetch(mediaUrl.value)
+    if (!r.ok) throw new Error('http ' + r.status)
+    htmlSrc.value = await r.text()
+  } catch { htmlErr.value = true }
+}
+onMounted(() => { if (isHtml.value && mediaUrl.value) loadHtml() })
 </script>
 
 <template>
@@ -169,7 +191,29 @@ function isPortrait(b) { return !!b.width && !!b.height && b.height > b.width }
     <figcaption v-if="block.caption || block.alt"><AppIcon name="image" :size="12" />{{ block.caption || block.alt }}</figcaption>
   </figure>
 
-  <!-- 附件 -->
+  <!-- 附件（HTML 演示件：文件卡 + 内联缩放预览，点击/按钮进全屏体验） -->
+  <div v-else-if="block.type === 'attachment' && isHtml" class="docblk htmlblk" :data-blk="block.id">
+    <div class="mediacard">
+      <span class="mediacard-ico"><AppIcon name="paperclip" :size="15" /></span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">{{ block.name }}</div>
+        <div class="sub">{{ block.mime }} · {{ (block.bytes / 1024).toFixed(0) }} KB</div>
+      </div>
+      <button class="btn small" @click="htmlView = true" title="全屏体验 HTML 演示"><AppIcon name="play" :size="12" />全屏体验</button>
+      <a :href="mediaUrl" target="_blank" rel="noopener" title="下载原文件"><button class="btn small"><AppIcon name="download" :size="12" />下载</button></a>
+    </div>
+    <div class="htmlprev" role="button" tabindex="0" :title="htmlErr ? '点击重新加载预览' : '点击全屏体验'"
+         @click="htmlErr ? (htmlErr = false, loadHtml()) : (htmlView = true)"
+         @keydown.enter="htmlErr ? (htmlErr = false, loadHtml()) : (htmlView = true)">
+      <iframe v-if="htmlSrc" class="htmlprev-frame" :srcdoc="htmlSrc" sandbox="allow-scripts"
+              scrolling="no" tabindex="-1" title="HTML 演示缩略预览"></iframe>
+      <span v-else class="htmlprev-ph sub">{{ htmlErr ? '预览加载失败——点击重试' : '预览加载中…' }}</span>
+      <span v-if="!htmlErr" class="htmlprev-cta"><AppIcon name="play" :size="12" />全屏体验</span>
+    </div>
+    <HtmlViewer v-if="htmlView" :url="mediaUrl" :name="block.name" :bytes="block.bytes" @close="htmlView = false" />
+  </div>
+
+  <!-- 附件（非 HTML：原文件卡 + 查看/下载） -->
   <div v-else-if="block.type === 'attachment'" class="docblk mediacard" :data-blk="block.id">
     <span class="mediacard-ico"><AppIcon name="paperclip" :size="15" /></span>
     <div style="flex:1;min-width:0">

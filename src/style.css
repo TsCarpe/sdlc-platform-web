@@ -516,6 +516,20 @@ a.chip.linklike:hover{background:var(--blue-light); border-color:transparent; co
 .docstruct .mediacard{display:flex; gap:10px; align-items:center; border:1px solid var(--line-soft); border-radius:12px; padding:10px 14px; margin:10px 0}
 .docstruct .mediacard-ico{width:34px; height:34px; border-radius:9px; background:var(--bg-active); color:var(--slate);
   display:flex; align-items:center; justify-content:center; flex:none}
+/* v5.x HTML 附件内联预览（DocBlock.htmlblk）：文件卡与预览框连体；iframe 按 2 倍视口渲染再 scale(.5)
+   ——桌面原型页缩成缩略图看全貌（transform 标准属性，全浏览器可用）；pointer-events:none 预览只读，
+   点击统一由外层 .htmlprev 进全屏体验 */
+.docstruct .htmlblk .mediacard{margin-bottom:0; border-radius:12px 12px 0 0}
+.docstruct .htmlprev{position:relative; height:260px; overflow:hidden; border:1px solid var(--line-soft);
+  border-top:0; border-radius:0 0 12px 12px; background:#fff; cursor:pointer; margin:0 0 10px}
+.docstruct .htmlprev:hover{border-color:var(--slate)}
+.docstruct .htmlprev:focus-visible{outline:2px solid var(--slate); outline-offset:1px}
+.docstruct .htmlprev-frame{width:200%; height:200%; transform:scale(.5); transform-origin:0 0;
+  border:0; display:block; pointer-events:none}
+.docstruct .htmlprev-ph{position:absolute; inset:0; display:flex; align-items:center; justify-content:center}
+.docstruct .htmlprev-cta{position:absolute; right:10px; bottom:10px; display:inline-flex; gap:5px;
+  align-items:center; padding:5px 10px; border-radius:8px; font-size:12px; line-height:1;
+  background:rgba(15,18,30,.78); color:#fff}
 .docstruct .docblk-child{margin-left:0}
 
 /* ===== v4.1 层级还原（parse_doc ≥0.5 配套）：小标题 / 卡头轻 chip / 内容格分组 / 图廊 / mini 表格 ===== */
@@ -1173,6 +1187,24 @@ tr:hover .row-del, .row-del:focus-visible{opacity:1}
 .iv-cap .iv-cap-txt.clamp{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer}
 .iv-cap .iv-cap-txt{cursor:pointer}
 .iv-cap .iv-hint{color:rgba(255,255,255,.45); font-size:11.5px}
+
+/* ---- v5.x HTML 全屏体验器（HtmlViewer）：白底整页（对齐飞书全屏预览）——顶栏退出/文件名/提示/下载 + 满屏 iframe ---- */
+.hv-mask{position:fixed; inset:0; z-index:var(--z-lightbox); background:#fff; display:flex; flex-direction:column;
+  animation:fade-in .14s ease-out}
+.hv-top{display:flex; align-items:center; gap:10px; flex:none; padding:10px 16px;
+  border-bottom:1px solid var(--line-soft); background:#fff}
+.hv-top .spacer{flex:1}
+.hv-ico{color:var(--slate); flex:none}
+.hv-name{font-weight:600; font-size:13px; min-width:0; max-width:32vw; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap}
+.hv-size{color:var(--muted); font-size:12px; white-space:nowrap; flex:none}
+.hv-warn{display:inline-flex; align-items:center; gap:4px; min-width:0; color:var(--muted); font-size:12px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.hv-stage{flex:1; position:relative; min-height:0}
+.hv-frame{width:100%; height:100%; border:0; display:block; background:#fff}
+.hv-loading{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:var(--muted); font-size:13px}
+.hv-exit{font-weight:600}   /* 退出主出口加重（同灯箱 .iv-close 惯例） */
 
 /* ---- v5 澄清工作台（DESIGN-v5 §1/§2）：tab 分阶段分组 / 工作台顶条 / 已定论块 / 影响分析 ---- */
 /* tab 分组与置灰（§1.1/D8） */

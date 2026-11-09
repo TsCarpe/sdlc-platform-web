@@ -11,12 +11,14 @@ import IterEmpty from './components/IterEmpty.vue'
 import AppIcon from './components/AppIcon.vue'
 import ConfirmBox from './components/ConfirmBox.vue'
 import Chat from './components/Chat.vue'
+import QuickStart from './components/QuickStart.vue'
 
 // v2.4：平台首页 = 迭代列表（DESIGN-v2.4 D37）；/reqs 保留为跨迭代需求二级视图
 const route = useRoute()
 const router = useRouter()
 const page = computed(() => {
   if (route.name === 'cases') return 'cases'
+  if (route.name === 'guide') return 'guide'
   if (route.name === 'iters' || route.name === 'iter') return 'iters'
   return 'reqs'
 })
@@ -113,7 +115,7 @@ function showToast(msg, type = 'ok') {
 
 // 导航切换
 function goPage(p) {
-  const name = p === 'cases' ? 'cases' : p === 'reqs' ? 'reqs' : 'iters'
+  const name = { cases: 'cases', reqs: 'reqs', guide: 'guide' }[p] || 'iters'
   if (route.name === name) return
   router.push({ name })
 }
@@ -171,6 +173,10 @@ watch(() => pendingJump.nonce, n => {
     </button>
     <!-- P5：AI 查询助理（右侧抽屉，只读查询，不切页） -->
     <Chat />
+    <button class="nav-item" :class="{ on: page === 'guide' }" :title="sideCollapsed ? '快速上手' : null"
+            @click="goPage('guide')">
+      <AppIcon name="book-open" :size="15" /><span class="nav-label">快速上手</span>
+    </button>
     <div class="side-foot">
       <details>
         <summary><AppIcon name="lock" :size="12" />写令牌{{ tokenSet ? '（已设置）' : '' }}</summary>
@@ -205,6 +211,7 @@ watch(() => pendingJump.nonce, n => {
         <template v-else-if="page === 'iters'"><span class="crumb">迭代列表 /</span> {{ currentIter }}</template>
         <template v-else-if="page === 'reqs' && !currentReqId">需求（跨迭代视图）</template>
         <template v-else-if="page === 'reqs'"><span class="crumb">需求 /</span> {{ currentReqId || '需求详情' }}</template>
+        <template v-else-if="page === 'guide'">快速上手</template>
         <template v-else>测试用例登记</template>
       </h1>
       <div class="sync-info" title="产物由本地 sdlc-sync 工具或平台流水线写入，无后台自动同步"><span class="dot"></span>同步服务 · 手动触发</div>
@@ -223,6 +230,7 @@ watch(() => pendingJump.nonce, n => {
                    @back="page === 'iters' ? backFromIter() : backFromReq()"
                    @toast="showToast" @loaded="onLoaded" />
         <ReqList v-else-if="page === 'reqs'" key="reqlist" @open="openReq" @toast="showToast" />
+        <QuickStart v-else-if="page === 'guide'" key="guide" @go="goPage" />
         <CaseList v-else key="cases" @toast="showToast" />
       </Transition>
     </div>

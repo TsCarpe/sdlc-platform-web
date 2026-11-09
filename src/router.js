@@ -1,5 +1,5 @@
 // History 路由（vue-router 4）。页面仍由 App.vue 按路由名组合，不使用 router-view。
-// /iters · /iters/:name · /reqs · /reqs/:id · /cases
+// /iters · /iters/:name · /reqs · /reqs/:id · /cases · /guide
 import { createRouter, createWebHistory } from 'vue-router'
 
 const view = { name: 'RouteMarker', render: () => null }
@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/reqs', name: 'reqs', component: view, meta: { title: '需求' } },
     { path: '/reqs/:id', name: 'req', component: view, meta: { title: '需求详情' } },
     { path: '/cases', name: 'cases', component: view, meta: { title: '测试用例' } },
+    { path: '/guide', name: 'guide', component: view, meta: { title: '快速上手' } },
     { path: '/:pathMatch(.*)*', name: 'fallback', redirect: '/iters', meta: { title: '迭代列表' } },
   ],
 })
